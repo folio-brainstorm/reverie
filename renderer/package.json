@@ -1,0 +1,33 @@
+{
+  "name": "@reverie/renderer",
+  "version": "0.1.0",
+  "description": "Rendering backends for the Rêverie raster painting engine",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "dev:no-debug": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:verbose": "vitest run --reporter=verbose --includeTaskLocation",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit"
+  },
+  "dependencies": {
+    "@reverie/core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
+  }
+}

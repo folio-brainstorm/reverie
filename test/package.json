@@ -1,0 +1,20 @@
+{
+  "name": "@reverie/test",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:no-debug": "vitest run --mode no-debug",
+    "test:watch": "vitest",
+    "test:verbose": "vitest run --reporter=verbose --includeTaskLocation",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@reverie/core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
+  }
+}
