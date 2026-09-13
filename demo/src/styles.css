@@ -1,4 +1,6 @@
 :root {
+  --canvas-viewport-width: 1280px;
+  --canvas-viewport-height: 720px;
   color: #f7f0e6;
   background: #12131c;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
@@ -32,7 +34,7 @@ input {
 
 .demo-card {
   display: grid;
-  width: min(1120px, 100%);
+  width: min(1440px, 100%);
   margin: 0 auto;
   gap: clamp(22px, 3vw, 34px);
   padding: clamp(22px, 4vw, 46px);
@@ -84,6 +86,9 @@ h1 {
 
 .canvas-frame {
   position: relative;
+  width: var(--canvas-viewport-width);
+  height: var(--canvas-viewport-height);
+  justify-self: center;
   overflow: hidden;
   border: 1px solid rgb(255 255 255 / 16%);
   border-radius: 20px;
@@ -115,8 +120,7 @@ h1 {
 canvas {
   display: block;
   width: 100%;
-  height: auto;
-  aspect-ratio: 3 / 2;
+  height: 100%;
   cursor: crosshair;
   image-rendering: pixelated;
   touch-action: none;

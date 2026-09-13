@@ -53,6 +53,7 @@ export type { LocalPixelCoord } from "./src/interfaces/pixel/LocalPixelCoord.js"
 export type { PixelCoord } from "./src/interfaces/pixel/PixelCoords.js";
 export type { PixelCoverage } from "./src/interfaces/pixel/PixelCoverage.js";
 export type { PaintStyle } from "./src/interfaces/paint/PaintStyle.js";
+export type { StampCommand } from "./src/interfaces/stroke/StampCommand.js";
 export type { StrokeConfig } from "./src/interfaces/stroke/StrokeConfig.js";
 export type { StrokeSample } from "./src/interfaces/stroke/StrokeSample.js";
 export type {

@@ -11,10 +11,18 @@ import { isValidCoord } from "../../utils/number/coords/isValidCoord.js";
 import { isValidTileSize } from "../../utils/number/tile/IsValidTileSize.js";
 import { registerTilePixelBuffer } from "../renderer/RasterRenderBridge.js";
 
+let nextTileId = 1;
+
 /**
  * Stores and tracks a fixed-size block of RGBA8 pixels in tile-local space.
  */
 export class Tile {
+  /** Stable identity that distinguishes this instance from recreated tiles. */
+  readonly tileId: number;
+
+  /** Monotonically increasing version of this tile's pixel state. */
+  private currentRevision = 0;
+
   /** Number of pixels along each immutable tile edge. */
   readonly size: number;
 
@@ -37,6 +45,11 @@ export class Tile {
       : { ...this.currentDirtyBounds };
   }
 
+  /** Returns the current pixel-state version without consuming dirty state. */
+  get revision(): number {
+    return this.currentRevision;
+  }
+
   /**
    * Creates a transparent tile with dense RGBA8 pixel storage.
    *
@@ -52,9 +65,13 @@ export class Tile {
       });
     }
 
+    this.tileId = nextTileId;
+    nextTileId += 1;
     this.size = size;
     this.pixels = new Uint8ClampedArray(size * size * 4);
-    registerTilePixelBuffer(this, this.pixels);
+    registerTilePixelBuffer(this, this.pixels, (x, y) => {
+      this.markPixelWritten(x, y);
+    });
   }
 
   /**
@@ -86,7 +103,7 @@ export class Tile {
     }
 
     this.setColorByCoord(coord, color);
-    this.updateDirtyBounds(coord);
+    this.markPixelWritten(coord.x, coord.y);
   }
 
   /**
@@ -100,6 +117,7 @@ export class Tile {
       width: this.size,
       height: this.size,
     };
+    this.currentRevision += 1;
   }
 
   /**
@@ -110,8 +128,8 @@ export class Tile {
   }
 
   /** Expands the half-open dirty rectangle to include one validated pixel. */
-  private updateDirtyBounds(coord: Coord): void {
-    const { x, y } = coord;
+  private markPixelWritten(x: number, y: number): void {
+    this.currentRevision += 1;
 
     if (this.currentDirtyBounds === null) {
       this.currentDirtyBounds = { x, y, width: 1, height: 1 };

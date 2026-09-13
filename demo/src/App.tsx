@@ -1,13 +1,20 @@
-import { Camera, CircleBrush, Raster, Stroke } from "@reverie/core";
+import { Camera, CircleBrush, Raster } from "@reverie/core";
 import type { RGBAColor } from "@reverie/core";
 import { CanvasRenderer } from "@reverie/renderer";
-import type { PointerEvent as ReactPointerEvent, ReactElement } from "react";
+import { CanvasDrawingSession } from "@reverie/web";
+import type { ReactElement } from "react";
 import { useEffect, useRef, useState } from "react";
 
-const CANVAS_WIDTH = 7680;
-const CANVAS_HEIGHT = 4320;
-const INITIAL_PAN_X = -45;
-const INITIAL_PAN_Y = -30;
+const DRAWING_WIDTH = 3840;
+const DRAWING_HEIGHT = 2160;
+const VIEWPORT_WIDTH = 1280;
+const VIEWPORT_HEIGHT = 720;
+const FIT_CAMERA_ZOOM = Math.min(
+  VIEWPORT_WIDTH / DRAWING_WIDTH,
+  VIEWPORT_HEIGHT / DRAWING_HEIGHT,
+);
+const INITIAL_PAN_X = 0;
+const INITIAL_PAN_Y = 0;
 const INITIAL_ZOOM = 8;
 const INITIAL_BRUSH_SIZE = 6;
 const INITIAL_BRUSH_OPACITY = 0.75;
@@ -20,10 +27,7 @@ export function App(): ReactElement {
   const rasterRef = useRef<Raster | null>(null);
   const cameraRef = useRef<Camera | null>(null);
   const rendererRef = useRef<CanvasRenderer | null>(null);
-  const brushRef = useRef<CircleBrush | null>(null);
-  const strokeRef = useRef<Stroke | null>(null);
-  const activePointerIdRef = useRef<number | null>(null);
-  const isPaintingRef = useRef(false);
+  const sessionRef = useRef<CanvasDrawingSession | null>(null);
   const [panX, setPanX] = useState(INITIAL_PAN_X);
   const [panY, setPanY] = useState(INITIAL_PAN_Y);
   const [zoom, setZoom] = useState(INITIAL_ZOOM);
@@ -32,6 +36,7 @@ export function App(): ReactElement {
   const [brushSpacing, setBrushSpacing] = useState(INITIAL_BRUSH_SPACING);
   const [brushColor, setBrushColor] = useState(INITIAL_BRUSH_COLOR);
   const [isPainting, setIsPainting] = useState(false);
+  const [drawingError, setDrawingError] = useState<string | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -41,23 +46,42 @@ export function App(): ReactElement {
     }
 
     const raster = new Raster({ tileSize: 128 });
-    const camera = new Camera({ panX, panY, zoom });
+    const camera = new Camera({
+      panX,
+      panY,
+      zoom: zoom * FIT_CAMERA_ZOOM,
+    });
     const renderer = new CanvasRenderer({ canvas, raster, camera });
-
-    renderer.resize(CANVAS_WIDTH, CANVAS_HEIGHT);
-    renderer.render();
+    const brush = new CircleBrush({
+      size: brushSize,
+      color: colorFromHex(brushColor),
+      opacity: brushOpacity,
+      spacing: brushSpacing,
+    });
+    const session = new CanvasDrawingSession({
+      canvas,
+      raster,
+      camera,
+      renderer,
+      brush,
+      frameBudget: 8,
+      onError: (error) => setDrawingError(formatDrawingError(error)),
+      onStrokeStart: () => setIsPainting(true),
+      onStrokeEnd: () => setIsPainting(false),
+    });
 
     rasterRef.current = raster;
     cameraRef.current = camera;
     rendererRef.current = renderer;
+    sessionRef.current = session;
+    session.attach();
 
     return () => {
-      isPaintingRef.current = false;
-      activePointerIdRef.current = null;
+      session.dispose();
       rasterRef.current = null;
       cameraRef.current = null;
       rendererRef.current = null;
-      strokeRef.current = null;
+      sessionRef.current = null;
     };
   }, []);
 
@@ -70,108 +94,32 @@ export function App(): ReactElement {
     }
 
     camera.setPan(panX, panY);
-    camera.setZoom(zoom);
+    camera.setZoom(zoom * FIT_CAMERA_ZOOM);
     renderer.render();
   }, [panX, panY, zoom]);
 
   useEffect(() => {
-    brushRef.current = new CircleBrush({
-      size: brushSize,
-      color: colorFromHex(brushColor),
-      opacity: brushOpacity,
-      spacing: brushSpacing,
-    });
+    sessionRef.current?.setBrush(
+      new CircleBrush({
+        size: brushSize,
+        color: colorFromHex(brushColor),
+        opacity: brushOpacity,
+        spacing: brushSpacing,
+      }),
+    );
   }, [brushColor, brushOpacity, brushSize, brushSpacing]);
 
-  const addStrokeSamplesAtPointer = (
-    event: ReactPointerEvent<HTMLCanvasElement>,
-  ): void => {
-    const camera = cameraRef.current;
-    const renderer = rendererRef.current;
-    const stroke = strokeRef.current;
-
-    if (camera === null || renderer === null || stroke === null) {
-      return;
-    }
-
-    const canvas = event.currentTarget;
-    const bounds = canvas.getBoundingClientRect();
-    const pointerEvents = getCoalescedPointerEvents(event.nativeEvent);
-
-    for (const pointerEvent of pointerEvents) {
-      const screenPoint = {
-        x: ((pointerEvent.clientX - bounds.left) * canvas.width) / bounds.width,
-        y:
-          ((pointerEvent.clientY - bounds.top) * canvas.height) / bounds.height,
-      };
-
-      stroke.addSample({
-        position: camera.screenToWorld(screenPoint),
-        timestamp: pointerEvent.timeStamp,
-      });
-    }
-
-    renderer.render();
-  };
-
-  const beginPainting = (event: ReactPointerEvent<HTMLCanvasElement>): void => {
-    if (event.button !== 0 || activePointerIdRef.current !== null) {
-      return;
-    }
-
-    const raster = rasterRef.current;
-    const brush = brushRef.current;
-
-    if (raster === null || brush === null) {
-      return;
-    }
-
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    activePointerIdRef.current = event.pointerId;
-    strokeRef.current = new Stroke({ raster, brush });
-    isPaintingRef.current = true;
-    setIsPainting(true);
-    addStrokeSamplesAtPointer(event);
-  };
-
-  const continuePainting = (
-    event: ReactPointerEvent<HTMLCanvasElement>,
-  ): void => {
-    if (
-      !isPaintingRef.current ||
-      activePointerIdRef.current !== event.pointerId
-    ) {
-      return;
-    }
-
-    event.preventDefault();
-    addStrokeSamplesAtPointer(event);
-  };
-
-  const finishStroke = (): void => {
-    strokeRef.current?.end();
-    strokeRef.current = null;
-    activePointerIdRef.current = null;
-    isPaintingRef.current = false;
-    setIsPainting(false);
-  };
-
-  const endPainting = (event: ReactPointerEvent<HTMLCanvasElement>): void => {
-    if (activePointerIdRef.current !== event.pointerId) {
-      return;
-    }
-
-    finishStroke();
-
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-  };
-
   const clearPainting = (): void => {
-    rasterRef.current?.clear();
-    rendererRef.current?.render();
+    const raster = rasterRef.current;
+    const renderer = rendererRef.current;
+
+    if (raster === null || renderer === null) {
+      return;
+    }
+
+    raster.clear();
+    renderer.render();
+    setDrawingError(null);
   };
 
   const resetView = (): void => {
@@ -179,6 +127,18 @@ export function App(): ReactElement {
     setPanY(INITIAL_PAN_Y);
     setZoom(INITIAL_ZOOM);
   };
+
+  const updateZoom = (nextZoom: number): void => {
+    const maxPanX = DRAWING_WIDTH * (1 - 1 / nextZoom);
+    const maxPanY = DRAWING_HEIGHT * (1 - 1 / nextZoom);
+
+    setPanX((currentPanX) => Math.min(currentPanX, maxPanX));
+    setPanY((currentPanY) => Math.min(currentPanY, maxPanY));
+    setZoom(nextZoom);
+  };
+
+  const maxPanX = DRAWING_WIDTH * (1 - 1 / zoom);
+  const maxPanY = DRAWING_HEIGHT * (1 - 1 / zoom);
 
   return (
     <main className="page-shell">
@@ -189,7 +149,8 @@ export function App(): ReactElement {
           <p className="intro">
             Press and drag across the canvas to create a continuous Stroke.
             Coalesced pointer samples travel through fixed-distance stamp
-            placement, CircleBrush, Rasterizer, Paint, and Source Over.
+            placement, the StampCommand queue, a frame-budgeted
+            DrawingScheduler, CircleBrush, Rasterizer, Paint, and Source Over.
           </p>
         </header>
 
@@ -265,15 +226,10 @@ export function App(): ReactElement {
           <canvas
             aria-label="Interactive Rêverie painting canvas"
             ref={canvasRef}
-            onPointerDown={beginPainting}
-            onPointerMove={continuePainting}
-            onPointerUp={endPainting}
-            onPointerCancel={endPainting}
-            onLostPointerCapture={finishStroke}
           />
           <div className="viewport-status" aria-live="polite">
-            {isPainting ? "stroke active" : "ready"} · pan ({panX.toFixed(1)},{" "}
-            {panY.toFixed(1)}) · zoom {zoom.toFixed(1)}×
+            {drawingError ?? (isPainting ? "stroke active" : "ready")} · pan (
+            {panX.toFixed(1)}, {panY.toFixed(1)}) · zoom {zoom.toFixed(1)}×
           </div>
         </div>
 
@@ -284,10 +240,11 @@ export function App(): ReactElement {
             </span>
             <input
               type="range"
-              min="-90"
-              max="0"
-              step="0.5"
+              min="0"
+              max={maxPanX}
+              step="1"
               value={panX}
+              disabled={zoom === 1}
               onChange={(event) => setPanX(Number(event.currentTarget.value))}
             />
           </label>
@@ -298,10 +255,11 @@ export function App(): ReactElement {
             </span>
             <input
               type="range"
-              min="-60"
-              max="0"
-              step="0.5"
+              min="0"
+              max={maxPanY}
+              step="1"
               value={panY}
+              disabled={zoom === 1}
               onChange={(event) => setPanY(Number(event.currentTarget.value))}
             />
           </label>
@@ -312,11 +270,13 @@ export function App(): ReactElement {
             </span>
             <input
               type="range"
-              min="2"
-              max="24"
+              min="1"
+              max="48"
               step="0.5"
               value={zoom}
-              onChange={(event) => setZoom(Number(event.currentTarget.value))}
+              onChange={(event) =>
+                updateZoom(Number(event.currentTarget.value))
+              }
             />
           </label>
 
@@ -341,14 +301,7 @@ function colorFromHex(hexColor: string): RGBAColor {
   };
 }
 
-/**
- * Returns every high-frequency sample represented by a dispatched pointer event.
- * Browsers without coalesced-event support fall back to the dispatched event.
- */
-function getCoalescedPointerEvents(
-  event: PointerEvent,
-): readonly PointerEvent[] {
-  const coalescedEvents = event.getCoalescedEvents?.() ?? [];
-
-  return coalescedEvents.length > 0 ? coalescedEvents : [event];
+/** Converts an unknown scheduler failure into concise Demo status text. */
+function formatDrawingError(error: unknown): string {
+  return error instanceof Error ? error.message : "Drawing failed.";
 }

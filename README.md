@@ -70,16 +70,24 @@ brush.stamp(raster, { x: 50.5, y: 50.25 });
 ## Stroke
 
 `Stroke` 保存连续 World Space 中的原始输入采样，并按照 `brush.size ×
-brush.spacing` 沿折线路径均匀补充 Stamp：
+brush.spacing` 沿折线路径均匀生成 `StampCommand`。命令由外部 Consumer
+决定何时绘制：
 
 ```ts
 import { Stroke } from "@reverie/core";
 
-const stroke = new Stroke({ raster, brush });
+const stroke = new Stroke({ brush });
 
 stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
 stroke.addSample({ position: { x: 100, y: 50 }, timestamp: 16 });
 stroke.end();
+
+while (stroke.hasPendingStamps) {
+  const command = stroke.nextStamp();
+
+  if (command === undefined) break;
+  stroke.brush.stamp(raster, command.position);
+}
 ```
 
 ## Canvas Renderer
@@ -99,8 +107,32 @@ renderer.resize(800, 600);
 renderer.render();
 ```
 
+## Drawing Scheduler
+
+`@reverie/web` 的 `DrawingScheduler` 将 `StampCommand` 包装为可执行的
+`DrawingCommand`，并通过可注入的 `FrameDriver` 在软帧预算内按 FIFO 顺序
+分批绘制：
+
+```ts
+import { DrawingScheduler } from "@reverie/web";
+
+const scheduler = new DrawingScheduler({
+  frameBudget: 4,
+  onRender: () => renderer.render(),
+  onError: (error) => reportDrawingError(error),
+});
+
+while (stroke.hasPendingStamps) {
+  const stamp = stroke.nextStamp();
+
+  if (stamp === undefined) break;
+  scheduler.enqueue({ stamp, brush: stroke.brush, raster });
+}
+```
+
 `demo` 提供了可直接按下并拖动绘画的连续 Stroke 画布，并可调整颜色、
-Brush Size、Spacing、Opacity、Pan 和 Zoom。
+Brush Size、Spacing、Opacity、Pan 和 Zoom。绘制命令由主线程上的
+`DrawingScheduler` 按帧消费。
 
 ## 开始使用
 

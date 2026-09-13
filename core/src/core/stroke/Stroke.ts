@@ -1,3 +1,6 @@
+import type { Brush } from "../../interfaces/brush/Brush.js";
+import type { WorldPoint } from "../../interfaces/camera/WorldPoint.js";
+import type { StampCommand } from "../../interfaces/stroke/StampCommand.js";
 import type { StrokeConfig } from "../../interfaces/stroke/StrokeConfig.js";
 import type { StrokeSample } from "../../interfaces/stroke/StrokeSample.js";
 
@@ -9,19 +12,28 @@ import {
 } from "../../utils/errors/ReverieErrors.js";
 import { advanceStampPlacement } from "./AdvanceStampPlacement.js";
 
+/** Minimum consumed prefix before the queue considers reclaiming its storage. */
+const PENDING_QUEUE_COMPACTION_THRESHOLD = 1024;
+
 /**
- * Preserves raw input samples and places evenly spaced brush stamps along their
- * piecewise-linear world-space path.
+ * Preserves raw input samples and queues evenly spaced stamp commands along
+ * their piecewise-linear world-space path.
  */
 export class Stroke {
-  /** Raster and brush remain fixed for the complete stroke lifetime. */
-  private readonly config: StrokeConfig;
+  /** Brush whose fixed metrics place stamps and whose behavior consumers execute. */
+  readonly brush: Brush;
 
   /** Fixed world-space interval derived when the stroke is constructed. */
   private readonly stampDistance: number;
 
   /** Internally owned raw input facts in arrival order. */
   private readonly samples: StrokeSample[] = [];
+
+  /** Stamp commands appended in path order and retained until consumed. */
+  private pendingStamps: StampCommand[] = [];
+
+  /** Index of the next unread command, avoiding linear-time array shifts. */
+  private pendingReadIndex = 0;
 
   /** Most recently accepted sample, or null before input begins. */
   private lastSample: StrokeSample | null = null;
@@ -42,10 +54,20 @@ export class Stroke {
     return this.hasEnded;
   }
 
+  /** Returns whether at least one generated stamp remains available to consume. */
+  get hasPendingStamps(): boolean {
+    return this.pendingStampCount > 0;
+  }
+
+  /** Returns the number of generated stamps not yet taken by a consumer. */
+  get pendingStampCount(): number {
+    return this.pendingStamps.length - this.pendingReadIndex;
+  }
+
   /**
-   * Creates an empty stroke using a fixed raster, brush, and stamp interval.
+   * Creates an empty stroke using a fixed brush and stamp interval.
    *
-   * @param config - Raster receiving stamps and brush defining size and spacing.
+   * @param config - Brush defining stamp behavior, size, and spacing.
    * @throws {ReverieRangeError} Brush size and spacing do not produce a positive,
    * finite stamp distance.
    */
@@ -62,16 +84,16 @@ export class Stroke {
       );
     }
 
-    this.config = { ...config };
+    this.brush = config.brush;
     this.stampDistance = stampDistance;
   }
 
   /**
    * Saves one raw sample and advances stamp placement along a linear segment.
    *
-   * The first sample stamps immediately. Later samples carry unused distance
-   * across segment boundaries, so input sampling frequency does not reset
-   * brush spacing.
+   * The first sample immediately queues a command. Later samples carry unused
+   * distance across segment boundaries, so input sampling frequency does not
+   * reset brush spacing. This method never executes the brush.
    *
    * @param sample - Continuous position and monotonically non-decreasing time.
    * @throws {ReverieError} The stroke has already ended.
@@ -105,7 +127,7 @@ export class Stroke {
     this.lastSample = ownedSample;
 
     if (previousSample === null) {
-      this.config.brush.stamp(this.config.raster, ownedSample.position);
+      this.enqueueStamp(ownedSample.position);
       this.distanceSinceLastStamp = 0;
       return;
     }
@@ -115,13 +137,49 @@ export class Stroke {
       ownedSample.position,
       this.stampDistance,
       this.distanceSinceLastStamp,
-      (position) => this.config.brush.stamp(this.config.raster, position),
+      (position) => this.enqueueStamp(position),
     );
+  }
+
+  /**
+   * Removes and returns the oldest pending stamp command.
+   *
+   * Taking a command does not execute the brush or report whether a later
+   * consumer execution succeeds.
+   *
+   * @returns The next FIFO command, or `undefined` when no work remains.
+   */
+  nextStamp(): StampCommand | undefined {
+    const command = this.pendingStamps[this.pendingReadIndex];
+
+    if (command === undefined) {
+      return undefined;
+    }
+
+    this.pendingReadIndex += 1;
+
+    if (this.pendingReadIndex === this.pendingStamps.length) {
+      this.pendingStamps = [];
+      this.pendingReadIndex = 0;
+    } else if (
+      this.pendingReadIndex >= PENDING_QUEUE_COMPACTION_THRESHOLD &&
+      this.pendingReadIndex * 2 >= this.pendingStamps.length
+    ) {
+      this.pendingStamps = this.pendingStamps.slice(this.pendingReadIndex);
+      this.pendingReadIndex = 0;
+    }
+
+    return command;
   }
 
   /** Marks this stroke as ended; repeated calls have no additional effect. */
   end(): void {
     this.hasEnded = true;
+  }
+
+  /** Adds an owned position snapshot to the tail of the pending FIFO queue. */
+  private enqueueStamp(position: WorldPoint): void {
+    this.pendingStamps.push({ position: { ...position } });
   }
 
   /** Rejects malformed, non-finite, or temporally regressive input samples. */

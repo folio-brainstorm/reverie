@@ -75,6 +75,26 @@ export class TileStore {
   }
 
   /**
+   * Returns a tile for trusted, already validated integer coordinates.
+   *
+   * @param x - Safe-integer horizontal tile coordinate.
+   * @param y - Safe-integer vertical tile coordinate.
+   * @returns The existing or newly created tile.
+   */
+  getOrCreateTrusted(x: number, y: number): Tile {
+    const key = `${x}:${y}`;
+    const existingTile = this.tiles.get(key);
+
+    if (existingTile !== undefined) {
+      return existingTile;
+    }
+
+    const tile = this.createTile();
+    this.tiles.set(key, tile);
+    return tile;
+  }
+
+  /**
    * Creates, stores, and returns a new tile at an unoccupied coordinate.
    *
    * @param coord - Safe-integer coordinate in the tile grid.

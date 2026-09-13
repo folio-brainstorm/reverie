@@ -11,17 +11,16 @@ import {
 } from "@reverie/core";
 import type {
   Brush,
+  StampCommand,
   StrokeConfig,
   StrokeSample,
   WorldPoint,
 } from "@reverie/core";
 
 describe("Stroke construction and lifecycle", () => {
-  it("is available with its contracts through the public package entry point", () => {
-    const raster = new Raster();
-    const positions: WorldPoint[] = [];
-    const brush = createRecordingBrush(positions);
-    const config: StrokeConfig = { raster, brush };
+  it("exposes its brush and command contracts through the public package entry point", () => {
+    const brush = createRecordingBrush([]);
+    const config: StrokeConfig = { brush };
     const stroke = new Stroke(config);
     const sample: StrokeSample = {
       position: { x: 0.25, y: -0.5 },
@@ -29,18 +28,16 @@ describe("Stroke construction and lifecycle", () => {
     };
 
     stroke.addSample(sample);
+    const command: StampCommand | undefined = stroke.nextStamp();
 
+    expect(stroke.brush).toBe(brush);
     expect(stroke.rawSamples).toEqual([sample]);
-    expect(positions).toEqual([sample.position]);
+    expect(command).toEqual({ position: sample.position });
     expect(stroke.isEnded).toBe(false);
   });
 
-  it("defensively preserves raw samples without exposing mutable state", () => {
-    const positions: WorldPoint[] = [];
-    const stroke = new Stroke({
-      raster: new Raster(),
-      brush: createRecordingBrush(positions),
-    });
+  it("defensively preserves raw samples and queued command positions", () => {
+    const stroke = new Stroke({ brush: createRecordingBrush([]) });
     const sample = { position: { x: 1, y: 2 }, timestamp: 3 };
 
     stroke.addSample(sample);
@@ -51,13 +48,12 @@ describe("Stroke construction and lifecycle", () => {
     expect(stroke.rawSamples).toEqual([
       { position: { x: 1, y: 2 }, timestamp: 3 },
     ]);
+    expect(stroke.nextStamp()).toEqual({ position: { x: 1, y: 2 } });
   });
 
-  it("ends idempotently without forcing a final off-spacing stamp", () => {
-    const positions: WorldPoint[] = [];
+  it("ends idempotently without discarding or adding pending commands", () => {
     const stroke = new Stroke({
-      raster: new Raster(),
-      brush: createRecordingBrush(positions, 20, 0.25),
+      brush: createRecordingBrush([], 20, 0.25),
     });
 
     stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
@@ -66,7 +62,8 @@ describe("Stroke construction and lifecycle", () => {
     stroke.end();
 
     expect(stroke.isEnded).toBe(true);
-    expect(positions).toEqual([
+    expect(stroke.pendingStampCount).toBe(4);
+    expect(drainStampPositions(stroke)).toEqual([
       { x: 0, y: 0 },
       { x: 5, y: 0 },
       { x: 10, y: 0 },
@@ -75,10 +72,7 @@ describe("Stroke construction and lifecycle", () => {
   });
 
   it("rejects samples after the stroke has ended", () => {
-    const stroke = new Stroke({
-      raster: new Raster(),
-      brush: createRecordingBrush([]),
-    });
+    const stroke = new Stroke({ brush: createRecordingBrush([]) });
 
     stroke.end();
     const addSample = () =>
@@ -94,10 +88,7 @@ describe("Stroke construction and lifecycle", () => {
     [Number.MAX_VALUE, 2],
   ])("rejects unsafe brush metrics size %s spacing %s", (size, spacing) => {
     const createStroke = () =>
-      new Stroke({
-        raster: new Raster(),
-        brush: createRecordingBrush([], size, spacing),
-      });
+      new Stroke({ brush: createRecordingBrush([], size, spacing) });
 
     expect(createStroke).toThrow(ReverieRangeError);
     expect(createStroke).toThrow(
@@ -106,46 +97,158 @@ describe("Stroke construction and lifecycle", () => {
   });
 });
 
-describe("linear stamp placement", () => {
-  it("places the first stamp immediately for a click stroke", () => {
-    const positions: WorldPoint[] = [];
+describe("pending stamp queue", () => {
+  it("queues the first sample without executing the brush", () => {
+    const executedPositions: WorldPoint[] = [];
     const stroke = new Stroke({
-      raster: new Raster(),
-      brush: createRecordingBrush(positions),
+      brush: createRecordingBrush(executedPositions),
     });
 
     stroke.addSample({ position: { x: 4.5, y: -2.25 }, timestamp: 0 });
-    stroke.end();
 
-    expect(positions).toEqual([{ x: 4.5, y: -2.25 }]);
+    expect(executedPositions).toEqual([]);
+    expect(stroke.hasPendingStamps).toBe(true);
+    expect(stroke.pendingStampCount).toBe(1);
+    expect(stroke.nextStamp()).toEqual({
+      position: { x: 4.5, y: -2.25 },
+    });
+    expect(stroke.hasPendingStamps).toBe(false);
+    expect(stroke.pendingStampCount).toBe(0);
   });
 
-  it("places stamps at fixed world distances including an aligned endpoint", () => {
-    const positions: WorldPoint[] = [];
+  it("returns undefined when the queue is empty", () => {
+    const stroke = new Stroke({ brush: createRecordingBrush([]) });
+
+    expect(stroke.nextStamp()).toBeUndefined();
+
+    stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
+    expect(stroke.nextStamp()).toBeDefined();
+    expect(stroke.nextStamp()).toBeUndefined();
+  });
+
+  it("preserves FIFO order for every generated command", () => {
     const stroke = new Stroke({
-      raster: new Raster(),
-      brush: createRecordingBrush(positions, 20, 0.5),
+      brush: createRecordingBrush([], 20, 0.5),
     });
 
     stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
-    stroke.addSample({ position: { x: 100, y: 0 }, timestamp: 1 });
+    stroke.addSample({ position: { x: 30, y: 0 }, timestamp: 1 });
 
-    expect(positions).toEqual(
-      Array.from({ length: 11 }, (_, index) => ({ x: index * 10, y: 0 })),
-    );
+    expect(stroke.pendingStampCount).toBe(4);
+    expect(drainStampPositions(stroke)).toEqual([
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 20, y: 0 },
+      { x: 30, y: 0 },
+    ]);
   });
 
-  it("uses Euclidean distance along a diagonal segment", () => {
-    const positions: WorldPoint[] = [];
+  it("continues from the next command after partial consumption", () => {
     const stroke = new Stroke({
-      raster: new Raster(),
-      brush: createRecordingBrush(positions, 20, 0.5),
+      brush: createRecordingBrush([], 20, 0.5),
+    });
+
+    stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
+    stroke.addSample({ position: { x: 90, y: 0 }, timestamp: 1 });
+
+    expect(stroke.pendingStampCount).toBe(10);
+    expect(stroke.nextStamp()).toEqual({ position: { x: 0, y: 0 } });
+    expect(stroke.nextStamp()).toEqual({ position: { x: 10, y: 0 } });
+    expect(stroke.nextStamp()).toEqual({ position: { x: 20, y: 0 } });
+    expect(stroke.pendingStampCount).toBe(7);
+    expect(stroke.nextStamp()).toEqual({ position: { x: 30, y: 0 } });
+  });
+
+  it("appends new commands behind unread work during partial consumption", () => {
+    const stroke = new Stroke({
+      brush: createRecordingBrush([], 20, 0.5),
+    });
+
+    stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
+    stroke.addSample({ position: { x: 30, y: 0 }, timestamp: 1 });
+    expect(stroke.nextStamp()).toEqual({ position: { x: 0, y: 0 } });
+    expect(stroke.nextStamp()).toEqual({ position: { x: 10, y: 0 } });
+
+    stroke.addSample({ position: { x: 50, y: 0 }, timestamp: 2 });
+
+    expect(stroke.pendingStampCount).toBe(4);
+    expect(drainStampPositions(stroke)).toEqual([
+      { x: 20, y: 0 },
+      { x: 30, y: 0 },
+      { x: 40, y: 0 },
+      { x: 50, y: 0 },
+    ]);
+  });
+
+  it("can append more work after the queue has been fully drained", () => {
+    const stroke = new Stroke({
+      brush: createRecordingBrush([], 20, 0.5),
+    });
+
+    stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
+    expect(stroke.nextStamp()).toEqual({ position: { x: 0, y: 0 } });
+    stroke.addSample({ position: { x: 10, y: 0 }, timestamp: 1 });
+
+    expect(stroke.pendingStampCount).toBe(1);
+    expect(stroke.nextStamp()).toEqual({ position: { x: 10, y: 0 } });
+  });
+
+  it("allows all remaining work to be consumed after end", () => {
+    const stroke = new Stroke({
+      brush: createRecordingBrush([], 20, 0.5),
+    });
+
+    stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
+    stroke.addSample({ position: { x: 20, y: 0 }, timestamp: 1 });
+    stroke.end();
+
+    expect(stroke.isEnded).toBe(true);
+    expect(stroke.hasPendingStamps).toBe(true);
+    expect(drainStampPositions(stroke)).toHaveLength(3);
+    expect(stroke.isEnded).toBe(true);
+    expect(stroke.hasPendingStamps).toBe(false);
+  });
+
+  it("leaves Raster unchanged until an external consumer executes commands", () => {
+    const raster = new Raster();
+    const brush = new CircleBrush({
+      size: 2,
+      spacing: 0.5,
+      color: { r: 0, g: 255, b: 0, a: 255 },
+    });
+    const stroke = new Stroke({ brush });
+
+    stroke.addSample({ position: { x: 0.5, y: 0.5 }, timestamp: 0 });
+    stroke.addSample({ position: { x: 4.5, y: 0.5 }, timestamp: 1 });
+
+    expect(raster.getPixel({ x: 0, y: 0 }).a).toBe(0);
+
+    while (stroke.hasPendingStamps) {
+      const command = stroke.nextStamp();
+
+      if (command === undefined) {
+        break;
+      }
+
+      stroke.brush.stamp(raster, command.position);
+    }
+
+    for (let x = 0; x <= 4; x += 1) {
+      expect(raster.getPixel({ x, y: 0 }).a).toBe(255);
+    }
+  });
+});
+
+describe("linear stamp placement", () => {
+  it("uses Euclidean distance along a diagonal segment", () => {
+    const stroke = new Stroke({
+      brush: createRecordingBrush([], 20, 0.5),
     });
 
     stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
     stroke.addSample({ position: { x: 30, y: 40 }, timestamp: 1 });
 
-    expect(positions).toEqual([
+    expect(drainStampPositions(stroke)).toEqual([
       { x: 0, y: 0 },
       { x: 6, y: 8 },
       { x: 12, y: 16 },
@@ -156,63 +259,54 @@ describe("linear stamp placement", () => {
   });
 
   it("carries unused distance across short sample segments", () => {
-    const positions: WorldPoint[] = [];
     const stroke = new Stroke({
-      raster: new Raster(),
-      brush: createRecordingBrush(positions, 20, 0.5),
+      brush: createRecordingBrush([], 20, 0.5),
     });
 
     stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
     stroke.addSample({ position: { x: 6, y: 0 }, timestamp: 1 });
     stroke.addSample({ position: { x: 12, y: 0 }, timestamp: 2 });
 
-    expect(positions).toEqual([
+    expect(drainStampPositions(stroke)).toEqual([
       { x: 0, y: 0 },
       { x: 10, y: 0 },
     ]);
   });
 
   it("continues accumulated distance around a piecewise-linear corner", () => {
-    const positions: WorldPoint[] = [];
     const stroke = new Stroke({
-      raster: new Raster(),
-      brush: createRecordingBrush(positions, 20, 0.5),
+      brush: createRecordingBrush([], 20, 0.5),
     });
 
     stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
     stroke.addSample({ position: { x: 8, y: 0 }, timestamp: 1 });
     stroke.addSample({ position: { x: 8, y: 8 }, timestamp: 2 });
 
-    expect(positions).toEqual([
+    expect(drainStampPositions(stroke)).toEqual([
       { x: 0, y: 0 },
       { x: 8, y: 2 },
     ]);
   });
 
-  it("fills a sparsely sampled high-speed movement", () => {
-    const positions: WorldPoint[] = [];
+  it("fills a sparsely sampled high-speed movement with commands", () => {
     const stroke = new Stroke({
-      raster: new Raster(),
-      brush: createRecordingBrush(positions, 20, 0.5),
+      brush: createRecordingBrush([], 20, 0.5),
     });
 
     stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
     stroke.addSample({ position: { x: 500, y: 0 }, timestamp: 1 });
 
+    const positions = drainStampPositions(stroke);
     expect(positions).toHaveLength(51);
     expect(positions.at(-1)).toEqual({ x: 500, y: 0 });
   });
 
-  it("produces identical stamps for dense and sparse collinear sampling", () => {
-    const sparsePositions: WorldPoint[] = [];
-    const densePositions: WorldPoint[] = [];
+  it("produces identical commands for dense and sparse collinear sampling", () => {
     const sparseStroke = new Stroke({
-      raster: new Raster(),
-      brush: createRecordingBrush(sparsePositions, 20, 0.5),
+      brush: createRecordingBrush([], 20, 0.5),
     });
     const denseStroke = new Stroke({
-      raster: new Raster(),
-      brush: createRecordingBrush(densePositions, 20, 0.5),
+      brush: createRecordingBrush([], 20, 0.5),
     });
 
     sparseStroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
@@ -225,67 +319,41 @@ describe("linear stamp placement", () => {
       });
     }
 
-    expect(densePositions).toEqual(sparsePositions);
+    expect(drainStampPositions(denseStroke)).toEqual(
+      drainStampPositions(sparseStroke),
+    );
   });
 
-  it("stores zero-length samples without placing duplicate stamps", () => {
-    const positions: WorldPoint[] = [];
-    const stroke = new Stroke({
-      raster: new Raster(),
-      brush: createRecordingBrush(positions),
-    });
+  it("stores zero-length samples without queuing duplicate commands", () => {
+    const stroke = new Stroke({ brush: createRecordingBrush([]) });
 
     stroke.addSample({ position: { x: 10, y: 10 }, timestamp: 0 });
     stroke.addSample({ position: { x: 10, y: 10 }, timestamp: 1 });
 
     expect(stroke.rawSamples).toHaveLength(2);
-    expect(positions).toEqual([{ x: 10, y: 10 }]);
+    expect(drainStampPositions(stroke)).toEqual([{ x: 10, y: 10 }]);
   });
 
   it("preserves fractional and negative interpolated positions", () => {
-    const positions: WorldPoint[] = [];
     const stroke = new Stroke({
-      raster: new Raster(),
-      brush: createRecordingBrush(positions, 2, 0.5),
+      brush: createRecordingBrush([], 2, 0.5),
     });
 
     stroke.addSample({ position: { x: -2.5, y: 0.25 }, timestamp: 0 });
     stroke.addSample({ position: { x: 0.5, y: 0.25 }, timestamp: 1 });
 
-    expect(positions).toEqual([
+    expect(drainStampPositions(stroke)).toEqual([
       { x: -2.5, y: 0.25 },
       { x: -1.5, y: 0.25 },
       { x: -0.5, y: 0.25 },
       { x: 0.5, y: 0.25 },
     ]);
   });
-
-  it("uses only the configured Brush contract to paint an actual raster", () => {
-    const raster = new Raster();
-    const stroke = new Stroke({
-      raster,
-      brush: new CircleBrush({
-        size: 2,
-        spacing: 0.5,
-        color: { r: 0, g: 255, b: 0, a: 255 },
-      }),
-    });
-
-    stroke.addSample({ position: { x: 0.5, y: 0.5 }, timestamp: 0 });
-    stroke.addSample({ position: { x: 4.5, y: 0.5 }, timestamp: 1 });
-
-    for (let x = 0; x <= 4; x += 1) {
-      expect(raster.getPixel({ x, y: 0 }).a).toBe(255);
-    }
-  });
 });
 
 describe("Stroke sample validation", () => {
   it("allows equal timestamps", () => {
-    const stroke = new Stroke({
-      raster: new Raster(),
-      brush: createRecordingBrush([]),
-    });
+    const stroke = new Stroke({ brush: createRecordingBrush([]) });
 
     stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 1 });
 
@@ -295,10 +363,7 @@ describe("Stroke sample validation", () => {
   });
 
   it("rejects decreasing timestamps without saving the sample", () => {
-    const stroke = new Stroke({
-      raster: new Raster(),
-      brush: createRecordingBrush([]),
-    });
+    const stroke = new Stroke({ brush: createRecordingBrush([]) });
 
     stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 2 });
     const addSample = () =>
@@ -307,15 +372,13 @@ describe("Stroke sample validation", () => {
     expect(addSample).toThrow(ReverieRangeError);
     expect(addSample).toThrow(`[${ErrorCodes.STROKE.NON_MONOTONIC_TIMESTAMP}]`);
     expect(stroke.rawSamples).toHaveLength(1);
+    expect(stroke.pendingStampCount).toBe(1);
   });
 
   it.each([Number.NaN, Number.POSITIVE_INFINITY])(
     "rejects invalid timestamp %s",
     (timestamp) => {
-      const stroke = new Stroke({
-        raster: new Raster(),
-        brush: createRecordingBrush([]),
-      });
+      const stroke = new Stroke({ brush: createRecordingBrush([]) });
       const addSample = () =>
         stroke.addSample({ position: { x: 0, y: 0 }, timestamp });
 
@@ -325,10 +388,7 @@ describe("Stroke sample validation", () => {
   );
 
   it("rejects a non-number timestamp at runtime", () => {
-    const stroke = new Stroke({
-      raster: new Raster(),
-      brush: createRecordingBrush([]),
-    });
+    const stroke = new Stroke({ brush: createRecordingBrush([]) });
     const addSample = () =>
       stroke.addSample({
         position: { x: 0, y: 0 },
@@ -343,10 +403,7 @@ describe("Stroke sample validation", () => {
   it.each([Number.NaN, Number.NEGATIVE_INFINITY])(
     "rejects invalid position component %s",
     (x) => {
-      const stroke = new Stroke({
-        raster: new Raster(),
-        brush: createRecordingBrush([]),
-      });
+      const stroke = new Stroke({ brush: createRecordingBrush([]) });
       const addSample = () =>
         stroke.addSample({ position: { x, y: 0 }, timestamp: 0 });
 
@@ -356,10 +413,7 @@ describe("Stroke sample validation", () => {
   );
 
   it("rejects a non-number position component at runtime", () => {
-    const stroke = new Stroke({
-      raster: new Raster(),
-      brush: createRecordingBrush([]),
-    });
+    const stroke = new Stroke({ brush: createRecordingBrush([]) });
     const addSample = () =>
       stroke.addSample({
         position: {
@@ -375,10 +429,7 @@ describe("Stroke sample validation", () => {
   });
 
   it("rejects finite positions whose displacement overflows", () => {
-    const stroke = new Stroke({
-      raster: new Raster(),
-      brush: createRecordingBrush([]),
-    });
+    const stroke = new Stroke({ brush: createRecordingBrush([]) });
 
     stroke.addSample({
       position: { x: -Number.MAX_VALUE, y: 0 },
@@ -393,12 +444,30 @@ describe("Stroke sample validation", () => {
     expect(addSample).toThrow(ReverieRangeError);
     expect(addSample).toThrow(`[${ErrorCodes.STROKE.NON_FINITE_SEGMENT}]`);
     expect(stroke.rawSamples).toHaveLength(1);
+    expect(stroke.pendingStampCount).toBe(1);
   });
 });
 
-/** Creates a Brush test double that records every requested stamp position. */
+/** Removes all pending commands and returns their positions in FIFO order. */
+function drainStampPositions(stroke: Stroke): WorldPoint[] {
+  const positions: WorldPoint[] = [];
+
+  while (stroke.hasPendingStamps) {
+    const command = stroke.nextStamp();
+
+    if (command === undefined) {
+      break;
+    }
+
+    positions.push({ ...command.position });
+  }
+
+  return positions;
+}
+
+/** Creates a Brush test double that records only externally executed stamps. */
 function createRecordingBrush(
-  positions: WorldPoint[],
+  executedPositions: WorldPoint[],
   size = 20,
   spacing = 0.5,
 ): Brush {
@@ -406,7 +475,7 @@ function createRecordingBrush(
     size,
     spacing,
     stamp(_raster, position): void {
-      positions.push({ ...position });
+      executedPositions.push({ ...position });
     },
   };
 }

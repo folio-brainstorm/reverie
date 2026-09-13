@@ -4,12 +4,12 @@ import type { WorldPoint } from "../../interfaces/camera/WorldPoint.js";
 import type { RGBAColor } from "../../interfaces/color/Colors.js";
 import type { Raster } from "../raster/Raster.js";
 
+import { blendRasterPixelSourceOver } from "../../internal/raster-write/BlendRasterPixelSourceOver.js";
+import { rasterizeCirclePixels } from "../../internal/rasterizer/RasterizeCirclePixels.js";
 import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
 import { ReverieRangeError } from "../../utils/errors/ReverieErrors.js";
 import { isValidRGBAColor } from "../../utils/number/color/IsValidRGBAColor.js";
 import { isUnitInterval } from "../../utils/number/math/IsUnitInterval.js";
-import { paintPixel } from "../paint/PaintPixel.js";
-import { Rasterizers } from "../rasterizer/Rasterizers.js";
 
 const DEFAULT_BRUSH_SPACING = 0.25;
 
@@ -32,6 +32,12 @@ export class CircleBrush implements Brush {
 
   /** Internally owned color so later config mutations cannot alter the brush. */
   private readonly internalColor: RGBAColor;
+
+  /** Effective binary-coverage alpha reused by every trusted pixel write. */
+  private readonly effectiveAlpha: number;
+
+  /** Normalized effective alpha reused by Source Over arithmetic. */
+  private readonly normalizedEffectiveAlpha: number;
 
   /** Returns a copy of the straight-alpha RGBA8 stamp color. */
   get color(): RGBAColor {
@@ -73,6 +79,8 @@ export class CircleBrush implements Brush {
     this.opacity = opacity;
     this.spacing = spacing;
     this.internalColor = { ...color };
+    this.effectiveAlpha = Math.round(color.a * opacity);
+    this.normalizedEffectiveAlpha = this.effectiveAlpha / 255;
   }
 
   /**
@@ -85,16 +93,26 @@ export class CircleBrush implements Brush {
    * pixel bounds exceed the safe integer range.
    */
   stamp(raster: Raster, position: WorldPoint): void {
-    Rasterizers.rasterizeCircle(
+    rasterizeCirclePixels(
       {
         center: position,
         radius: this.size / 2,
       },
-      (hit) => {
-        paintPixel(raster, hit, {
-          color: this.internalColor,
-          opacity: this.opacity,
-        });
+      (x, y) => {
+        if (this.effectiveAlpha === 0) {
+          return;
+        }
+
+        blendRasterPixelSourceOver(
+          raster,
+          x,
+          y,
+          this.internalColor.r,
+          this.internalColor.g,
+          this.internalColor.b,
+          this.effectiveAlpha,
+          this.normalizedEffectiveAlpha,
+        );
       },
     );
   }
