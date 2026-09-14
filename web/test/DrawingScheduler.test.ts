@@ -6,7 +6,7 @@ import type { Brush } from "@reverie/core";
 import {
   DrawingScheduler,
   WebError,
-  WebErrorCodes,
+  WebErrorDefinitions,
   WebFrameDriver,
   WebRangeError,
   WebTypeError,
@@ -45,7 +45,7 @@ describe("DrawingScheduler construction", () => {
 
       expect(createScheduler).toThrow(WebRangeError);
       expect(createScheduler).toThrow(
-        `[${WebErrorCodes.INVALID_FRAME_BUDGET}]`,
+        `[${WebErrorDefinitions.INVALID_FRAME_BUDGET.code}]`,
       );
     },
   );
@@ -60,7 +60,7 @@ describe("DrawingScheduler construction", () => {
 
     expect(createScheduler).toThrow(WebTypeError);
     expect(createScheduler).toThrow(
-      `[${WebErrorCodes.INVALID_FRAME_BUDGET_TYPE}]`,
+      `[${WebErrorDefinitions.INVALID_FRAME_BUDGET_TYPE.code}]`,
     );
   });
 });
@@ -195,7 +195,7 @@ describe("DrawingScheduler lifecycle and failures", () => {
       WebError,
     );
     expect(() => scheduler.enqueue(createCommand(2, () => undefined))).toThrow(
-      `[${WebErrorCodes.SCHEDULER_DISPOSED}]`,
+      `[${WebErrorDefinitions.SCHEDULER_DISPOSED.code}]`,
     );
   });
 
@@ -240,7 +240,7 @@ describe("DrawingScheduler lifecycle and failures", () => {
     expect(scheduler.pendingCommandCount).toBe(1);
     expect(driver.pendingFrameCount).toBe(0);
     expect(() => scheduler.enqueue(createCommand(3, () => undefined))).toThrow(
-      `[${WebErrorCodes.SCHEDULER_FAILED}]`,
+      `[${WebErrorDefinitions.SCHEDULER_FAILED.code}]`,
     );
   });
 
@@ -262,7 +262,7 @@ describe("DrawingScheduler lifecycle and failures", () => {
     expect(onError).toHaveBeenCalledWith(renderError);
     expect(scheduler.pendingCommandCount).toBe(0);
     expect(() => scheduler.enqueue(createCommand(2, () => undefined))).toThrow(
-      `[${WebErrorCodes.SCHEDULER_FAILED}]`,
+      `[${WebErrorDefinitions.SCHEDULER_FAILED.code}]`,
     );
   });
 
@@ -279,7 +279,7 @@ describe("DrawingScheduler lifecycle and failures", () => {
 
     expect(() => driver.runNextFrame()).toThrow(stampError);
     expect(() => scheduler.enqueue(createCommand(2, () => undefined))).toThrow(
-      `[${WebErrorCodes.SCHEDULER_FAILED}]`,
+      `[${WebErrorDefinitions.SCHEDULER_FAILED.code}]`,
     );
   });
 
@@ -302,7 +302,7 @@ describe("DrawingScheduler lifecycle and failures", () => {
     expect(onError).toHaveBeenCalledWith(schedulingError);
     expect(scheduler.pendingCommandCount).toBe(1);
     expect(() => scheduler.enqueue(createCommand(2, () => undefined))).toThrow(
-      `[${WebErrorCodes.SCHEDULER_FAILED}]`,
+      `[${WebErrorDefinitions.SCHEDULER_FAILED.code}]`,
     );
   });
 });
@@ -348,7 +348,7 @@ describe("WebFrameDriver", () => {
 
     expect(createDriver).toThrow(WebError);
     expect(createDriver).toThrow(
-      `[${WebErrorCodes.FRAME_SCHEDULING_UNAVAILABLE}]`,
+      `[${WebErrorDefinitions.FRAME_SCHEDULING_UNAVAILABLE.code}]`,
     );
   });
 });

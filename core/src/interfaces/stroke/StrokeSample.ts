@@ -1,10 +1,10 @@
 import type { WorldPoint } from "../camera/WorldPoint.js";
 
-/** One unmodified input fact supplied to a stroke. */
+/** One timestamped world-space point in a raw or derived stroke path. */
 export interface StrokeSample {
-  /** Continuous world-space input position. */
+  /** Continuous world-space path position. */
   readonly position: WorldPoint;
 
-  /** Finite input time used to preserve temporal ordering. */
+  /** Finite path time used to preserve temporal ordering. */
   readonly timestamp: number;
 }

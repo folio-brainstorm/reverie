@@ -32,20 +32,26 @@ describe("Stroke construction and lifecycle", () => {
 
     expect(stroke.brush).toBe(brush);
     expect(stroke.rawSamples).toEqual([sample]);
+    expect(stroke.processedSamples).toEqual([sample]);
     expect(command).toEqual({ position: sample.position });
     expect(stroke.isEnded).toBe(false);
   });
 
-  it("defensively preserves raw samples and queued command positions", () => {
+  it("defensively preserves raw, processed, and queued command positions", () => {
     const stroke = new Stroke({ brush: createRecordingBrush([]) });
     const sample = { position: { x: 1, y: 2 }, timestamp: 3 };
 
     stroke.addSample(sample);
     sample.position.x = 100;
     const exposedSamples = stroke.rawSamples;
+    const exposedProcessedSamples = stroke.processedSamples;
     exposedSamples[0]!.position.y = 200;
+    exposedProcessedSamples[0]!.position.y = 300;
 
     expect(stroke.rawSamples).toEqual([
+      { position: { x: 1, y: 2 }, timestamp: 3 },
+    ]);
+    expect(stroke.processedSamples).toEqual([
       { position: { x: 1, y: 2 }, timestamp: 3 },
     ]);
     expect(stroke.nextStamp()).toEqual({ position: { x: 1, y: 2 } });
@@ -94,6 +100,254 @@ describe("Stroke construction and lifecycle", () => {
     expect(createStroke).toThrow(
       `[${ErrorCodes.STROKE.INVALID_STAMP_DISTANCE}]`,
     );
+  });
+
+  it.each([0, -0.1, 1.1, Number.NaN, Number.POSITIVE_INFINITY])(
+    "rejects invalid smoothing %s",
+    (smoothing) => {
+      const createStroke = () =>
+        new Stroke({ brush: createRecordingBrush([]), smoothing });
+
+      expect(createStroke).toThrow(ReverieRangeError);
+      expect(createStroke).toThrow(`[${ErrorCodes.STROKE.INVALID_SMOOTHING}]`);
+    },
+  );
+
+  it("rejects a non-number smoothing value at runtime", () => {
+    const createStroke = () =>
+      new Stroke({
+        brush: createRecordingBrush([]),
+        // @ts-expect-error Runtime validation protects JavaScript callers.
+        smoothing: "0.5",
+      });
+
+    expect(createStroke).toThrow(ReverieTypeError);
+    expect(createStroke).toThrow(`[${ErrorCodes.STROKE.INVALID_NUMBER_TYPE}]`);
+  });
+
+  it.each([0, -1, Number.NaN, Number.NEGATIVE_INFINITY])(
+    "rejects invalid resample distance %s",
+    (resampleDistance) => {
+      const createStroke = () =>
+        new Stroke({ brush: createRecordingBrush([]), resampleDistance });
+
+      expect(createStroke).toThrow(ReverieRangeError);
+      expect(createStroke).toThrow(
+        `[${ErrorCodes.STROKE.INVALID_RESAMPLE_DISTANCE}]`,
+      );
+    },
+  );
+
+  it("rejects a non-number resample distance at runtime", () => {
+    const createStroke = () =>
+      new Stroke({
+        brush: createRecordingBrush([]),
+        // @ts-expect-error Runtime validation protects JavaScript callers.
+        resampleDistance: "1",
+      });
+
+    expect(createStroke).toThrow(ReverieTypeError);
+    expect(createStroke).toThrow(`[${ErrorCodes.STROKE.INVALID_NUMBER_TYPE}]`);
+  });
+});
+
+describe("stroke smoothing and resampling", () => {
+  it("preserves raw positions when smoothing is one", () => {
+    const stroke = new Stroke({
+      brush: createRecordingBrush([]),
+      smoothing: 1,
+      resampleDistance: 10,
+    });
+
+    stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
+    stroke.addSample({ position: { x: 10, y: 0 }, timestamp: 1 });
+    stroke.addSample({ position: { x: 20, y: 0 }, timestamp: 2 });
+
+    expect(stroke.processedSamples).toEqual(stroke.rawSamples);
+  });
+
+  it("applies streaming EMA before resampling", () => {
+    const stroke = new Stroke({
+      brush: createRecordingBrush([]),
+      smoothing: 0.5,
+      resampleDistance: 2.5,
+    });
+
+    stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
+    stroke.addSample({ position: { x: 10, y: 0 }, timestamp: 10 });
+    stroke.addSample({ position: { x: 10, y: 0 }, timestamp: 20 });
+
+    expect(stroke.rawSamples.map((sample) => sample.position.x)).toEqual([
+      0, 10, 10,
+    ]);
+    expect(stroke.processedSamples.map((sample) => sample.position.x)).toEqual([
+      0, 2.5, 5, 7.5,
+    ]);
+  });
+
+  it("smooths fractional negative coordinates without quantization", () => {
+    const stroke = new Stroke({
+      brush: createRecordingBrush([]),
+      smoothing: 0.5,
+      resampleDistance: 0.5,
+    });
+
+    stroke.addSample({
+      position: { x: -10.25, y: -20.125 },
+      timestamp: 0,
+    });
+    stroke.addSample({
+      position: { x: -11.25, y: -20.125 },
+      timestamp: 1,
+    });
+
+    expect(stroke.processedSamples.at(-1)).toEqual({
+      position: { x: -10.75, y: -20.125 },
+      timestamp: 1,
+    });
+  });
+
+  it("emits fixed-distance samples and interpolates timestamps", () => {
+    const stroke = new Stroke({
+      brush: createRecordingBrush([]),
+      smoothing: 1,
+      resampleDistance: 5,
+    });
+
+    stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
+    stroke.addSample({ position: { x: 20, y: 0 }, timestamp: 100 });
+
+    expect(stroke.processedSamples).toEqual([
+      { position: { x: 0, y: 0 }, timestamp: 0 },
+      { position: { x: 5, y: 0 }, timestamp: 25 },
+      { position: { x: 10, y: 0 }, timestamp: 50 },
+      { position: { x: 15, y: 0 }, timestamp: 75 },
+      { position: { x: 20, y: 0 }, timestamp: 100 },
+    ]);
+  });
+
+  it("carries resampling remainder across input segment boundaries", () => {
+    const stroke = new Stroke({
+      brush: createRecordingBrush([]),
+      smoothing: 1,
+      resampleDistance: 10,
+    });
+
+    stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
+    stroke.addSample({ position: { x: 6, y: 0 }, timestamp: 6 });
+    stroke.addSample({ position: { x: 12, y: 0 }, timestamp: 12 });
+
+    expect(stroke.processedSamples).toEqual([
+      { position: { x: 0, y: 0 }, timestamp: 0 },
+      { position: { x: 10, y: 0 }, timestamp: 10 },
+    ]);
+  });
+
+  it("carries resampling distance around a corner", () => {
+    const stroke = new Stroke({
+      brush: createRecordingBrush([]),
+      smoothing: 1,
+      resampleDistance: 10,
+    });
+
+    stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
+    stroke.addSample({ position: { x: 8, y: 0 }, timestamp: 8 });
+    stroke.addSample({ position: { x: 8, y: 8 }, timestamp: 16 });
+
+    expect(stroke.processedSamples).toEqual([
+      { position: { x: 0, y: 0 }, timestamp: 0 },
+      { position: { x: 8, y: 2 }, timestamp: 10 },
+    ]);
+  });
+
+  it("produces the same processed straight path from sparse and dense input", () => {
+    const createStroke = () =>
+      new Stroke({
+        brush: createRecordingBrush([]),
+        smoothing: 1,
+        resampleDistance: 5,
+      });
+    const sparseStroke = createStroke();
+    const denseStroke = createStroke();
+
+    sparseStroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
+    sparseStroke.addSample({ position: { x: 100, y: 0 }, timestamp: 100 });
+
+    for (let x = 0; x <= 100; x += 10) {
+      denseStroke.addSample({
+        position: { x, y: 0 },
+        timestamp: x,
+      });
+    }
+
+    expectSamplesToBeClose(
+      denseStroke.processedSamples,
+      sparseStroke.processedSamples,
+    );
+  });
+
+  it("reduces the amplitude of noisy input", () => {
+    const stroke = new Stroke({
+      brush: createRecordingBrush([]),
+      smoothing: 0.5,
+      resampleDistance: 5,
+    });
+    const yCoordinates = [0, 1, -1, 1, -1];
+
+    yCoordinates.forEach((y, index) => {
+      stroke.addSample({
+        position: { x: index * 10, y },
+        timestamp: index,
+      });
+    });
+
+    const processedAmplitude = Math.max(
+      ...stroke.processedSamples.map((sample) => Math.abs(sample.position.y)),
+    );
+    expect(processedAmplitude).toBeLessThan(1);
+  });
+
+  it("keeps processed path density independent from brush metrics", () => {
+    const firstStroke = new Stroke({
+      brush: createRecordingBrush([], 2, 0.5),
+      resampleDistance: 2,
+    });
+    const secondStroke = new Stroke({
+      brush: createRecordingBrush([], 10, 1),
+      resampleDistance: 2,
+    });
+
+    for (const stroke of [firstStroke, secondStroke]) {
+      stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
+      stroke.addSample({ position: { x: 20, y: 0 }, timestamp: 20 });
+    }
+
+    expect(firstStroke.processedSamples).toEqual(secondStroke.processedSamples);
+    expect(firstStroke.processedSamples).toHaveLength(11);
+    expect(drainStampPositions(firstStroke)).toHaveLength(21);
+    expect(drainStampPositions(secondStroke)).toHaveLength(3);
+  });
+
+  it("keeps a click as one raw sample, processed sample, and stamp", () => {
+    const stroke = new Stroke({ brush: createRecordingBrush([]) });
+
+    stroke.addSample({ position: { x: 4, y: -3 }, timestamp: 2 });
+
+    expect(stroke.rawSamples).toHaveLength(1);
+    expect(stroke.processedSamples).toHaveLength(1);
+    expect(stroke.pendingStampCount).toBe(1);
+  });
+
+  it("stores repeated zero-length raw input without duplicate outputs", () => {
+    const stroke = new Stroke({ brush: createRecordingBrush([]) });
+
+    stroke.addSample({ position: { x: 10, y: 10 }, timestamp: 0 });
+    stroke.addSample({ position: { x: 10, y: 10 }, timestamp: 0 });
+    stroke.addSample({ position: { x: 10, y: 10 }, timestamp: 1 });
+
+    expect(stroke.rawSamples).toHaveLength(3);
+    expect(stroke.processedSamples).toHaveLength(1);
+    expect(stroke.pendingStampCount).toBe(1);
   });
 });
 
@@ -463,6 +717,21 @@ function drainStampPositions(stroke: Stroke): WorldPoint[] {
   }
 
   return positions;
+}
+
+/** Compares mathematically equivalent paths independent of float evaluation order. */
+function expectSamplesToBeClose(
+  actual: readonly StrokeSample[],
+  expected: readonly StrokeSample[],
+): void {
+  expect(actual).toHaveLength(expected.length);
+
+  actual.forEach((sample, index) => {
+    const expectedSample = expected[index]!;
+    expect(sample.position.x).toBeCloseTo(expectedSample.position.x);
+    expect(sample.position.y).toBeCloseTo(expectedSample.position.y);
+    expect(sample.timestamp).toBeCloseTo(expectedSample.timestamp);
+  });
 }
 
 /** Creates a Brush test double that records only externally executed stamps. */

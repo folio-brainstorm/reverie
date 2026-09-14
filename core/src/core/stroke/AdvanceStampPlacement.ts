@@ -37,15 +37,20 @@ export function advanceStampPlacement(
   let lastStampDistance = distanceAlongSegment;
 
   while (distanceAlongSegment <= segmentLength + tolerance) {
-    const interpolation =
-      Math.min(distanceAlongSegment, segmentLength) / segmentLength;
+    const clampedDistance = Math.min(distanceAlongSegment, segmentLength);
+    const isSegmentEnd = segmentLength - clampedDistance <= tolerance;
+    const interpolation = clampedDistance / segmentLength;
 
-    placeStamp({
-      x: start.x + deltaX * interpolation,
-      y: start.y + deltaY * interpolation,
-    });
+    placeStamp(
+      isSegmentEnd
+        ? { ...end }
+        : {
+            x: start.x + deltaX * interpolation,
+            y: start.y + deltaY * interpolation,
+          },
+    );
 
-    lastStampDistance = Math.min(distanceAlongSegment, segmentLength);
+    lastStampDistance = clampedDistance;
     distanceAlongSegment += stampDistance;
   }
 

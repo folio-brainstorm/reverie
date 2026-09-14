@@ -1,9 +1,6 @@
 export { DrawingScheduler, WebFrameDriver } from "./src/scheduler/index.js";
 export { CanvasDrawingSession } from "./src/session/index.js";
-export {
-  WebErrorCodes,
-  WebErrorDefinitions,
-} from "./src/errors/WebErrorDefinitions.js";
+export { WebErrorDefinitions } from "./src/errors/WebErrorDefinitions.js";
 export {
   WebError,
   WebRangeError,

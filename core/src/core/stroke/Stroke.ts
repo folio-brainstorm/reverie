@@ -11,23 +11,40 @@ import {
   ReverieTypeError,
 } from "../../utils/errors/ReverieErrors.js";
 import { advanceStampPlacement } from "./AdvanceStampPlacement.js";
+import { smoothStrokeSample } from "./SmoothStrokeSample.js";
+import { StrokeResampler } from "./StrokeResampler.js";
 
 /** Minimum consumed prefix before the queue considers reclaiming its storage. */
 const PENDING_QUEUE_COMPACTION_THRESHOLD = 1024;
 
+/** Core default that preserves raw positions unless smoothing is requested. */
+const DEFAULT_SMOOTHING = 1;
+
+/** Core default path-representation interval measured in world units. */
+const DEFAULT_RESAMPLE_DISTANCE = 1;
+
 /**
- * Preserves raw input samples and queues evenly spaced stamp commands along
- * their piecewise-linear world-space path.
+ * Preserves raw input, derives a smoothed and resampled path, and queues evenly
+ * spaced stamp commands along that processed world-space path.
  */
 export class Stroke {
   /** Brush whose fixed metrics place stamps and whose behavior consumers execute. */
   readonly brush: Brush;
 
+  /** Position EMA factor captured for the lifetime of the stroke. */
+  private readonly smoothing: number;
+
+  /** Streaming fixed-distance processed-path generator. */
+  private readonly resampler: StrokeResampler;
+
   /** Fixed world-space interval derived when the stroke is constructed. */
   private readonly stampDistance: number;
 
   /** Internally owned raw input facts in arrival order. */
-  private readonly samples: StrokeSample[] = [];
+  private readonly rawSampleStorage: StrokeSample[] = [];
+
+  /** Internally owned derived path samples in emission order. */
+  private readonly processedSampleStorage: StrokeSample[] = [];
 
   /** Stamp commands appended in path order and retained until consumed. */
   private pendingStamps: StampCommand[] = [];
@@ -35,8 +52,14 @@ export class Stroke {
   /** Index of the next unread command, avoiding linear-time array shifts. */
   private pendingReadIndex = 0;
 
-  /** Most recently accepted sample, or null before input begins. */
-  private lastSample: StrokeSample | null = null;
+  /** Most recently accepted raw sample, or null before input begins. */
+  private lastRawSample: StrokeSample | null = null;
+
+  /** Most recent EMA output used by the next smoothing step. */
+  private lastSmoothedSample: StrokeSample | null = null;
+
+  /** Most recent resampler output consumed by stamp placement. */
+  private lastProcessedSample: StrokeSample | null = null;
 
   /** Path length accumulated after the most recent brush stamp. */
   private distanceSinceLastStamp = 0;
@@ -46,7 +69,12 @@ export class Stroke {
 
   /** Returns defensive copies of every raw input sample in arrival order. */
   get rawSamples(): readonly StrokeSample[] {
-    return this.samples.map(copySample);
+    return this.rawSampleStorage.map(copySample);
+  }
+
+  /** Returns defensive copies of the derived path samples in emission order. */
+  get processedSamples(): readonly StrokeSample[] {
+    return this.processedSampleStorage.map(copySample);
   }
 
   /** Returns whether {@link end} has closed this stroke to further input. */
@@ -65,14 +93,39 @@ export class Stroke {
   }
 
   /**
-   * Creates an empty stroke using a fixed brush and stamp interval.
+   * Creates an empty stroke with fixed path-processing and brush intervals.
    *
-   * @param config - Brush defining stamp behavior, size, and spacing.
+   * @param config - Brush and optional smoothing and resampling settings.
+   * @throws {ReverieTypeError} A processing setting is not a number.
+   * @throws {ReverieRangeError} Smoothing is outside `(0, 1]` or resample
+   * distance is not positive and finite.
    * @throws {ReverieRangeError} Brush size and spacing do not produce a positive,
    * finite stamp distance.
    */
   constructor(config: StrokeConfig) {
+    const smoothing =
+      config.smoothing === undefined ? DEFAULT_SMOOTHING : config.smoothing;
+    const resampleDistance =
+      config.resampleDistance === undefined
+        ? DEFAULT_RESAMPLE_DISTANCE
+        : config.resampleDistance;
     const stampDistance = config.brush.size * config.brush.spacing;
+
+    Stroke.assertNumber(smoothing, "config.smoothing");
+    Stroke.assertNumber(resampleDistance, "config.resampleDistance");
+
+    if (!Number.isFinite(smoothing) || smoothing <= 0 || smoothing > 1) {
+      throw ReverieRangeError.from(ErrorDefinitions.STROKE.INVALID_SMOOTHING, {
+        received: smoothing,
+      });
+    }
+
+    if (!Number.isFinite(resampleDistance) || resampleDistance <= 0) {
+      throw ReverieRangeError.from(
+        ErrorDefinitions.STROKE.INVALID_RESAMPLE_DISTANCE,
+        { received: resampleDistance },
+      );
+    }
 
     if (!Number.isFinite(stampDistance) || stampDistance <= 0) {
       throw ReverieRangeError.from(
@@ -85,15 +138,18 @@ export class Stroke {
     }
 
     this.brush = config.brush;
+    this.smoothing = smoothing;
+    this.resampler = new StrokeResampler(resampleDistance);
     this.stampDistance = stampDistance;
   }
 
   /**
-   * Saves one raw sample and advances stamp placement along a linear segment.
+   * Saves one raw sample, smooths and resamples it, then advances stamp placement.
    *
-   * The first sample immediately queues a command. Later samples carry unused
-   * distance across segment boundaries, so input sampling frequency does not
-   * reset brush spacing. This method never executes the brush.
+   * Raw samples remain unchanged. The first processed sample immediately queues
+   * a command, while later samples preserve independent resampling and stamp
+   * distance remainders across segment boundaries. This method never executes
+   * the brush.
    *
    * @param sample - Continuous position and monotonically non-decreasing time.
    * @throws {ReverieError} The stroke has already ended.
@@ -108,36 +164,27 @@ export class Stroke {
     this.assertValidSample(sample);
 
     const ownedSample = copySample(sample);
-    const previousSample = this.lastSample;
+    const previousRawSample = this.lastRawSample;
 
-    if (previousSample !== null) {
-      const segmentLength = Math.hypot(
-        ownedSample.position.x - previousSample.position.x,
-        ownedSample.position.y - previousSample.position.y,
-      );
-
-      if (!Number.isFinite(segmentLength)) {
-        throw ReverieRangeError.from(
-          ErrorDefinitions.STROKE.NON_FINITE_SEGMENT,
-        );
-      }
+    if (previousRawSample !== null) {
+      Stroke.assertFiniteSegment(previousRawSample, ownedSample);
     }
 
-    this.samples.push(ownedSample);
-    this.lastSample = ownedSample;
+    const smoothedSample = smoothStrokeSample(
+      this.lastSmoothedSample,
+      ownedSample,
+      this.smoothing,
+    );
 
-    if (previousSample === null) {
-      this.enqueueStamp(ownedSample.position);
-      this.distanceSinceLastStamp = 0;
-      return;
+    if (this.lastSmoothedSample !== null) {
+      Stroke.assertFiniteSegment(this.lastSmoothedSample, smoothedSample);
     }
 
-    this.distanceSinceLastStamp = advanceStampPlacement(
-      previousSample.position,
-      ownedSample.position,
-      this.stampDistance,
-      this.distanceSinceLastStamp,
-      (position) => this.enqueueStamp(position),
+    this.rawSampleStorage.push(ownedSample);
+    this.lastRawSample = ownedSample;
+    this.lastSmoothedSample = smoothedSample;
+    this.resampler.push(smoothedSample, (processedSample) =>
+      this.acceptProcessedSample(processedSample),
     );
   }
 
@@ -182,6 +229,28 @@ export class Stroke {
     this.pendingStamps.push({ position: { ...position } });
   }
 
+  /** Stores one processed sample and advances brush stamp placement. */
+  private acceptProcessedSample(sample: StrokeSample): void {
+    const previousSample = this.lastProcessedSample;
+
+    this.processedSampleStorage.push(sample);
+    this.lastProcessedSample = sample;
+
+    if (previousSample === null) {
+      this.enqueueStamp(sample.position);
+      this.distanceSinceLastStamp = 0;
+      return;
+    }
+
+    this.distanceSinceLastStamp = advanceStampPlacement(
+      previousSample.position,
+      sample.position,
+      this.stampDistance,
+      this.distanceSinceLastStamp,
+      (position) => this.enqueueStamp(position),
+    );
+  }
+
   /** Rejects malformed, non-finite, or temporally regressive input samples. */
   private assertValidSample(sample: StrokeSample): void {
     Stroke.assertNumber(sample.position.x, "sample.position.x");
@@ -209,16 +278,31 @@ export class Stroke {
     }
 
     if (
-      this.lastSample !== null &&
-      sample.timestamp < this.lastSample.timestamp
+      this.lastRawSample !== null &&
+      sample.timestamp < this.lastRawSample.timestamp
     ) {
       throw ReverieRangeError.from(
         ErrorDefinitions.STROKE.NON_MONOTONIC_TIMESTAMP,
         {
-          previous: this.lastSample.timestamp,
+          previous: this.lastRawSample.timestamp,
           received: sample.timestamp,
         },
       );
+    }
+  }
+
+  /** Rejects a segment whose finite endpoints overflow distance arithmetic. */
+  private static assertFiniteSegment(
+    start: StrokeSample,
+    end: StrokeSample,
+  ): void {
+    const segmentLength = Math.hypot(
+      end.position.x - start.position.x,
+      end.position.y - start.position.y,
+    );
+
+    if (!Number.isFinite(segmentLength)) {
+      throw ReverieRangeError.from(ErrorDefinitions.STROKE.NON_FINITE_SEGMENT);
     }
   }
 

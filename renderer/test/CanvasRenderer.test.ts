@@ -5,7 +5,7 @@ import type { Renderer } from "@reverie/core/renderer";
 
 import {
   CanvasRenderer,
-  RendererErrorCodes,
+  RendererErrorDefinitions,
   RendererError,
   RendererTypeError,
   RendererRangeError
@@ -104,14 +104,14 @@ describe("CanvasRenderer construction", () => {
     expect(createRenderer).toThrow(RendererError);
     expect(createRenderer).toThrow(Error);
     expect(createRenderer).toThrow(
-      `[${RendererErrorCodes.FAILED_TO_ACQUIRE_RENDERING_CONTEXT}]`,
+      `[${RendererErrorDefinitions.FAILED_TO_ACQUIRE_RENDERING_CONTEXT.code}]`,
     );
 
     try {
       createRenderer();
     } catch (error) {
       expect(error).toMatchObject({
-        code: RendererErrorCodes.FAILED_TO_ACQUIRE_RENDERING_CONTEXT,
+        code: RendererErrorDefinitions.FAILED_TO_ACQUIRE_RENDERING_CONTEXT.code,
         name: "RendererError",
       });
     }
@@ -155,7 +155,7 @@ describe("CanvasRenderer resize", () => {
     expect(() => renderer.resize(width, height)).toThrow(RendererRangeError);
     expect(() => renderer.resize(width, height)).toThrow(RangeError);
     expect(() => renderer.resize(width, height)).toThrow(
-      `[${RendererErrorCodes.INVALID_CANVAS_SIZE}]`,
+      `[${RendererErrorDefinitions.INVALID_CANVAS_SIZE.code}]`,
     );
     expect(canvas.width).toBe(20);
     expect(canvas.height).toBe(10);

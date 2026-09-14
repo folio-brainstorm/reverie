@@ -121,6 +121,16 @@ export const ErrorDefinitions = {
       code: "EC_STROKE_0007",
       template: "Stroke sample positions must produce a finite segment length.",
     },
+    INVALID_SMOOTHING: {
+      code: "EC_STROKE_0008",
+      template:
+        "Stroke smoothing must be finite and greater than 0 but no greater than 1, received `$received`.",
+    },
+    INVALID_RESAMPLE_DISTANCE: {
+      code: "EC_STROKE_0009",
+      template:
+        "Stroke resample distance must be positive and finite, received `$received`.",
+    },
   },
   TILE: {
     LOCAL_PIXEL_COORDINATE_OUT_OF_BOUNDS: {
