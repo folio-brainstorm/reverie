@@ -10,7 +10,7 @@ import { isRasterPixelWritable } from "../../internal/paint-target/ActiveRasterP
 import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
 import { ReverieRangeError } from "../../utils/errors/ReverieErrors.js";
 import { isValidRGBAColor } from "../../utils/number/color/IsValidRGBAColor.js";
-import { CoordConventer } from "../../utils/number/coords/CoordCoventer.js";
+import { CoordCoverter } from "../../utils/number/coords/CoordCoverter.js";
 import { isValidCoord } from "../../utils/number/coords/isValidCoord.js";
 import { isValidTileSize } from "../../utils/number/tile/IsValidTileSize.js";
 import { blendSourceOver } from "../paint/BlendSourceOver.js";
@@ -177,6 +177,6 @@ export class Raster {
 
   /** Maps a previously validated pixel into its containing tile. */
   private locateValidPixel(pixel: PixelCoord): PixelLocation {
-    return CoordConventer.World.locateWorldPixel(pixel, this.tileSize);
+    return CoordCoverter.World.locateWorldPixel(pixel, this.tileSize);
   }
 }

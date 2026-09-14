@@ -16,7 +16,7 @@ import {
 } from "../../utils/diagnostic/Diagnostics.js";
 import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
 import { ReverieRangeError } from "../../utils/errors/ReverieErrors.js";
-import { CoordConventer } from "../../utils/number/coords/CoordCoventer.js";
+import { CoordCoverter } from "../../utils/number/coords/CoordCoverter.js";
 import { isValidCoord } from "../../utils/number/coords/isValidCoord.js";
 import { isValidTileSize } from "../../utils/number/tile/IsValidTileSize.js";
 import { Raster } from "../raster/Raster.js";
@@ -155,7 +155,7 @@ export class World {
       );
     }
 
-    return CoordConventer.World.locateWorldPixel(coord, this.config.tileSize);
+    return CoordCoverter.World.locateWorldPixel(coord, this.config.tileSize);
   }
 
   /** Determines whether a candidate is a valid finite World region. */

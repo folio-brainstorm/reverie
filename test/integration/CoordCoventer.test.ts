@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { CoordConventer } from "../../core/src/utils/number/coords/CoordCoventer";
+import { CoordCoverter } from "../../core/src/utils/number/coords/CoordCoverter";
 
 const TILE_SIZE = 256;
 
-describe("CoordConventer.World", () => {
+describe("CoordCoverter.World", () => {
   it.each([
     [{ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }],
     [{ x: 255, y: 255 }, { x: 0, y: 0 }, { x: 255, y: 255 }],
@@ -17,18 +17,18 @@ describe("CoordConventer.World", () => {
   ])(
     "maps world coordinate %o to tile %o and local coordinate %o",
     (world, tile, local) => {
-      expect(CoordConventer.World.locateWorldPixel(world, TILE_SIZE)).toEqual({
+      expect(CoordCoverter.World.locateWorldPixel(world, TILE_SIZE)).toEqual({
         tile,
         local,
       });
-      expect(CoordConventer.World.worldCoordToTileCoord(world, TILE_SIZE)).toEqual(tile);
-      expect(CoordConventer.World.worldCoordToLocalPixelCoord(world, TILE_SIZE)).toEqual(local);
+      expect(CoordCoverter.World.worldCoordToTileCoord(world, TILE_SIZE)).toEqual(tile);
+      expect(CoordCoverter.World.worldCoordToLocalPixelCoord(world, TILE_SIZE)).toEqual(local);
     },
   );
 
   it("preserves the mapping invariants", () => {
     const world = { x: -12_345, y: 67_890 };
-    const { tile, local } = CoordConventer.World.locateWorldPixel(world, TILE_SIZE);
+    const { tile, local } = CoordCoverter.World.locateWorldPixel(world, TILE_SIZE);
 
     expect(local.x).toBeGreaterThanOrEqual(0);
     expect(local.x).toBeLessThan(TILE_SIZE);
@@ -41,7 +41,7 @@ describe("CoordConventer.World", () => {
   it.each([0, -1, 1.5, Number.POSITIVE_INFINITY, Number.MAX_VALUE])(
     "rejects invalid tile size %s",
     (tileSize) => {
-      expect(() => CoordConventer.World.locateWorldPixel({ x: 0, y: 0 }, tileSize))
+      expect(() => CoordCoverter.World.locateWorldPixel({ x: 0, y: 0 }, tileSize))
         .toThrow(RangeError);
     },
   );

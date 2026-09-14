@@ -21,7 +21,7 @@ function assertValidTileSize(tileSize: number): void {
 }
 
 /** Coordinate conversions between the world grid and its tile grid. */
-export namespace CoordConventer {
+export namespace CoordCoverter {
   /** Conversions whose input is expressed in world-pixel coordinates. */
   export namespace World {
     /**
