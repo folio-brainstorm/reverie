@@ -1,6 +1,6 @@
 // Runtime engine API.
 export { Raster } from "./src/core/raster/index.js";
-export { World } from "./src/core/world/index.js";
+export { RasterLayer, World } from "./src/core/world/index.js";
 export { Camera } from "./src/core/camera/index.js";
 export { CircleBrush } from "./src/core/brush/index.js";
 export { Rasterizers } from "./src/core/rasterizer/index.js";
@@ -47,6 +47,7 @@ export type {
   DiagnosticSeverity,
 } from "./src/interfaces/diagnostic/Diagnostic.js";
 export type { WorldConfig } from "./src/interfaces/world/World.js";
+export type { WorldBounds } from "./src/interfaces/world/WorldBounds.js";
 export type { RasterConfig } from "./src/interfaces/raster/Raster.js";
 export type { RGBAColor } from "./src/interfaces/color/Colors.js";
 export type { LocalPixelCoord } from "./src/interfaces/pixel/LocalPixelCoord.js";

@@ -5,9 +5,10 @@ import type {
 } from "../../interfaces/pixel/PixelCoords.js";
 import type { RasterConfig } from "../../interfaces/raster/Raster.js";
 
+import { TRANSPARENT_RGBA } from "../../config/color/ColorConstants.js";
+import { isRasterPixelWritable } from "../../internal/paint-target/ActiveRasterPaintBounds.js";
 import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
 import { ReverieRangeError } from "../../utils/errors/ReverieErrors.js";
-import { TRANSPARENT_RGBA } from "../../config/color/ColorConstants.js";
 import { isValidRGBAColor } from "../../utils/number/color/IsValidRGBAColor.js";
 import { CoordConventer } from "../../utils/number/coords/CoordCoventer.js";
 import { isValidCoord } from "../../utils/number/coords/isValidCoord.js";
@@ -94,12 +95,18 @@ export class Raster {
    * outside the RGBA8 range.
    */
   setPixel(pixel: PixelCoord, color: RGBAColor): void {
-    const { tile: tileCoord, local: localPixel } =
-      this.getLocationByPixel(pixel);
+    this.assertValidPixel(pixel);
 
     if (!isValidRGBAColor(color)) {
       throw ReverieRangeError.from(ErrorDefinitions.COMMON.INVALID_RGBA_COLOR);
     }
+
+    if (!isRasterPixelWritable(this, pixel.x, pixel.y)) {
+      return;
+    }
+
+    const { tile: tileCoord, local: localPixel } =
+      this.locateValidPixel(pixel);
 
     const tile = this.tileStore.getOrCreate(tileCoord);
     tile.setPixel(localPixel, color);
@@ -116,8 +123,7 @@ export class Raster {
    * outside the RGBA8 range.
    */
   blendPixel(pixel: PixelCoord, color: RGBAColor): void {
-    const { tile: tileCoord, local: localPixel } =
-      this.getLocationByPixel(pixel);
+    this.assertValidPixel(pixel);
 
     if (!isValidRGBAColor(color)) {
       throw ReverieRangeError.from(ErrorDefinitions.COMMON.INVALID_RGBA_COLOR);
@@ -126,6 +132,13 @@ export class Raster {
     if (color.a === 0) {
       return;
     }
+
+    if (!isRasterPixelWritable(this, pixel.x, pixel.y)) {
+      return;
+    }
+
+    const { tile: tileCoord, local: localPixel } =
+      this.locateValidPixel(pixel);
 
     const tile = this.tileStore.get(tileCoord);
     const destination =
@@ -148,13 +161,22 @@ export class Raster {
    * @returns The containing tile and its zero-based local pixel coordinate.
    */
   private getLocationByPixel(pixel: PixelCoord): PixelLocation {
+    this.assertValidPixel(pixel);
+    return this.locateValidPixel(pixel);
+  }
+
+  /** Validates a candidate coordinate before any tile mapping or allocation. */
+  private assertValidPixel(pixel: PixelCoord): void {
     if (!isValidCoord(pixel)) {
       throw ReverieRangeError.from(
         ErrorDefinitions.COMMON.UNSAFE_COORDINATE_VALUE,
         pixel,
       );
     }
+  }
 
+  /** Maps a previously validated pixel into its containing tile. */
+  private locateValidPixel(pixel: PixelCoord): PixelLocation {
     return CoordConventer.World.locateWorldPixel(pixel, this.tileSize);
   }
 }

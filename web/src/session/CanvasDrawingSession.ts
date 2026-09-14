@@ -1,5 +1,5 @@
 import { Stroke } from "@reverie/core";
-import type { Brush, Camera, Raster } from "@reverie/core";
+import type { Brush, Camera, Raster, RasterLayer } from "@reverie/core";
 import type { CanvasRenderer } from "@reverie/renderer";
 
 import { WebErrorDefinitions } from "../errors/WebErrorDefinitions.js";
@@ -24,6 +24,9 @@ export class CanvasDrawingSession {
 
   /** Camera converting CSS-pixel input into continuous world positions. */
   readonly camera: Camera;
+
+  /** Optional bounded layer used to execute stamps into {@link raster}. */
+  readonly layer: RasterLayer | undefined;
 
   /** Externally owned renderer used for sizing and presentation. */
   readonly renderer: CanvasRenderer;
@@ -85,6 +88,7 @@ export class CanvasDrawingSession {
    * Creates an unattached Web drawing Session.
    *
    * @param config - Canvas, models, renderer, brush, and optional runtime hooks.
+   * @throws {WebError} The optional layer does not own the supplied Raster.
    * @throws {WebTypeError} The maximum DPR is not a number.
    * @throws {WebRangeError} The maximum DPR is not positive and finite.
    */
@@ -94,9 +98,14 @@ export class CanvasDrawingSession {
 
     CanvasDrawingSession.assertValidMaxDevicePixelRatio(maxDevicePixelRatio);
 
+    if (config.layer !== undefined && config.layer.raster !== config.raster) {
+      throw WebError.from(WebErrorDefinitions.SESSION_LAYER_RASTER_MISMATCH);
+    }
+
     this.canvas = config.canvas;
     this.raster = config.raster;
     this.camera = config.camera;
+    this.layer = config.layer;
     this.renderer = config.renderer;
     this.currentBrush = config.brush;
     this.maxDevicePixelRatio = maxDevicePixelRatio;
@@ -281,7 +290,12 @@ export class CanvasDrawingSession {
         break;
       }
 
-      this.scheduler.enqueue({ stamp, brush: stroke.brush, raster: this.raster });
+      this.scheduler.enqueue({
+        stamp,
+        brush: stroke.brush,
+        raster: this.raster,
+        ...(this.layer === undefined ? {} : { layer: this.layer }),
+      });
     }
   }
 

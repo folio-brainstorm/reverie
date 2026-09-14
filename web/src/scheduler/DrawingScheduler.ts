@@ -77,7 +77,11 @@ export class DrawingScheduler {
           break;
         }
 
-        command.brush.stamp(command.raster, command.stamp.position);
+        if (command.layer === undefined) {
+          command.brush.stamp(command.raster, command.stamp.position);
+        } else {
+          command.layer.stamp(command.brush, command.stamp.position);
+        }
         processedCommandCount += 1;
       }
 

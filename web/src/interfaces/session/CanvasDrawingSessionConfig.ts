@@ -1,4 +1,4 @@
-import type { Brush, Camera, Raster } from "@reverie/core";
+import type { Brush, Camera, Raster, RasterLayer } from "@reverie/core";
 import type { CanvasRenderer } from "@reverie/renderer";
 
 import type { DrawingScheduler } from "../../scheduler/DrawingScheduler.js";
@@ -10,6 +10,9 @@ export interface CanvasDrawingSessionConfig {
 
   /** Sparse Raster that receives scheduled brush stamps. */
   readonly raster: Raster;
+
+  /** Optional bounded layer owning `raster` and mediating Brush writes. */
+  readonly layer?: RasterLayer;
 
   /** Camera whose zoom remains CSS pixels per world unit. */
   readonly camera: Camera;

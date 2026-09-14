@@ -1,4 +1,9 @@
-import type { Brush, Raster, StampCommand } from "@reverie/core";
+import type {
+  Brush,
+  Raster,
+  RasterLayer,
+  StampCommand,
+} from "@reverie/core";
 
 /** Supplies the runtime objects needed to execute one core stamp command. */
 export interface DrawingCommand {
@@ -10,4 +15,7 @@ export interface DrawingCommand {
 
   /** Raster that receives the executed stamp. */
   readonly raster: Raster;
+
+  /** Optional bounded layer that mediates final pixel writes. */
+  readonly layer?: RasterLayer;
 }

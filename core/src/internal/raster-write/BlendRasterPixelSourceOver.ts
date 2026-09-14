@@ -5,6 +5,7 @@ import {
   getTilePixelBufferForTrustedWrite,
   markTrustedTilePixelWritten,
 } from "../../core/renderer/RasterRenderBridge.js";
+import { isRasterPixelWritable } from "../paint-target/ActiveRasterPaintBounds.js";
 
 const MAX_CHANNEL_VALUE = 255;
 
@@ -33,6 +34,10 @@ export function blendRasterPixelSourceOver(
   sourceAlphaByte: number,
   sourceAlpha: number,
 ): void {
+  if (!isRasterPixelWritable(raster, pixelX, pixelY)) {
+    return;
+  }
+
   const tileSize = raster.tileSize;
   const tileX = Math.floor(pixelX / tileSize);
   const tileY = Math.floor(pixelY / tileSize);

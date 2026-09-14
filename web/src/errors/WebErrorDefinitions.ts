@@ -44,4 +44,18 @@ export const WebErrorDefinitions = {
     code: "EC_WEB_0009",
     template: "Cannot attach a disposed CanvasDrawingSession.",
   },
+  SESSION_LAYER_RASTER_MISMATCH: {
+    code: "EC_WEB_0010",
+    template:
+      "CanvasDrawingSession layer must own the Raster supplied to the Session.",
+  },
+  INVALID_REVERIE_CANVAS_DIMENSIONS: {
+    code: "EC_WEB_0011",
+    template:
+      "ReverieCanvas width and height must either both be omitted or both be positive safe integers.",
+  },
+  REVERIE_CANVAS_DISPOSED: {
+    code: "EC_WEB_0012",
+    template: "ReverieCanvas has been disposed.",
+  },
 } as const satisfies Record<string, ErrorDefinition>;

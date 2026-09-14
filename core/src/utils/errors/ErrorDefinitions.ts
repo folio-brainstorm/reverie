@@ -76,7 +76,13 @@ export const ErrorDefinitions = {
       template: "Brush spacing must be a positive finite number.",
     },
   },
-  WORLD: {},
+  WORLD: {
+    INVALID_BOUNDS: {
+      code: "EC_WORLD_0001",
+      template:
+        "World bounds require safe-integer x and y origins plus positive safe-integer width and height.",
+    },
+  },
   PAINT: {
     INVALID_OPACITY: {
       code: "EC_PAINT_0001",

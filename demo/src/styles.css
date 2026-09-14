@@ -77,7 +77,7 @@ h1 {
 }
 
 .brush-controls,
-.view-controls {
+.view-toolbar {
   display: grid;
   grid-template-columns: minmax(76px, 0.45fr) repeat(3, minmax(125px, 1fr)) auto;
   gap: 18px;
@@ -86,28 +86,36 @@ h1 {
 
 .canvas-frame {
   position: relative;
+  box-sizing: content-box;
   width: var(--canvas-viewport-width);
   height: var(--canvas-viewport-height);
   justify-self: center;
   overflow: hidden;
   border: 1px solid rgb(255 255 255 / 16%);
   border-radius: 20px;
+  background:
+    radial-gradient(circle at 50% 45%, rgb(73 75 91 / 55%), transparent 48%),
+    #20212d;
+  box-shadow:
+    inset 0 0 80px rgb(0 0 0 / 22%),
+    inset 0 0 0 1px rgb(0 0 0 / 12%);
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.drawing-surface {
+  position: absolute;
+  z-index: 0;
+  border: 1px solid rgb(255 255 255 / 52%);
   background-color: #ddd7ce;
   background-image:
     linear-gradient(45deg, #c9c2b8 25%, transparent 25%),
     linear-gradient(-45deg, #c9c2b8 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, #c9c2b8 75%),
     linear-gradient(-45deg, transparent 75%, #c9c2b8 75%);
-  background-position:
-    0 0,
-    0 8px,
-    8px -8px,
-    -8px 0;
-  background-size: 16px 16px;
-  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 12%);
-  transition:
-    border-color 140ms ease,
-    box-shadow 140ms ease;
+  box-shadow: 0 12px 38px rgb(0 0 0 / 34%);
+  pointer-events: none;
 }
 
 .canvas-frame.is-painting {
@@ -118,6 +126,8 @@ h1 {
 }
 
 canvas {
+  position: relative;
+  z-index: 1;
   display: block;
   width: 100%;
   height: 100%;
@@ -127,10 +137,33 @@ canvas {
   user-select: none;
 }
 
+.canvas-frame.is-panning,
+.canvas-frame.is-panning canvas {
+  cursor: grabbing;
+}
+
+.brush-indicator {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.brush-indicator-pixel {
+  position: absolute;
+  border: 1px solid rgb(255 255 255 / 88%);
+  background: rgb(239 111 97 / 22%);
+  box-shadow:
+    inset 0 0 0 1px rgb(18 19 28 / 55%),
+    0 0 0 1px rgb(18 19 28 / 45%);
+}
+
 .viewport-status {
   position: absolute;
   right: 14px;
   bottom: 14px;
+  z-index: 3;
   padding: 8px 11px;
   border: 1px solid rgb(255 255 255 / 14%);
   border-radius: 999px;
@@ -142,8 +175,15 @@ canvas {
   backdrop-filter: blur(10px);
 }
 
-.view-controls {
-  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+.view-toolbar {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.view-toolbar p {
+  margin: 0;
+  color: #aaa6b5;
+  font-size: 0.8rem;
 }
 
 label {
@@ -219,14 +259,14 @@ canvas:focus-visible {
 
 @media (max-width: 820px) {
   .brush-controls,
-  .view-controls {
+  .view-toolbar {
     grid-template-columns: 1fr 1fr;
   }
 }
 
 @media (max-width: 560px) {
   .brush-controls,
-  .view-controls {
+  .view-toolbar {
     grid-template-columns: 1fr;
   }
 
