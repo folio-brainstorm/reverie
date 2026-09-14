@@ -2,5 +2,6 @@ packages:
   - core
   - web
   - renderer
+  - exporter
   - demo
   - test

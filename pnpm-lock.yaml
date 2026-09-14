@@ -39,6 +39,9 @@ importers:
       '@reverie/core':
         specifier: workspace:*
         version: link:../core
+      '@reverie/exporter':
+        specifier: workspace:*
+        version: link:../exporter
       '@reverie/renderer':
         specifier: workspace:*
         version: link:../renderer
@@ -67,6 +70,28 @@ importers:
       vite:
         specifier: ^8.2.2
         version: 8.3.0(@types/node@26.5.1)
+
+  exporter:
+    dependencies:
+      '@reverie/core':
+        specifier: workspace:*
+        version: link:../core
+      '@stacksjs/ts-webp':
+        specifier: ^0.1.3
+        version: 0.1.3
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
+      jpeg-js:
+        specifier: ^0.4.4
+        version: 0.4.4
+    devDependencies:
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: ^5.0.0
+        version: 5.0.0(@types/node@26.5.1)(vite@8.3.0(@types/node@26.5.1))
 
   renderer:
     dependencies:
@@ -99,6 +124,9 @@ importers:
       '@reverie/core':
         specifier: workspace:*
         version: link:../core
+      '@reverie/exporter':
+        specifier: workspace:*
+        version: link:../exporter
       '@reverie/renderer':
         specifier: workspace:*
         version: link:../renderer
@@ -311,6 +339,9 @@ packages:
   '@sindresorhus/base62@1.0.0':
     resolution: {integrity: sha512-TeheYy0ILzBEI/CO55CP6zJCSdSWeRtGnHy8U8dWSUH4I68iqTsy7HkMktR4xakThc9jotkPQUXT4ITdbV7cHA==}
     engines: {node: '>=18'}
+
+  '@stacksjs/ts-webp@0.1.3':
+    resolution: {integrity: sha512-0PFmmBLKCxIc+8pNEwfvoXfS5uH47y7rXpVaGEfj6VQGPoQCAWUmheppCeJ66YCdSVR1dezR/4MGTZCnT+uZow==}
 
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
@@ -702,6 +733,9 @@ packages:
       picomatch:
         optional: true
 
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
+
   file-entry-cache@11.1.5:
     resolution: {integrity: sha512-+PFTHITI08JIGhnNpGNI8T8inUpgZfk3GNEqfT9R2zZV2iFXg3CvqzSl/uEhs7TSGujYRELEANyDvS8Fj7+S7Q==}
 
@@ -759,6 +793,9 @@ packages:
 
   isexe@2.0.0:
     resolution: {integrity: sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==}
+
+  jpeg-js@0.4.4:
+    resolution: {integrity: sha512-WZzeDOEtTOBK4Mdsar0IqEU5sMr3vSV2RqkAIzUEV2BHnUfKGyswWFPFwK5EeDo93K3FohSHbLAjj0s1Wzd+dg==}
 
   jsdoc-type-pratt-parser@9.2.1:
     resolution: {integrity: sha512-V4Ww4EHnTcTLSOMoB0FsF72JhQvcAsriCm/LWnxJeGWoxIjEL2l9na11abQok5SYShq8m0Gl02el/xAbTCulvQ==}
@@ -1331,6 +1368,8 @@ snapshots:
 
   '@sindresorhus/base62@1.0.0': {}
 
+  '@stacksjs/ts-webp@0.1.3': {}
+
   '@types/chai@5.2.3':
     dependencies:
       '@types/deep-eql': 4.0.2
@@ -1688,6 +1727,8 @@ snapshots:
     optionalDependencies:
       picomatch: 4.0.7
 
+  fflate@0.8.3: {}
+
   file-entry-cache@11.1.5:
     dependencies:
       flat-cache: 6.1.23
@@ -1735,6 +1776,8 @@ snapshots:
       is-extglob: 2.1.1
 
   isexe@2.0.0: {}
+
+  jpeg-js@0.4.4: {}
 
   jsdoc-type-pratt-parser@9.2.1:
     dependencies:

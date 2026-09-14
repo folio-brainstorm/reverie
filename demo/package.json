@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@reverie/core": "workspace:*",
+    "@reverie/exporter": "workspace:*",
     "@reverie/renderer": "workspace:*",
     "@reverie/web": "workspace:*",
     "react": "^19.2.8",

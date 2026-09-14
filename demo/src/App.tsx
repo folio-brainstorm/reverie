@@ -1,12 +1,17 @@
 import { CircleBrush, Rasterizers } from "@reverie/core";
 import type { PixelCoord, RGBAColor, ScreenPoint } from "@reverie/core";
+import type { ExportFormat, ExportRegion } from "@reverie/exporter";
 import { ReverieCanvas } from "@reverie/web";
+import type { ReverieDownloadOptions } from "@reverie/web";
 import type {
   CSSProperties,
   PointerEvent as ReactPointerEvent,
   ReactElement,
 } from "react";
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
+
+import { exportRasterToConsole } from "./ExportRasterToConsole";
 
 const DRAWING_WIDTH = 16;
 const DRAWING_HEIGHT = 16;
@@ -29,6 +34,23 @@ const INITIAL_BRUSH_SIZE = 1;
 const INITIAL_BRUSH_OPACITY = 0.75;
 const INITIAL_BRUSH_SPACING = 0.2;
 const INITIAL_BRUSH_COLOR = "#ef6f61";
+const EXPORT_REGION: ExportRegion = {
+  x: 0,
+  y: 0,
+  width: DRAWING_WIDTH,
+  height: DRAWING_HEIGHT,
+};
+const EXPORT_FORMAT_LABELS: Record<ExportFormat, string> = {
+  png: "PNG",
+  jpeg: "JPEG",
+  webp: "WebP",
+};
+const DEMO_FILE_BASE_NAME = "reverie-export";
+const EXPORT_REQUESTS: readonly ReverieDownloadOptions[] = [
+  { format: "png", filename: DEMO_FILE_BASE_NAME },
+  { format: "jpeg", filename: DEMO_FILE_BASE_NAME },
+  { format: "webp", filename: DEMO_FILE_BASE_NAME },
+];
 
 /** Displays an interactive CircleBrush painting surface with camera controls. */
 export function App(): ReactElement {
@@ -49,6 +71,7 @@ export function App(): ReactElement {
   const [isPainting, setIsPainting] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [drawingError, setDrawingError] = useState<string | null>(null);
+  const [exportStatus, setExportStatus] = useState<string | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -89,18 +112,6 @@ export function App(): ReactElement {
   }, []);
 
   useEffect(() => {
-    const reverie = reverieRef.current;
-
-    if (reverie === null) {
-      return;
-    }
-
-    reverie.camera.setPan(panX, panY);
-    reverie.camera.setZoom(zoom * FIT_CAMERA_ZOOM);
-    reverie.render();
-  }, [panX, panY, zoom]);
-
-  useEffect(() => {
     reverieRef.current?.setBrush(
       new CircleBrush({
         size: brushSize,
@@ -111,15 +122,90 @@ export function App(): ReactElement {
     );
   }, [brushColor, brushOpacity, brushSize, brushSpacing]);
 
+  /**
+   * Mirrors the camera's current view into React state so the DOM overlay
+   * (checkerboard, clip path, brush indicator) commits in the same frame as the
+   * imperatively painted canvas.
+   *
+   * The Camera is the single source of truth for pan and zoom. Without this
+   * synchronous flush the overlay would lag one frame behind the canvas, which
+   * reintroduces visible misalignment while panning.
+   */
+  const publishCameraView = (): void => {
+    const camera = reverieRef.current?.camera;
+
+    if (camera === undefined) {
+      return;
+    }
+
+    flushSync(() => {
+      setPanX(camera.panX);
+      setPanY(camera.panY);
+      setZoom(camera.zoom / FIT_CAMERA_ZOOM);
+    });
+  };
+
   const clearPainting = (): void => {
     reverieRef.current?.clear();
     setDrawingError(null);
+    setExportStatus(null);
+  };
+
+  const exportPainting = (): void => {
+    const reverie = reverieRef.current;
+
+    if (reverie === null) {
+      return;
+    }
+
+    try {
+      const result = exportRasterToConsole(
+        reverie.activeLayer.raster,
+        EXPORT_REGION,
+      );
+
+      setDrawingError(null);
+      setExportStatus(
+        `exported ${result.width} × ${result.height} RGBA buffer to console`,
+      );
+    } catch (error) {
+      setExportStatus(null);
+      setDrawingError(formatDrawingError(error));
+    }
+  };
+
+  const exportPaintingAsImage = (request: ReverieDownloadOptions): void => {
+    const reverie = reverieRef.current;
+
+    if (reverie === null) {
+      return;
+    }
+
+    setDrawingError(null);
+    setExportStatus(`encoding ${EXPORT_FORMAT_LABELS[request.format]}…`);
+
+    void reverie
+      .download(request)
+      .then(() => {
+        setExportStatus(`downloaded ${EXPORT_FORMAT_LABELS[request.format]}`);
+      })
+      .catch((error: unknown) => {
+        setExportStatus(null);
+        setDrawingError(formatDrawingError(error));
+      });
   };
 
   const resetView = (): void => {
-    setPanX(INITIAL_PAN_X);
-    setPanY(INITIAL_PAN_Y);
-    setZoom(INITIAL_ZOOM);
+    const reverie = reverieRef.current;
+
+    if (reverie === null) {
+      return;
+    }
+
+    reverie.camera.setPan(INITIAL_PAN_X, INITIAL_PAN_Y);
+    reverie.camera.setZoom(INITIAL_ZOOM * FIT_CAMERA_ZOOM);
+    reverie.render();
+    publishCameraView();
   };
 
   const handlePanStart = (event: ReactPointerEvent<HTMLDivElement>): void => {
@@ -172,8 +258,7 @@ export function App(): ReactElement {
       y: event.clientY,
     };
     reverie.render();
-    setPanX(camera.panX);
-    setPanY(camera.panY);
+    publishCameraView();
   };
 
   const handlePanEnd = (event: ReactPointerEvent<HTMLDivElement>): void => {
@@ -229,9 +314,7 @@ export function App(): ReactElement {
     camera.zoomAt(anchor, nextZoom * FIT_CAMERA_ZOOM);
     reverie.render();
     setPointerScreenPosition(anchor);
-    setPanX(camera.panX);
-    setPanY(camera.panY);
-    setZoom(nextZoom);
+    publishCameraView();
   };
 
   const cameraZoom = zoom * FIT_CAMERA_ZOOM;
@@ -351,14 +434,6 @@ export function App(): ReactElement {
               }
             />
           </label>
-
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={clearPainting}
-          >
-            Clear canvas
-          </button>
         </div>
 
         <div
@@ -410,6 +485,7 @@ export function App(): ReactElement {
           </div>
           <div className="viewport-status" aria-live="polite">
             {drawingError ??
+              exportStatus ??
               (isPanning ? "panning" : isPainting ? "stroke active" : "ready")}
             {" · "}16 × 16 px · pan ({panX.toFixed(2)}, {panY.toFixed(2)}) ·
             zoom {zoom.toFixed(2)}×
@@ -418,9 +494,39 @@ export function App(): ReactElement {
 
         <div className="view-toolbar" aria-label="Camera controls">
           <p>Middle-drag to pan · Wheel to zoom at cursor</p>
-          <button type="button" onClick={resetView}>
-            Reset view
-          </button>
+
+          <div className="view-toolbar-tools">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={clearPainting}
+            >
+              Clear canvas
+            </button>
+
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={exportPainting}
+            >
+              Export to console
+            </button>
+
+            {EXPORT_REQUESTS.map((request) => (
+              <button
+                key={request.format}
+                type="button"
+                className="secondary-button"
+                onClick={() => exportPaintingAsImage(request)}
+              >
+                Export {EXPORT_FORMAT_LABELS[request.format]}
+              </button>
+            ))}
+
+            <button type="button" onClick={resetView}>
+              Reset view
+            </button>
+          </div>
         </div>
       </section>
     </main>

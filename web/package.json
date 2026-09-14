@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@reverie/core": "workspace:*",
+    "@reverie/exporter": "workspace:*",
     "@reverie/renderer": "workspace:*"
   },
   "devDependencies": {

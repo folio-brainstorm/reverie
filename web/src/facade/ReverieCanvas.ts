@@ -1,9 +1,13 @@
 import { Camera, CircleBrush, World } from "@reverie/core";
 import type { Brush, RasterLayer, WorldBounds } from "@reverie/core";
+import type { ExportRegion } from "@reverie/exporter";
 import { CanvasRenderer } from "@reverie/renderer";
 
 import { WebErrorDefinitions } from "../errors/WebErrorDefinitions.js";
 import { WebError, WebRangeError } from "../errors/WebErrors.js";
+import { downloadEncodedImage } from "../export/DownloadEncodedImage.js";
+import { encodeRasterRegion } from "../export/EncodeRasterRegion.js";
+import type { ReverieDownloadOptions } from "../interfaces/export/ReverieDownloadOptions.js";
 import type { ReverieCanvasConfig } from "../interfaces/facade/ReverieCanvasConfig.js";
 import { CanvasDrawingSession } from "../session/CanvasDrawingSession.js";
 
@@ -54,9 +58,7 @@ export class ReverieCanvas {
     const bounds = ReverieCanvas.resolveBounds(config.width, config.height);
     this.world = new World({
       bounds,
-      ...(config.tileSize === undefined
-        ? {}
-        : { tileSize: config.tileSize }),
+      ...(config.tileSize === undefined ? {} : { tileSize: config.tileSize }),
     });
     this.activeLayer = this.world.createRasterLayer();
     this.camera = new Camera();
@@ -121,6 +123,49 @@ export class ReverieCanvas {
     this.renderer.render();
   }
 
+  /**
+   * Encodes a region of the active layer and downloads it as an image file.
+   *
+   * The region defaults to the World's bounds, so a fixed canvas exports its
+   * whole surface without extra configuration. An unbounded World has no natural
+   * full-image size, so it requires an explicit `region`. Only the active layer is
+   * exported; multi-layer compositing is not part of this step.
+   *
+   * The operation is read-only with respect to drawing state: neither the Raster,
+   * the Camera, the Brush, nor the Scheduler is modified. JPEG downloads install
+   * the runtime `Buffer` shim automatically, so callers never need to reach for
+   * `JPEGEncoder.installJpegJsBufferShim()` themselves.
+   *
+   * @param options - Format, optional filename, optional region, and encoder options.
+   * @returns A promise resolving once the browser download has been triggered.
+   * @throws {WebError} This facade has been disposed.
+   * @throws {WebRangeError} The World is unbounded and no `region` was supplied.
+   * @throws {ExporterRangeError} The region is unusable or an encoder option is
+   * outside its supported range.
+   * @throws {ExporterError} The format backend failed to encode the bitmap.
+   *
+   * @example
+   * await reverie.download({ format: "png", filename: "drawing" });
+   */
+  async download(options: ReverieDownloadOptions): Promise<void> {
+    this.assertUsable();
+
+    const region = ReverieCanvas.resolveExportRegion(
+      this.world.bounds,
+      options.region,
+    );
+    const image = await encodeRasterRegion(
+      this.activeLayer.raster,
+      region,
+      options,
+    );
+
+    downloadEncodedImage(
+      image,
+      options.filename === undefined ? {} : { filename: options.filename },
+    );
+  }
+
   /** Releases input, resize, and owned scheduling resources permanently. */
   dispose(): void {
     if (this.isDisposed) {
@@ -165,6 +210,27 @@ export class ReverieCanvas {
     }
 
     return { x: 0, y: 0, width, height };
+  }
+
+  /** Resolves the World bounds into the region a download should export. */
+  private static resolveExportRegion(
+    bounds: WorldBounds | null,
+    region: ExportRegion | undefined,
+  ): ExportRegion {
+    if (region !== undefined) {
+      return region;
+    }
+
+    if (bounds === null) {
+      throw WebRangeError.from(WebErrorDefinitions.EXPORT_REGION_REQUIRED);
+    }
+
+    return {
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
+    };
   }
 
   /** Rejects facade mutations after lifecycle disposal. */

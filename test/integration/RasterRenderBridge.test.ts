@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { Raster } from "@reverie/core";
 import {
   getRasterTilePixels,
+  getRasterTileVersion,
+  getRasterTileView,
 } from "@reverie/core/renderer";
 import type { Renderer, TileCoord } from "@reverie/core/renderer";
 
@@ -21,31 +23,19 @@ describe("Raster renderer bridge", () => {
 
   it("reads an allocated tile in row-major RGBA8 order", () => {
     const raster = new Raster({ tileSize: TILE_SIZE });
-    raster.setPixel(
-      { x: 0, y: 0 },
-      { r: 255, g: 64, b: 32, a: 255 },
-    );
-    raster.setPixel(
-      { x: 1, y: 1 },
-      { r: 10, g: 20, b: 30, a: 40 },
-    );
+    raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 64, b: 32, a: 255 });
+    raster.setPixel({ x: 1, y: 1 }, { r: 10, g: 20, b: 30, a: 40 });
 
     const pixels = getRasterTilePixels(raster, { x: 0, y: 0 });
 
     expect(Array.from(pixels ?? [])).toEqual([
-      255, 64, 32, 255,
-      0, 0, 0, 0,
-      0, 0, 0, 0,
-      10, 20, 30, 40,
+      255, 64, 32, 255, 0, 0, 0, 0, 0, 0, 0, 0, 10, 20, 30, 40,
     ]);
   });
 
   it("resolves negative tile coordinates", () => {
     const raster = new Raster({ tileSize: TILE_SIZE });
-    raster.setPixel(
-      { x: -1, y: -1 },
-      { r: 128, g: 96, b: 64, a: 255 },
-    );
+    raster.setPixel({ x: -1, y: -1 }, { r: 128, g: 96, b: 64, a: 255 });
 
     const pixels = getRasterTilePixels(raster, { x: -1, y: -1 });
 
@@ -78,6 +68,46 @@ describe("Raster renderer bridge", () => {
 
     expect(
       getRasterTilePixels(raster, { x: 500_000, y: -500_000 }),
+    ).toBeUndefined();
+    // #if DEBUG
+    expect(raster.allocatedTileCount).toBe(0);
+    // #endif
+  });
+
+  it("exposes a live zero-copy view over an allocated tile", () => {
+    const raster = new Raster({ tileSize: TILE_SIZE });
+    const pixel = { x: 0, y: 0 };
+    raster.setPixel(pixel, { r: 10, g: 20, b: 30, a: 255 });
+
+    const view = getRasterTileView(raster, { x: 0, y: 0 });
+
+    expect(view).toBeDefined();
+    expect(view?.pixels[0]).toBe(10);
+
+    raster.setPixel(pixel, { r: 200, g: 20, b: 30, a: 255 });
+
+    expect(view?.pixels[0]).toBe(200);
+  });
+
+  it("reports the same tile identity and revision as the version query", () => {
+    const raster = new Raster({ tileSize: TILE_SIZE });
+    const coord: TileCoord = { x: 1, y: -1 };
+    raster.setPixel({ x: 2, y: -1 }, { r: 1, g: 2, b: 3, a: 4 });
+
+    const view = getRasterTileView(raster, coord);
+    const version = getRasterTileVersion(raster, coord);
+
+    expect(view).toBeDefined();
+    expect(version).toBeDefined();
+    expect(view?.tileId).toBe(version?.tileId);
+    expect(view?.revision).toBe(version?.revision);
+  });
+
+  it("returns undefined for an absent tile without allocating storage", () => {
+    const raster = new Raster({ tileSize: TILE_SIZE });
+
+    expect(
+      getRasterTileView(raster, { x: 500_000, y: -500_000 }),
     ).toBeUndefined();
     // #if DEBUG
     expect(raster.allocatedTileCount).toBe(0);

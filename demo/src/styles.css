@@ -180,6 +180,14 @@ canvas {
   align-items: center;
 }
 
+.view-toolbar-tools {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .view-toolbar p {
   margin: 0;
   color: #aaa6b5;

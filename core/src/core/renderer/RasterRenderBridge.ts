@@ -1,4 +1,5 @@
 import { RasterTileVersion } from "../../interfaces/renderer/RasterTileVersion.js";
+import type { RasterTileView } from "../../interfaces/renderer/RasterTileView.js";
 import type { TileCoord } from "../../interfaces/tile/TileCoord.js";
 import type { Raster } from "../raster/Raster.js";
 import type { Tile } from "../tile/Tile.js";
@@ -97,6 +98,38 @@ export function getRasterTileVersion(
   }
 
   return { tileId: tile.tileId, revision: tile.revision };
+}
+
+/**
+ * Reads one allocated Raster tile as a zero-copy view over its live pixels.
+ *
+ * Unlike {@link getRasterTilePixels}, the returned array is not a snapshot: it
+ * aliases the Tile's internal storage, so it must be treated as read-only and
+ * must not be retained after the synchronous work that requested it. Copying is
+ * left to the caller so bulk readers can extract a region without allocating a
+ * full-tile intermediate.
+ *
+ * @param raster - Raster whose sparse storage should be inspected.
+ * @param coord - Safe-integer coordinate in the Raster tile grid.
+ * @returns A live tile view, or `undefined` when the tile is absent.
+ */
+export function getRasterTileView(
+  raster: Raster,
+  coord: TileCoord,
+): RasterTileView | undefined {
+  const tile = RASTER_TILE_STORES.get(raster)?.get(coord);
+
+  if (tile === undefined) {
+    return undefined;
+  }
+
+  const pixels = TILE_PIXEL_BUFFERS.get(tile);
+
+  if (pixels === undefined) {
+    return undefined;
+  }
+
+  return { tileId: tile.tileId, revision: tile.revision, pixels };
 }
 
 /** Returns an allocated tile for trusted, prevalidated world-pixel writes. */

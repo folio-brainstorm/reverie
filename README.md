@@ -4,6 +4,8 @@
 
 - `core`：可独立构建的 TypeScript 核心包（`@reverie/core`）
 - `renderer`：可扩展的渲染后端包（`@reverie/renderer`）
+- `web`：浏览器运行时包（`@reverie/web`）
+- `exporter`：导出包（`@reverie/exporter`）
 - `demo`：独立的 Vite + React + TypeScript 示例应用
 - `test`：独立的 Vitest 测试包，负责测试 `core`
 
@@ -133,6 +135,103 @@ while (stroke.hasPendingStamps) {
 `demo` 提供了可直接按下并拖动绘画的连续 Stroke 画布，并可调整颜色、
 Brush Size、Spacing、Opacity、Pan 和 Zoom。绘制命令由主线程上的
 `DrawingScheduler` 按帧消费。
+
+## Export Renderer
+
+`@reverie/exporter` 的 `ExportRenderer` 将 World Pixel Region 导出为稠密的
+RGBA8 buffer。导出区域使用半开区间 `[x, x + width) × [y, y + height)`，未
+分配的 Tile 在输出中保持透明黑，且 Raster 本身不会被修改：
+
+```ts
+import { ExportRenderer } from "@reverie/exporter";
+
+const exporter = new ExportRenderer({ raster });
+
+const image = exporter.render({
+  x: 0,
+  y: 0,
+  width: 1920,
+  height: 1080,
+});
+
+// image.width === 1920
+// image.height === 1080
+// image.pixels.length === 1920 * 1080 * 4
+```
+
+`render()` 是同步 API，每次调用都返回一个全新的 buffer；buffer 使用 straight
+alpha，不进行 premultiply、缩放或图层合成。`render()` 只输出原始 RGBA 数据，
+编码为实际图片文件由 `Image Encoders` 负责。
+
+`demo` 中的 “Export to console” 按钮会把当前画布导出为 16 × 16 的 RGBA
+buffer，并把完整的 `Uint8ClampedArray` 输出到浏览器控制台。
+
+## Image Encoders
+
+`@reverie/exporter` 的 `PNGEncoder`、`JPEGEncoder` 与 `WebPEncoder` 将
+`ExportResult` 编码为完整的图片文件。Encoder 只读取 bitmap，不接触 Raster、
+World 或 Camera，输出统一为运行时中立的 `Uint8Array`：
+
+```ts
+import { JPEGEncoder, PNGEncoder, WebPEncoder } from "@reverie/exporter";
+
+const png = await new PNGEncoder().encode(image, { compressionLevel: 6 });
+const jpeg = await new JPEGEncoder().encode(image, { quality: 0.92 });
+const webp = await new WebPEncoder().encode(image, { lossless: true });
+
+// png.mimeType === "image/png";   png.extension === "png"
+// jpeg.mimeType === "image/jpeg"; jpeg.extension === "jpg"
+// webp.mimeType === "image/webp"; webp.extension === "webp"
+```
+
+PNG 始终无损，包括完全透明像素中保留的颜色通道。JPEG 没有 Alpha 通道，因此会
+先把 RGBA 合成到不透明背景上（默认白色，可通过 `background` 指定）。WebP 默认
+无损编码并精确保留 Alpha，只有显式传入 `lossless: false` 时才走有损路径；有损
+bitstream 无法携带 Alpha，会退化为颜色通道本身。
+
+所有 Encoder 都是无状态的：既不修改传入的 bitmap，也不在实例上保留上一次的
+输入或结果，因此同一个实例可以并发编码。输入会在编码前校验，非法尺寸、错误的
+buffer 长度或越界的 quality / compressionLevel 都会抛出带稳定 code 的
+`ExporterTypeError` 或 `ExporterRangeError`。
+
+## Web Download
+
+`@reverie/web` 的 `downloadEncodedImage` 把已编码的 `EncodedImage` 交付给浏览器下载：字节被包装为 `Blob`（MIME 取自 `image.mimeType`），通过临时 Object URL 与临时 `<a>` 触发下载，随后撤销 Object URL 并移除临时节点。该 Helper 是浏览器专用逻辑，只负责交付字节，不读取 Raster、不渲染、不编码：
+
+```ts
+import { downloadEncodedImage } from "@reverie/web";
+
+downloadEncodedImage(image, { filename: "artwork" });
+```
+
+省略 `filename` 时使用 `drawing.<extension>`；`filename` 缺少扩展名时会补上编码结果的扩展名，已有扩展名则原样保留，因此不会出现 `artwork.png.png`。
+
+`ReverieCanvas` 在同一个 Helper 之上提供高层入口。它以 `world.bounds` 作为默认导出区域，固定尺寸画布一次调用即可导出整幅画面；无限 World 没有自然的完整尺寸，必须显式传入 `region`：
+
+```ts
+await reverie.download({ format: "png", filename: "drawing.png" });
+
+await reverie.download({
+  format: "jpeg",
+  filename: "artwork.jpg",
+  quality: 0.9,
+});
+
+await reverie.download({
+  format: "webp",
+  filename: "artwork.webp",
+  lossless: false,
+});
+
+await reverie.download({
+  format: "png",
+  region: { x: -1024, y: -1024, width: 2048, height: 2048 },
+});
+```
+
+`download()` 只导出当前 `activeLayer`，不做多图层合成；导出过程只读取 Raster，不会修改像素、Camera、Brush 或 Scheduler。PNG 支持 `compressionLevel`（`0..9`，默认 `6`）。JPEG 需要全局 `Buffer`，`download()` 会自动安装对应的 shim，因此浏览器环境无需手动调用；只有直接使用 `JPEGEncoder` 时才需要先调用一次 `JPEGEncoder.installJpegJsBufferShim()`。
+
+`demo` 中的 “Export PNG / JPEG / WebP” 按钮通过 `ReverieCanvas.download()` 直接下载导出结果。
 
 ## 开始使用
 

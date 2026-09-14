@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { CircleBrush } from "@reverie/core";
+import { CircleBrush, World } from "@reverie/core";
+import {
+  ExportRenderer,
+  JPEGEncoder,
+  PNGEncoder,
+  WebPEncoder,
+} from "@reverie/exporter";
 
 import {
   ReverieCanvas,
@@ -10,7 +16,13 @@ import {
 } from "../index.js";
 import type { FrameCallback, ReverieCanvasConfig } from "../index.js";
 
+import {
+  DownloadTestRuntime,
+  flushScheduledTimers,
+} from "./DownloadTestRuntime.js";
+
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -59,16 +71,19 @@ describe("ReverieCanvas construction", () => {
     { width: 16, height: -1 },
     { width: 1.5, height: 16 },
     { width: 16, height: Number.POSITIVE_INFINITY },
-  ])("rejects invalid dimension configuration $width x $height", (dimensions) => {
-    const runtime = createCanvasRuntime();
-    const createReverie = () =>
-      new ReverieCanvas({ canvas: runtime.canvas, ...dimensions });
+  ])(
+    "rejects invalid dimension configuration $width x $height",
+    (dimensions) => {
+      const runtime = createCanvasRuntime();
+      const createReverie = () =>
+        new ReverieCanvas({ canvas: runtime.canvas, ...dimensions });
 
-    expect(createReverie).toThrow(WebRangeError);
-    expect(createReverie).toThrow(
-      `[${WebErrorDefinitions.INVALID_REVERIE_CANVAS_DIMENSIONS.code}]`,
-    );
-  });
+      expect(createReverie).toThrow(WebRangeError);
+      expect(createReverie).toThrow(
+        `[${WebErrorDefinitions.INVALID_REVERIE_CANVAS_DIMENSIONS.code}]`,
+      );
+    },
+  );
 });
 
 describe("ReverieCanvas drawing and lifecycle", () => {
@@ -144,6 +159,297 @@ describe("ReverieCanvas drawing and lifecycle", () => {
     expect(() => reverie.render()).toThrow(
       `[${WebErrorDefinitions.REVERIE_CANVAS_DISPOSED.code}]`,
     );
+  });
+});
+
+describe("ReverieCanvas export and download", () => {
+  it("downloads the whole fixed World as PNG by default", async () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({
+      canvas: runtime.canvas,
+      width: 1920,
+      height: 1080,
+    });
+    const renderSpy = vi.spyOn(ExportRenderer.prototype, "render");
+    const encodeSpy = vi.spyOn(PNGEncoder.prototype, "encode");
+
+    await reverie.download({ format: "png" });
+    await flushScheduledTimers();
+
+    expect(renderSpy).toHaveBeenCalledWith({
+      x: 0,
+      y: 0,
+      width: 1920,
+      height: 1080,
+    });
+    expect(encodeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ width: 1920, height: 1080 }),
+      {},
+    );
+    expect(runtime.downloads.blobs[0]?.type).toBe("image/png");
+    expect(runtime.downloads.anchors[0]?.download).toBe("drawing.png");
+    expect(runtime.downloads.revokedObjectUrls).toEqual(
+      runtime.downloads.createdObjectUrls,
+    );
+
+    reverie.dispose();
+  });
+
+  it("preserves negative World bounds instead of assuming an origin", async () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({
+      canvas: runtime.canvas,
+      width: 1920,
+      height: 1080,
+    });
+    // The facade always creates bounds at origin `(0, 0)`, so the getter is
+    // stubbed to cover a World whose origin lies above and left of the origin.
+    vi.spyOn(World.prototype, "bounds", "get").mockReturnValue({
+      x: -960,
+      y: -540,
+      width: 1920,
+      height: 1080,
+    });
+    const renderSpy = vi.spyOn(ExportRenderer.prototype, "render");
+
+    await reverie.download({ format: "png" });
+    await flushScheduledTimers();
+
+    expect(renderSpy).toHaveBeenCalledWith({
+      x: -960,
+      y: -540,
+      width: 1920,
+      height: 1080,
+    });
+
+    reverie.dispose();
+  });
+
+  it("requires an explicit region for an unbounded World", async () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+    const download = (): Promise<void> => reverie.download({ format: "png" });
+
+    await expect(download()).rejects.toThrow(WebRangeError);
+    await expect(download()).rejects.toThrow(
+      `[${WebErrorDefinitions.EXPORT_REGION_REQUIRED.code}]`,
+    );
+    expect(runtime.downloads.createdObjectUrls).toHaveLength(0);
+
+    reverie.dispose();
+  });
+
+  it("exports an explicit region of an unbounded World", async () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+    const renderSpy = vi.spyOn(ExportRenderer.prototype, "render");
+    const region = { x: -500, y: -500, width: 1000, height: 1000 };
+
+    await reverie.download({ format: "png", region });
+    await flushScheduledTimers();
+
+    expect(renderSpy).toHaveBeenCalledWith(region);
+    expect(region).toEqual({ x: -500, y: -500, width: 1000, height: 1000 });
+
+    reverie.dispose();
+  });
+
+  it("forwards JPEG options and uses JPEG delivery metadata", async () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({
+      canvas: runtime.canvas,
+      width: 8,
+      height: 8,
+    });
+    const background = { r: 0, g: 0, b: 0, a: 255 };
+    const encodeSpy = vi
+      .spyOn(JPEGEncoder.prototype, "encode")
+      .mockResolvedValue({
+        data: new Uint8Array([1]),
+        mimeType: "image/jpeg",
+        extension: "jpg",
+      });
+
+    await reverie.download({ format: "jpeg", quality: 0.9, background });
+    await flushScheduledTimers();
+
+    expect(encodeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ width: 8, height: 8 }),
+      { quality: 0.9, background },
+    );
+    expect(runtime.downloads.blobs[0]?.type).toBe("image/jpeg");
+    expect(runtime.downloads.anchors[0]?.download).toBe("drawing.jpg");
+
+    reverie.dispose();
+  });
+
+  it("forwards WebP options to the WebP encoder", async () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({
+      canvas: runtime.canvas,
+      width: 8,
+      height: 8,
+    });
+    const encodeSpy = vi
+      .spyOn(WebPEncoder.prototype, "encode")
+      .mockResolvedValue({
+        data: new Uint8Array([1]),
+        mimeType: "image/webp",
+        extension: "webp",
+      });
+
+    await reverie.download({ format: "webp", quality: 0.5, lossless: false });
+    await flushScheduledTimers();
+
+    expect(encodeSpy).toHaveBeenCalledWith(expect.anything(), {
+      quality: 0.5,
+      lossless: false,
+    });
+    expect(runtime.downloads.blobs[0]?.type).toBe("image/webp");
+    expect(runtime.downloads.anchors[0]?.download).toBe("drawing.webp");
+
+    reverie.dispose();
+  });
+
+  it("omits encoder options the request leaves unspecified", async () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({
+      canvas: runtime.canvas,
+      width: 8,
+      height: 8,
+    });
+    const encodeSpy = vi
+      .spyOn(WebPEncoder.prototype, "encode")
+      .mockResolvedValue({
+        data: new Uint8Array([1]),
+        mimeType: "image/webp",
+        extension: "webp",
+      });
+
+    await reverie.download({ format: "webp" });
+    await flushScheduledTimers();
+
+    expect(encodeSpy).toHaveBeenCalledWith(expect.anything(), {});
+
+    reverie.dispose();
+  });
+
+  it("forwards the PNG compression level to the PNG encoder", async () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({
+      canvas: runtime.canvas,
+      width: 8,
+      height: 8,
+    });
+    const encodeSpy = vi.spyOn(PNGEncoder.prototype, "encode");
+
+    await reverie.download({ format: "png", compressionLevel: 9 });
+    await flushScheduledTimers();
+
+    expect(encodeSpy).toHaveBeenCalledWith(expect.anything(), {
+      compressionLevel: 9,
+    });
+
+    reverie.dispose();
+  });
+
+  it("installs the jpeg-js Buffer shim before encoding a JPEG", async () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({
+      canvas: runtime.canvas,
+      width: 8,
+      height: 8,
+    });
+    const shimSpy = vi.spyOn(JPEGEncoder, "installJpegJsBufferShim");
+    const encodeSpy = vi
+      .spyOn(JPEGEncoder.prototype, "encode")
+      .mockResolvedValue({
+        data: new Uint8Array([1]),
+        mimeType: "image/jpeg",
+        extension: "jpg",
+      });
+
+    await reverie.download({ format: "jpeg" });
+    await flushScheduledTimers();
+
+    expect(shimSpy).toHaveBeenCalledTimes(1);
+    expect(encodeSpy).toHaveBeenCalledWith(expect.anything(), {});
+
+    reverie.dispose();
+  });
+
+  it("does not touch the jpeg-js Buffer shim for non-JPEG formats", async () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({
+      canvas: runtime.canvas,
+      width: 8,
+      height: 8,
+    });
+    const shimSpy = vi.spyOn(JPEGEncoder, "installJpegJsBufferShim");
+
+    await reverie.download({ format: "webp" });
+    await flushScheduledTimers();
+
+    expect(shimSpy).not.toHaveBeenCalled();
+
+    reverie.dispose();
+  });
+
+  it("does not modify the Raster or drawing state while exporting", async () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({
+      canvas: runtime.canvas,
+      width: 16,
+      height: 16,
+    });
+    const raster = reverie.activeLayer.raster;
+    const camera = reverie.camera;
+    const brush = reverie.brush;
+    const sampleRegion = { x: 0, y: 0, width: 16, height: 16 };
+
+    raster.setPixel({ x: 2, y: 3 }, { r: 255, g: 0, b: 0, a: 255 });
+    const pixelsBefore = new ExportRenderer({ raster }).render(
+      sampleRegion,
+    ).pixels;
+
+    await reverie.download({ format: "png" });
+    await flushScheduledTimers();
+
+    expect(new ExportRenderer({ raster }).render(sampleRegion).pixels).toEqual(
+      pixelsBefore,
+    );
+    expect(raster.getPixel({ x: 2, y: 3 })).toEqual({
+      r: 255,
+      g: 0,
+      b: 0,
+      a: 255,
+    });
+    expect(raster.getPixel({ x: 15, y: 15 })).toEqual({
+      r: 0,
+      g: 0,
+      b: 0,
+      a: 0,
+    });
+    expect(reverie.camera).toBe(camera);
+    expect(reverie.brush).toBe(brush);
+
+    reverie.dispose();
+  });
+
+  it("rejects a download after disposal", async () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({
+      canvas: runtime.canvas,
+      width: 8,
+      height: 8,
+    });
+    reverie.dispose();
+
+    await expect(reverie.download({ format: "png" })).rejects.toThrow(WebError);
+    await expect(reverie.download({ format: "png" })).rejects.toThrow(
+      `[${WebErrorDefinitions.REVERIE_CANVAS_DISPOSED.code}]`,
+    );
+    expect(runtime.downloads.createdObjectUrls).toHaveLength(0);
   });
 });
 
@@ -287,6 +593,7 @@ class TestCanvas {
 interface TestCanvasRuntime {
   readonly canvas: HTMLCanvasElement & TestCanvas;
   readonly observer: TestResizeObserver | null;
+  readonly downloads: DownloadTestRuntime;
   readonly runNextFrame: () => void;
 }
 
@@ -324,21 +631,21 @@ function createCanvasRuntime(): TestCanvasRuntime {
   } as unknown as Document;
 
   const testCanvas = new TestCanvas(ownerDocument);
-  vi.stubGlobal(
-    "requestAnimationFrame",
-    (callback: FrameCallback): number => {
-      const handle = nextFrameHandle;
-      nextFrameHandle += 1;
-      frameCallbacks.set(handle, callback);
-      return handle;
-    },
-  );
+  const downloads = new DownloadTestRuntime();
+  downloads.install();
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameCallback): number => {
+    const handle = nextFrameHandle;
+    nextFrameHandle += 1;
+    frameCallbacks.set(handle, callback);
+    return handle;
+  });
   vi.stubGlobal("cancelAnimationFrame", (handle: number): void => {
     frameCallbacks.delete(handle);
   });
 
   return {
     canvas: testCanvas as HTMLCanvasElement & TestCanvas,
+    downloads,
     get observer(): TestResizeObserver | null {
       return currentObserver;
     },

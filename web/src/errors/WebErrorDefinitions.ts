@@ -58,4 +58,36 @@ export const WebErrorDefinitions = {
     code: "EC_WEB_0012",
     template: "ReverieCanvas has been disposed.",
   },
+  INVALID_ENCODED_IMAGE: {
+    code: "EC_WEB_0013",
+    template:
+      "Encoded image must be an object with a `Uint8Array` `data` buffer, a `mimeType`, and an `extension`.",
+  },
+  INVALID_ENCODED_IMAGE_DATA: {
+    code: "EC_WEB_0014",
+    template:
+      "Encoded image `data` must be a Uint8Array, but received `$received`.",
+  },
+  EMPTY_ENCODED_IMAGE_DATA: {
+    code: "EC_WEB_0015",
+    template: "Encoded image `data` must contain at least one byte.",
+  },
+  INVALID_ENCODED_IMAGE_FIELD: {
+    code: "EC_WEB_0016",
+    template:
+      "Encoded image `$param` must be a non-empty string, but received `$received`.",
+  },
+  INVALID_DOWNLOAD_FILENAME: {
+    code: "EC_WEB_0017",
+    template:
+      "Download filename must be a non-empty string, but received `$received`.",
+  },
+  EXPORT_REGION_REQUIRED: {
+    code: "EC_WEB_0018",
+    template: "An export region is required when exporting an unbounded World.",
+  },
+  UNSUPPORTED_EXPORT_FORMAT: {
+    code: "EC_WEB_0019",
+    template: "Unsupported export format `$received`.",
+  },
 } as const satisfies Record<string, ErrorDefinition>;
