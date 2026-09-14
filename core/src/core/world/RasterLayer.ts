@@ -1,5 +1,6 @@
 import type { Brush } from "../../interfaces/brush/Brush.js";
 import type { WorldPoint } from "../../interfaces/camera/WorldPoint.js";
+import type { StampCommand } from "../../interfaces/stroke/StampCommand.js";
 import type { WorldBounds } from "../../interfaces/world/WorldBounds.js";
 
 import { RasterPaintTarget } from "../../internal/paint-target/RasterPaintTarget.js";
@@ -37,8 +38,9 @@ export class RasterLayer {
    *
    * @param brush - Brush used to produce the stamp.
    * @param position - Continuous world-space stamp center.
+   * @param input - Optional per-stamp input forwarded without interpretation.
    */
-  stamp(brush: Brush, position: WorldPoint): void {
-    this.paintTarget.stamp(brush, position);
+  stamp(brush: Brush, position: WorldPoint, input?: StampCommand): void {
+    this.paintTarget.stamp(brush, position, input);
   }
 }

@@ -75,6 +75,38 @@ export const ErrorDefinitions = {
       code: "EC_BRUSH_0003",
       template: "Brush spacing must be a positive finite number.",
     },
+    INVALID_DYNAMICS_OBJECT: {
+      code: "EC_BRUSH_0004",
+      template: "Brush dynamics `$param` must be a non-array object.",
+    },
+    INVALID_DYNAMICS_MIN: {
+      code: "EC_BRUSH_0005",
+      template:
+        "Brush dynamics `$param` minimum must be a finite number between 0 and 1.",
+    },
+    INVALID_MAX_VELOCITY: {
+      code: "EC_BRUSH_0006",
+      template:
+        "Brush dynamics `$param` maxVelocity must be a positive finite number.",
+    },
+    INVALID_DYNAMICS_CURVE: {
+      code: "EC_BRUSH_0007",
+      template:
+        "Brush dynamics `$param` curve must provide an evaluate method.",
+    },
+    INVALID_DYNAMICS_CURVE_OUTPUT: {
+      code: "EC_BRUSH_0008",
+      template:
+        "Brush dynamics `$param` curve must return a finite number between 0 and 1, but received `$received`.",
+    },
+    INVALID_DYNAMICS_INPUT: {
+      code: "EC_BRUSH_0009",
+      template: "Brush dynamics input `$param` is outside its valid range.",
+    },
+    INVALID_RESOLVED_PARAMETERS: {
+      code: "EC_BRUSH_0010",
+      template: "Brush dynamics produced invalid resolved parameters.",
+    },
   },
   WORLD: {
     INVALID_BOUNDS: {

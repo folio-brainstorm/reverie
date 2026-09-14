@@ -187,6 +187,37 @@ describe("CanvasDrawingSession pointer input mapping", () => {
     reverie.dispose();
   });
 
+  it("forwards pen input through per-stamp brush dynamics", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({
+      canvas: runtime.canvas,
+      brush: new CircleBrush({
+        size: 1,
+        color: { r: 0, g: 255, b: 0, a: 255 },
+        dynamics: { opacity: { pressure: { min: 0 } } },
+      }),
+    });
+
+    runtime.canvas.dispatchPointer("pointerdown", {
+      button: 0,
+      pointerId: 1,
+      clientX: 0.5,
+      clientY: 0.5,
+      timeStamp: 1,
+      pointerType: "pen",
+      pressure: 0.25,
+    });
+    runtime.runNextFrame();
+
+    expect(reverie.activeLayer.raster.getPixel({ x: 0, y: 0 })).toEqual({
+      r: 0,
+      g: 255,
+      b: 0,
+      a: 64,
+    });
+    reverie.dispose();
+  });
+
   it("ignores mouse pressure and resolves the Core default", () => {
     const runtime = createCanvasRuntime();
     const reverie = new ReverieCanvas({ canvas: runtime.canvas });

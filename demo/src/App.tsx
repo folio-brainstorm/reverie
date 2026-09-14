@@ -13,8 +13,8 @@ import { flushSync } from "react-dom";
 
 import { exportRasterToConsole } from "./ExportRasterToConsole";
 
-const DRAWING_WIDTH = 16;
-const DRAWING_HEIGHT = 16;
+const DRAWING_WIDTH = 1920;
+const DRAWING_HEIGHT = 1080;
 const VIEWPORT_WIDTH = 1280;
 const VIEWPORT_HEIGHT = 720;
 const FIT_CAMERA_ZOOM = Math.min(

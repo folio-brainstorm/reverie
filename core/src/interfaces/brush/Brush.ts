@@ -1,4 +1,5 @@
 import type { WorldPoint } from "../camera/WorldPoint.js";
+import type { StampCommand } from "../stroke/StampCommand.js";
 import type { Raster } from "../../core/raster/Raster.js";
 
 /** Defines a brush model that can place one stamp in continuous world space. */
@@ -14,6 +15,7 @@ export interface Brush {
    *
    * @param raster - Sparse raster that receives the stamp.
    * @param position - Center of the stamp in continuous world coordinates.
+   * @param input - Optional per-stamp input used by brushes with dynamics.
    */
-  stamp(raster: Raster, position: WorldPoint): void;
+  stamp(raster: Raster, position: WorldPoint, input?: StampCommand): void;
 }

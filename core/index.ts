@@ -2,7 +2,7 @@
 export { Raster } from "./src/core/raster/index.js";
 export { RasterLayer, World } from "./src/core/world/index.js";
 export { Camera } from "./src/core/camera/index.js";
-export { CircleBrush } from "./src/core/brush/index.js";
+export { CircleBrush, LinearDynamicsCurve } from "./src/core/brush/index.js";
 export { Rasterizers } from "./src/core/rasterizer/index.js";
 export { Stroke } from "./src/core/stroke/index.js";
 export { blendSourceOver, paintPixel } from "./src/core/paint/index.js";
@@ -43,6 +43,14 @@ export type {
 export type { CameraConfig } from "./src/interfaces/camera/CameraConfig.js";
 export type { Brush } from "./src/interfaces/brush/Brush.js";
 export type { CircleBrushConfig } from "./src/interfaces/brush/CircleBrushConfig.js";
+export type { ResolvedBrushParameters } from "./src/interfaces/brush/ResolvedBrushParameters.js";
+export type { BrushDynamics } from "./src/interfaces/brush/dynamics/BrushDynamics.js";
+export type { BrushParameterDynamics } from "./src/interfaces/brush/dynamics/BrushParameterDynamics.js";
+export type { DynamicsCurve } from "./src/interfaces/brush/dynamics/DynamicsCurve.js";
+export type { PressureDynamics } from "./src/interfaces/brush/dynamics/PressureDynamics.js";
+export type { RotationDynamics } from "./src/interfaces/brush/dynamics/RotationDynamics.js";
+export type { TiltDynamics } from "./src/interfaces/brush/dynamics/TiltDynamics.js";
+export type { VelocityDynamics } from "./src/interfaces/brush/dynamics/VelocityDynamics.js";
 export type { ScreenPoint } from "./src/interfaces/camera/ScreenPoint.js";
 export type { ViewportSize } from "./src/interfaces/camera/ViewportSize.js";
 export type { WorldPoint } from "./src/interfaces/camera/WorldPoint.js";

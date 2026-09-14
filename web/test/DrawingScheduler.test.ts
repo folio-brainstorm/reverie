@@ -106,6 +106,28 @@ describe("DrawingScheduler frame execution", () => {
     expect(driver.pendingFrameCount).toBe(0);
   });
 
+  it("forwards the complete stamp context without interpreting dynamics", () => {
+    const driver = new ManualFrameDriver();
+    const raster = new Raster();
+    const stamp = {
+      position: { x: 2, y: 3 },
+      timestamp: 10,
+      pressure: 0.25,
+      tiltX: -20,
+      tiltY: 30,
+      velocity: 0.5,
+    };
+    const stampBrush = vi.fn<Brush["stamp"]>();
+    const brush: Brush = { size: 1, spacing: 1, stamp: stampBrush };
+    const scheduler = new DrawingScheduler({ frameDriver: driver });
+
+    scheduler.enqueue({ stamp, brush, raster });
+    driver.runNextFrame();
+
+    expect(stampBrush).toHaveBeenCalledOnce();
+    expect(stampBrush).toHaveBeenCalledWith(raster, stamp.position, stamp);
+  });
+
   it("splits work across frames when the soft budget is exhausted", () => {
     const driver = new ManualFrameDriver();
     const executed: number[] = [];

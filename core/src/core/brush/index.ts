@@ -1,3 +1,12 @@
 export { CircleBrush } from "./CircleBrush.js";
+export { LinearDynamicsCurve } from "./LinearDynamicsCurve.js";
 export type { Brush } from "../../interfaces/brush/Brush.js";
 export type { CircleBrushConfig } from "../../interfaces/brush/CircleBrushConfig.js";
+export type { ResolvedBrushParameters } from "../../interfaces/brush/ResolvedBrushParameters.js";
+export type { BrushDynamics } from "../../interfaces/brush/dynamics/BrushDynamics.js";
+export type { BrushParameterDynamics } from "../../interfaces/brush/dynamics/BrushParameterDynamics.js";
+export type { DynamicsCurve } from "../../interfaces/brush/dynamics/DynamicsCurve.js";
+export type { PressureDynamics } from "../../interfaces/brush/dynamics/PressureDynamics.js";
+export type { RotationDynamics } from "../../interfaces/brush/dynamics/RotationDynamics.js";
+export type { TiltDynamics } from "../../interfaces/brush/dynamics/TiltDynamics.js";
+export type { VelocityDynamics } from "../../interfaces/brush/dynamics/VelocityDynamics.js";

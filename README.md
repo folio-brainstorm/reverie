@@ -88,7 +88,7 @@ while (stroke.hasPendingStamps) {
   const command = stroke.nextStamp();
 
   if (command === undefined) break;
-  stroke.brush.stamp(raster, command.position);
+  stroke.brush.stamp(raster, command.position, command);
 }
 ```
 
@@ -107,9 +107,38 @@ stroke.addSample({
 
 `pressure` 必须是 `[0, 1]` 内的有限数，`tiltX` / `tiltY` 必须是以度为单位、
 位于 `[-90, 90]` 内的有限数。省略时分别取默认值 `1`、`0`、`0`，因此
-`{ position, timestamp }` 形式的旧调用保持完全兼容。Step 17 只负责传递这些
-属性，不会用它们改变 Brush 尺寸、透明度或旋转。浏览器输入由 `@reverie/web`
-归一化：只有 `pointerType === "pen"` 的压力会被采信，鼠标与触摸一律取 `1`。
+`{ position, timestamp }` 形式的旧调用保持完全兼容。每条命令还包含相邻实际
+Stamp 之间的速度，单位为 World Unit/ms；首条命令或非正时间差使用 `0`。
+浏览器输入由 `@reverie/web` 归一化：只有 `pointerType === "pen"` 的压力会被
+采信，鼠标与触摸一律取 `1`。
+
+## Brush Dynamics
+
+`CircleBrush` 可以独立配置 Pressure → Size、Pressure → Opacity、Velocity →
+Size、Velocity → Opacity 和 Tilt → Rotation。配置项存在即启用，`min` 表示相对
+基础值的最小比例；Pressure 和 Velocity 同时影响同一参数时，其归一化因子相乘：
+
+```ts
+const dynamicBrush = new CircleBrush({
+  size: 20,
+  color: { r: 0, g: 255, b: 0, a: 255 },
+  opacity: 0.8,
+  dynamics: {
+    size: {
+      pressure: { min: 0.2 },
+      velocity: { min: 0.5, maxVelocity: 1 },
+    },
+    opacity: {
+      pressure: { min: 0.1 },
+    },
+    rotation: { tilt: {} },
+  },
+});
+```
+
+默认曲线为线性，也可提供实现 `DynamicsCurve.evaluate(input)` 的确定性自定义
+曲线。输入和输出均为 `[0, 1]`。Tilt 旋转以弧度解析；圆形 Brush 的像素结果不受
+旋转影响。未配置 dynamics 时仍使用原有固定参数快路径。
 
 ## Canvas Renderer
 

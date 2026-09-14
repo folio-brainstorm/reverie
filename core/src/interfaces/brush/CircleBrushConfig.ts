@@ -1,4 +1,5 @@
 import type { RGBAColor } from "../color/Colors.js";
+import type { BrushDynamics } from "./dynamics/BrushDynamics.js";
 
 /** Configuration for a circular brush model. */
 export interface CircleBrushConfig {
@@ -13,4 +14,7 @@ export interface CircleBrushConfig {
 
   /** Stamp-distance proportion relative to size. Defaults to `0.25`. */
   spacing?: number;
+
+  /** Optional per-stamp input mappings owned by this brush. */
+  dynamics?: BrushDynamics;
 }

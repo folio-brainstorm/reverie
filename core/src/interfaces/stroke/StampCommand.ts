@@ -22,4 +22,10 @@ export interface StampCommand {
 
   /** Pen tilt around the Y axis in degrees; populated by {@link Stroke}. */
   readonly tiltY?: number;
+
+  /**
+   * Speed from the preceding actual stamp in world units per millisecond.
+   * The first stamp and a non-positive time delta resolve to `0`.
+   */
+  readonly velocity?: number;
 }

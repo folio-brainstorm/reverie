@@ -485,7 +485,7 @@ describe("pending stamp queue", () => {
         break;
       }
 
-      stroke.brush.stamp(raster, command.position);
+      stroke.brush.stamp(raster, command.position, command);
     }
 
     for (let x = 0; x <= 4; x += 1) {
@@ -875,6 +875,54 @@ describe("extended stroke sample input", () => {
       commands.map((command) => command.tiltY),
       [30, 15, 0, -15, -30],
     );
+    expectNumbersToBeClose(
+      commands.map((command) => command.velocity),
+      [0, 0.8, 0.8, 0.8, 0.8],
+    );
+  });
+
+  it("derives velocity between neighboring actual stamps", () => {
+    const stroke = new Stroke({
+      brush: createRecordingBrush([], 10, 1),
+      smoothing: 1,
+      resampleDistance: 10,
+    });
+
+    stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
+    stroke.addSample({ position: { x: 10, y: 0 }, timestamp: 10 });
+
+    expect(
+      drainStampCommands(stroke).map((command) => command.velocity),
+    ).toEqual([0, 1]);
+  });
+
+  it("uses zero velocity when neighboring stamps have equal timestamps", () => {
+    const stroke = new Stroke({
+      brush: createRecordingBrush([], 10, 1),
+      smoothing: 1,
+      resampleDistance: 10,
+    });
+
+    stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 5 });
+    stroke.addSample({ position: { x: 10, y: 0 }, timestamp: 5 });
+
+    expect(
+      drainStampCommands(stroke).map((command) => command.velocity),
+    ).toEqual([0, 0]);
+  });
+
+  it("resets first-stamp velocity for each new stroke", () => {
+    const createStroke = (): Stroke =>
+      new Stroke({ brush: createRecordingBrush([], 10, 1) });
+    const firstStroke = createStroke();
+    const secondStroke = createStroke();
+
+    firstStroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
+    firstStroke.addSample({ position: { x: 10, y: 0 }, timestamp: 10 });
+    secondStroke.addSample({ position: { x: 100, y: 0 }, timestamp: 100 });
+
+    expect(firstStroke.nextStamp()?.velocity).toBe(0);
+    expect(secondStroke.nextStamp()?.velocity).toBe(0);
   });
 
   it("keeps input attributes finite across zero-length segments", () => {
@@ -902,6 +950,7 @@ describe("extended stroke sample input", () => {
         pressure: 0.5,
         tiltX: 10,
         tiltY: -10,
+        velocity: 0,
       },
     ]);
   });
@@ -924,6 +973,7 @@ describe("extended stroke sample input", () => {
         pressure: 0.3,
         tiltX: -12,
         tiltY: 8,
+        velocity: 0,
       },
     ]);
   });
@@ -934,7 +984,10 @@ describe("extended stroke sample input", () => {
     stroke.addSample({ position: { x: 4, y: -3 }, timestamp: 2 });
 
     expect(drainStampCommands(stroke)).toEqual([
-      normalizedSample({ x: 4, y: -3 }, 2),
+      {
+        ...normalizedSample({ x: 4, y: -3 }, 2),
+        velocity: 0,
+      },
     ]);
   });
 
@@ -1023,7 +1076,7 @@ function executeAllStamps(stroke: Stroke, raster: Raster): void {
       break;
     }
 
-    stroke.brush.stamp(raster, command.position);
+    stroke.brush.stamp(raster, command.position, command);
   }
 }
 
