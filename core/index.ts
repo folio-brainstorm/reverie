@@ -10,6 +10,13 @@ export { blendSourceOver, paintPixel } from "./src/core/paint/index.js";
 export { Tile } from "./src/core/tile/index.js";
 // #endif
 
+// Shared normalized stroke-input defaults reused by input adapters.
+export {
+  DEFAULT_PRESSURE,
+  DEFAULT_TILT_X,
+  DEFAULT_TILT_Y,
+} from "./src/config/stroke/StrokeInputConstants.js";
+
 // Stable diagnostics and errors intended for consumer-side handling.
 export { ErrorCodes } from "./src/utils/errors/ErrorDefinitions.js";
 export {
@@ -57,6 +64,7 @@ export type { PaintStyle } from "./src/interfaces/paint/PaintStyle.js";
 export type { StampCommand } from "./src/interfaces/stroke/StampCommand.js";
 export type { StrokeConfig } from "./src/interfaces/stroke/StrokeConfig.js";
 export type { StrokeSample } from "./src/interfaces/stroke/StrokeSample.js";
+export type { StrokeSampleInput } from "./src/interfaces/stroke/StrokeSampleInput.js";
 export type {
   Circle,
   PixelCoverageVisitor,

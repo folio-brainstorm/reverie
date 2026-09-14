@@ -1,5 +1,8 @@
 import type { StrokeSample } from "../../interfaces/stroke/StrokeSample.js";
 
+import { copyStrokeSample } from "./CopyStrokeSample.js";
+import { interpolateStrokeSample } from "./InterpolateStrokeSample.js";
+
 /**
  * Emits fixed-distance samples along a streaming piecewise-linear path.
  *
@@ -23,8 +26,9 @@ export class StrokeResampler {
   /**
    * Consumes one smoothed sample and visits each newly resampled output.
    *
-   * The first sample is always emitted. Position and timestamp are linearly
-   * interpolated for later outputs, and zero-length segments emit nothing.
+   * The first sample is always emitted. Position, timestamp, pressure, and both
+   * tilt axes are linearly interpolated for later outputs, and zero-length
+   * segments emit nothing.
    *
    * @param sample - Current smoothed input sample.
    * @param visit - Synchronous consumer invoked once per processed sample.
@@ -34,7 +38,7 @@ export class StrokeResampler {
     this.lastInputSample = sample;
 
     if (previousSample === null) {
-      visit(copySample(sample));
+      visit(copyStrokeSample(sample));
       return;
     }
 
@@ -64,18 +68,8 @@ export class StrokeResampler {
 
       visit(
         isSegmentEnd
-          ? copySample(sample)
-          : {
-              position: {
-                x: previousSample.position.x + deltaX * interpolation,
-                y: previousSample.position.y + deltaY * interpolation,
-              },
-              timestamp: interpolate(
-                previousSample.timestamp,
-                sample.timestamp,
-                interpolation,
-              ),
-            },
+          ? copyStrokeSample(sample)
+          : interpolateStrokeSample(previousSample, sample, interpolation),
       );
 
       lastOutputDistance = clampedDistance;
@@ -86,17 +80,4 @@ export class StrokeResampler {
     this.distanceSinceLastOutput =
       trailingDistance <= tolerance ? 0 : trailingDistance;
   }
-}
-
-/** Copies a sample into resampler-owned output storage. */
-function copySample(sample: StrokeSample): StrokeSample {
-  return {
-    position: { ...sample.position },
-    timestamp: sample.timestamp,
-  };
-}
-
-/** Interpolates finite values without overflowing their intermediate delta. */
-function interpolate(start: number, end: number, amount: number): number {
-  return start * (1 - amount) + end * amount;
 }

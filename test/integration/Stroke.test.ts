@@ -14,6 +14,7 @@ import type {
   StampCommand,
   StrokeConfig,
   StrokeSample,
+  StrokeSampleInput,
   WorldPoint,
 } from "@reverie/core";
 
@@ -22,7 +23,7 @@ describe("Stroke construction and lifecycle", () => {
     const brush = createRecordingBrush([]);
     const config: StrokeConfig = { brush };
     const stroke = new Stroke(config);
-    const sample: StrokeSample = {
+    const sample: StrokeSampleInput = {
       position: { x: 0.25, y: -0.5 },
       timestamp: 10,
     };
@@ -31,9 +32,14 @@ describe("Stroke construction and lifecycle", () => {
     const command: StampCommand | undefined = stroke.nextStamp();
 
     expect(stroke.brush).toBe(brush);
-    expect(stroke.rawSamples).toEqual([sample]);
-    expect(stroke.processedSamples).toEqual([sample]);
-    expect(command).toEqual({ position: sample.position });
+    expect(stroke.rawSamples).toEqual([
+      normalizedSample({ x: 0.25, y: -0.5 }, 10),
+    ]);
+    expect(stroke.processedSamples).toEqual([
+      normalizedSample({ x: 0.25, y: -0.5 }, 10),
+    ]);
+    expect(command?.timestamp).toBe(10);
+    expect(command?.position).toEqual({ x: 0.25, y: -0.5 });
     expect(stroke.isEnded).toBe(false);
   });
 
@@ -48,13 +54,11 @@ describe("Stroke construction and lifecycle", () => {
     exposedSamples[0]!.position.y = 200;
     exposedProcessedSamples[0]!.position.y = 300;
 
-    expect(stroke.rawSamples).toEqual([
-      { position: { x: 1, y: 2 }, timestamp: 3 },
-    ]);
+    expect(stroke.rawSamples).toEqual([normalizedSample({ x: 1, y: 2 }, 3)]);
     expect(stroke.processedSamples).toEqual([
-      { position: { x: 1, y: 2 }, timestamp: 3 },
+      normalizedSample({ x: 1, y: 2 }, 3),
     ]);
-    expect(stroke.nextStamp()).toEqual({ position: { x: 1, y: 2 } });
+    expect(stroke.nextStamp()?.position).toEqual({ x: 1, y: 2 });
   });
 
   it("ends idempotently without discarding or adding pending commands", () => {
@@ -201,10 +205,9 @@ describe("stroke smoothing and resampling", () => {
       timestamp: 1,
     });
 
-    expect(stroke.processedSamples.at(-1)).toEqual({
-      position: { x: -10.75, y: -20.125 },
-      timestamp: 1,
-    });
+    expect(stroke.processedSamples.at(-1)).toEqual(
+      normalizedSample({ x: -10.75, y: -20.125 }, 1),
+    );
   });
 
   it("emits fixed-distance samples and interpolates timestamps", () => {
@@ -218,11 +221,11 @@ describe("stroke smoothing and resampling", () => {
     stroke.addSample({ position: { x: 20, y: 0 }, timestamp: 100 });
 
     expect(stroke.processedSamples).toEqual([
-      { position: { x: 0, y: 0 }, timestamp: 0 },
-      { position: { x: 5, y: 0 }, timestamp: 25 },
-      { position: { x: 10, y: 0 }, timestamp: 50 },
-      { position: { x: 15, y: 0 }, timestamp: 75 },
-      { position: { x: 20, y: 0 }, timestamp: 100 },
+      normalizedSample({ x: 0, y: 0 }, 0),
+      normalizedSample({ x: 5, y: 0 }, 25),
+      normalizedSample({ x: 10, y: 0 }, 50),
+      normalizedSample({ x: 15, y: 0 }, 75),
+      normalizedSample({ x: 20, y: 0 }, 100),
     ]);
   });
 
@@ -238,8 +241,8 @@ describe("stroke smoothing and resampling", () => {
     stroke.addSample({ position: { x: 12, y: 0 }, timestamp: 12 });
 
     expect(stroke.processedSamples).toEqual([
-      { position: { x: 0, y: 0 }, timestamp: 0 },
-      { position: { x: 10, y: 0 }, timestamp: 10 },
+      normalizedSample({ x: 0, y: 0 }, 0),
+      normalizedSample({ x: 10, y: 0 }, 10),
     ]);
   });
 
@@ -255,8 +258,8 @@ describe("stroke smoothing and resampling", () => {
     stroke.addSample({ position: { x: 8, y: 8 }, timestamp: 16 });
 
     expect(stroke.processedSamples).toEqual([
-      { position: { x: 0, y: 0 }, timestamp: 0 },
-      { position: { x: 8, y: 2 }, timestamp: 10 },
+      normalizedSample({ x: 0, y: 0 }, 0),
+      normalizedSample({ x: 8, y: 2 }, 10),
     ]);
   });
 
@@ -363,9 +366,7 @@ describe("pending stamp queue", () => {
     expect(executedPositions).toEqual([]);
     expect(stroke.hasPendingStamps).toBe(true);
     expect(stroke.pendingStampCount).toBe(1);
-    expect(stroke.nextStamp()).toEqual({
-      position: { x: 4.5, y: -2.25 },
-    });
+    expect(stroke.nextStamp()?.position).toEqual({ x: 4.5, y: -2.25 });
     expect(stroke.hasPendingStamps).toBe(false);
     expect(stroke.pendingStampCount).toBe(0);
   });
@@ -406,11 +407,11 @@ describe("pending stamp queue", () => {
     stroke.addSample({ position: { x: 90, y: 0 }, timestamp: 1 });
 
     expect(stroke.pendingStampCount).toBe(10);
-    expect(stroke.nextStamp()).toEqual({ position: { x: 0, y: 0 } });
-    expect(stroke.nextStamp()).toEqual({ position: { x: 10, y: 0 } });
-    expect(stroke.nextStamp()).toEqual({ position: { x: 20, y: 0 } });
+    expect(stroke.nextStamp()?.position).toEqual({ x: 0, y: 0 });
+    expect(stroke.nextStamp()?.position).toEqual({ x: 10, y: 0 });
+    expect(stroke.nextStamp()?.position).toEqual({ x: 20, y: 0 });
     expect(stroke.pendingStampCount).toBe(7);
-    expect(stroke.nextStamp()).toEqual({ position: { x: 30, y: 0 } });
+    expect(stroke.nextStamp()?.position).toEqual({ x: 30, y: 0 });
   });
 
   it("appends new commands behind unread work during partial consumption", () => {
@@ -420,8 +421,8 @@ describe("pending stamp queue", () => {
 
     stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
     stroke.addSample({ position: { x: 30, y: 0 }, timestamp: 1 });
-    expect(stroke.nextStamp()).toEqual({ position: { x: 0, y: 0 } });
-    expect(stroke.nextStamp()).toEqual({ position: { x: 10, y: 0 } });
+    expect(stroke.nextStamp()?.position).toEqual({ x: 0, y: 0 });
+    expect(stroke.nextStamp()?.position).toEqual({ x: 10, y: 0 });
 
     stroke.addSample({ position: { x: 50, y: 0 }, timestamp: 2 });
 
@@ -440,11 +441,11 @@ describe("pending stamp queue", () => {
     });
 
     stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
-    expect(stroke.nextStamp()).toEqual({ position: { x: 0, y: 0 } });
+    expect(stroke.nextStamp()?.position).toEqual({ x: 0, y: 0 });
     stroke.addSample({ position: { x: 10, y: 0 }, timestamp: 1 });
 
     expect(stroke.pendingStampCount).toBe(1);
-    expect(stroke.nextStamp()).toEqual({ position: { x: 10, y: 0 } });
+    expect(stroke.nextStamp()?.position).toEqual({ x: 10, y: 0 });
   });
 
   it("allows all remaining work to be consumed after end", () => {
@@ -702,6 +703,283 @@ describe("Stroke sample validation", () => {
   });
 });
 
+describe("extended stroke sample input", () => {
+  it("preserves supplied pressure and tilt in raw samples", () => {
+    const stroke = new Stroke({ brush: createRecordingBrush([]) });
+
+    stroke.addSample({
+      position: { x: 10, y: 20 },
+      timestamp: 100,
+      pressure: 0.4,
+      tiltX: -10,
+      tiltY: 20,
+    });
+
+    expect(stroke.rawSamples).toEqual([
+      {
+        position: { x: 10, y: 20 },
+        timestamp: 100,
+        pressure: 0.4,
+        tiltX: -10,
+        tiltY: 20,
+      },
+    ]);
+  });
+
+  it("normalizes legacy input to the Core defaults", () => {
+    const stroke = new Stroke({ brush: createRecordingBrush([]) });
+
+    stroke.addSample({ position: { x: 1, y: 2 }, timestamp: 3 });
+
+    expect(stroke.rawSamples).toEqual([normalizedSample({ x: 1, y: 2 }, 3)]);
+  });
+
+  it.each([0, 0.5, 1])("accepts pressure %s", (pressure) => {
+    const stroke = new Stroke({ brush: createRecordingBrush([]) });
+
+    expect(() =>
+      stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0, pressure }),
+    ).not.toThrow();
+  });
+
+  it.each([-0.01, 1.01, Number.NaN, Number.POSITIVE_INFINITY])(
+    "rejects invalid pressure %s",
+    (pressure) => {
+      const stroke = new Stroke({ brush: createRecordingBrush([]) });
+      const addSample = () =>
+        stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0, pressure });
+
+      expect(addSample).toThrow(ReverieRangeError);
+      expect(addSample).toThrow(`[${ErrorCodes.STROKE.INVALID_PRESSURE}]`);
+    },
+  );
+
+  it.each([-90, 0, 90])("accepts tilt %s on both axes", (tilt) => {
+    const stroke = new Stroke({ brush: createRecordingBrush([]) });
+
+    expect(() =>
+      stroke.addSample({
+        position: { x: 0, y: 0 },
+        timestamp: 0,
+        tiltX: tilt,
+        tiltY: tilt,
+      }),
+    ).not.toThrow();
+  });
+
+  it.each([-90.1, 90.1, Number.NaN, Number.POSITIVE_INFINITY])(
+    "rejects invalid tilt %s on either axis",
+    (tilt) => {
+      const stroke = new Stroke({ brush: createRecordingBrush([]) });
+      const addTiltX = () =>
+        stroke.addSample({
+          position: { x: 0, y: 0 },
+          timestamp: 0,
+          tiltX: tilt,
+        });
+      const addTiltY = () =>
+        stroke.addSample({
+          position: { x: 0, y: 0 },
+          timestamp: 0,
+          tiltY: tilt,
+        });
+
+      expect(addTiltX).toThrow(`[${ErrorCodes.STROKE.INVALID_TILT}]`);
+      expect(addTiltY).toThrow(`[${ErrorCodes.STROKE.INVALID_TILT}]`);
+    },
+  );
+
+  it("interpolates pressure while resampling", () => {
+    const stroke = new Stroke({
+      brush: createRecordingBrush([]),
+      smoothing: 1,
+      resampleDistance: 5,
+    });
+
+    stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0, pressure: 0 });
+    stroke.addSample({ position: { x: 10, y: 0 }, timestamp: 10, pressure: 1 });
+
+    expect(stroke.processedSamples.map((sample) => sample.pressure)).toEqual([
+      0, 0.5, 1,
+    ]);
+  });
+
+  it("interpolates tilt and timestamps while resampling", () => {
+    const stroke = new Stroke({
+      brush: createRecordingBrush([]),
+      smoothing: 1,
+      resampleDistance: 10,
+    });
+
+    stroke.addSample({
+      position: { x: 0, y: 0 },
+      timestamp: 0,
+      tiltX: -30,
+      tiltY: 90,
+    });
+    stroke.addSample({
+      position: { x: 20, y: 0 },
+      timestamp: 20,
+      tiltX: 30,
+      tiltY: -90,
+    });
+
+    const midpoint = stroke.processedSamples[1];
+
+    expect(midpoint?.tiltX).toBeCloseTo(0);
+    expect(midpoint?.tiltY).toBeCloseTo(0);
+    expect(midpoint?.timestamp).toBeCloseTo(10);
+  });
+
+  it("interpolates input attributes at each stamp position", () => {
+    const stroke = new Stroke({
+      brush: createRecordingBrush([], 40, 0.5),
+      smoothing: 1,
+      resampleDistance: 80,
+    });
+
+    stroke.addSample({
+      position: { x: 0, y: 0 },
+      timestamp: 0,
+      pressure: 0.2,
+      tiltX: -45,
+      tiltY: 30,
+    });
+    stroke.addSample({
+      position: { x: 80, y: 0 },
+      timestamp: 100,
+      pressure: 1,
+      tiltX: 45,
+      tiltY: -30,
+    });
+
+    const commands = drainStampCommands(stroke);
+
+    expectNumbersToBeClose(
+      commands.map((command) => command.position.x),
+      [0, 20, 40, 60, 80],
+    );
+    expectNumbersToBeClose(
+      commands.map((command) => command.pressure),
+      [0.2, 0.4, 0.6, 0.8, 1],
+    );
+    expectNumbersToBeClose(
+      commands.map((command) => command.timestamp),
+      [0, 25, 50, 75, 100],
+    );
+    expectNumbersToBeClose(
+      commands.map((command) => command.tiltX),
+      [-45, -22.5, 0, 22.5, 45],
+    );
+    expectNumbersToBeClose(
+      commands.map((command) => command.tiltY),
+      [30, 15, 0, -15, -30],
+    );
+  });
+
+  it("keeps input attributes finite across zero-length segments", () => {
+    const stroke = new Stroke({ brush: createRecordingBrush([]) });
+
+    stroke.addSample({
+      position: { x: 5, y: 5 },
+      timestamp: 0,
+      pressure: 0.5,
+      tiltX: 10,
+      tiltY: -10,
+    });
+    stroke.addSample({
+      position: { x: 5, y: 5 },
+      timestamp: 1,
+      pressure: 0.75,
+      tiltX: 20,
+      tiltY: -20,
+    });
+
+    expect(drainStampCommands(stroke)).toEqual([
+      {
+        position: { x: 5, y: 5 },
+        timestamp: 0,
+        pressure: 0.5,
+        tiltX: 10,
+        tiltY: -10,
+      },
+    ]);
+  });
+
+  it("carries supplied input on a single click", () => {
+    const stroke = new Stroke({ brush: createRecordingBrush([]) });
+
+    stroke.addSample({
+      position: { x: 4, y: -3 },
+      timestamp: 2,
+      pressure: 0.3,
+      tiltX: -12,
+      tiltY: 8,
+    });
+
+    expect(drainStampCommands(stroke)).toEqual([
+      {
+        position: { x: 4, y: -3 },
+        timestamp: 2,
+        pressure: 0.3,
+        tiltX: -12,
+        tiltY: 8,
+      },
+    ]);
+  });
+
+  it("normalizes a legacy click to the Core defaults", () => {
+    const stroke = new Stroke({ brush: createRecordingBrush([]) });
+
+    stroke.addSample({ position: { x: 4, y: -3 }, timestamp: 2 });
+
+    expect(drainStampCommands(stroke)).toEqual([
+      normalizedSample({ x: 4, y: -3 }, 2),
+    ]);
+  });
+
+  it("renders identical pixels regardless of supplied input attributes", () => {
+    const plainRaster = new Raster();
+    const extendedRaster = new Raster();
+    const createBrush = (): CircleBrush =>
+      new CircleBrush({
+        size: 6,
+        spacing: 0.5,
+        color: { r: 0, g: 255, b: 0, a: 255 },
+      });
+    const plainStroke = new Stroke({ brush: createBrush() });
+    const extendedStroke = new Stroke({ brush: createBrush() });
+
+    plainStroke.addSample({ position: { x: 0.5, y: 0.5 }, timestamp: 0 });
+    plainStroke.addSample({ position: { x: 12.5, y: 0.5 }, timestamp: 16 });
+    extendedStroke.addSample({
+      position: { x: 0.5, y: 0.5 },
+      timestamp: 0,
+      pressure: 0.2,
+      tiltX: -45,
+      tiltY: 30,
+    });
+    extendedStroke.addSample({
+      position: { x: 12.5, y: 0.5 },
+      timestamp: 16,
+      pressure: 1,
+      tiltX: 45,
+      tiltY: -30,
+    });
+
+    executeAllStamps(plainStroke, plainRaster);
+    executeAllStamps(extendedStroke, extendedRaster);
+
+    for (let x = 0; x <= 16; x += 1) {
+      for (let y = 0; y <= 6; y += 1) {
+        expect(extendedRaster.getPixel({ x, y })).toEqual(
+          plainRaster.getPixel({ x, y }),
+        );
+      }
+    }
+  });
+});
+
 /** Removes all pending commands and returns their positions in FIFO order. */
 function drainStampPositions(stroke: Stroke): WorldPoint[] {
   const positions: WorldPoint[] = [];
@@ -717,6 +995,56 @@ function drainStampPositions(stroke: Stroke): WorldPoint[] {
   }
 
   return positions;
+}
+
+/** Removes all pending commands and returns them in FIFO order. */
+function drainStampCommands(stroke: Stroke): StampCommand[] {
+  const commands: StampCommand[] = [];
+
+  while (stroke.hasPendingStamps) {
+    const command = stroke.nextStamp();
+
+    if (command === undefined) {
+      break;
+    }
+
+    commands.push(command);
+  }
+
+  return commands;
+}
+
+/** Executes every pending command of a stroke into the supplied raster. */
+function executeAllStamps(stroke: Stroke, raster: Raster): void {
+  while (stroke.hasPendingStamps) {
+    const command = stroke.nextStamp();
+
+    if (command === undefined) {
+      break;
+    }
+
+    stroke.brush.stamp(raster, command.position);
+  }
+}
+
+/** Adds Core defaults to one position and timestamp for canonical comparisons. */
+function normalizedSample(
+  position: WorldPoint,
+  timestamp: number,
+): StrokeSample {
+  return { position, timestamp, pressure: 1, tiltX: 0, tiltY: 0 };
+}
+
+/** Compares numeric command attributes within floating-point tolerance. */
+function expectNumbersToBeClose(
+  actual: readonly (number | undefined)[],
+  expected: readonly number[],
+): void {
+  expect(actual).toHaveLength(expected.length);
+
+  actual.forEach((value, index) => {
+    expect(value).toBeCloseTo(expected[index]!);
+  });
 }
 
 /** Compares mathematically equivalent paths independent of float evaluation order. */

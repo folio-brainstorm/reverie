@@ -1,16 +1,23 @@
 import type { Brush } from "../../interfaces/brush/Brush.js";
-import type { WorldPoint } from "../../interfaces/camera/WorldPoint.js";
 import type { StampCommand } from "../../interfaces/stroke/StampCommand.js";
 import type { StrokeConfig } from "../../interfaces/stroke/StrokeConfig.js";
 import type { StrokeSample } from "../../interfaces/stroke/StrokeSample.js";
+import type { StrokeSampleInput } from "../../interfaces/stroke/StrokeSampleInput.js";
 
+import {
+  MAX_TILT_DEGREES,
+  MIN_TILT_DEGREES,
+} from "../../config/stroke/StrokeInputConstants.js";
 import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
 import {
   ReverieError,
   ReverieRangeError,
   ReverieTypeError,
 } from "../../utils/errors/ReverieErrors.js";
+import { isUnitInterval } from "../../utils/number/math/IsUnitInterval.js";
 import { advanceStampPlacement } from "./AdvanceStampPlacement.js";
+import { copyStrokeSample } from "./CopyStrokeSample.js";
+import { normalizeStrokeSample } from "./NormalizeStrokeSample.js";
 import { smoothStrokeSample } from "./SmoothStrokeSample.js";
 import { StrokeResampler } from "./StrokeResampler.js";
 
@@ -26,6 +33,11 @@ const DEFAULT_RESAMPLE_DISTANCE = 1;
 /**
  * Preserves raw input, derives a smoothed and resampled path, and queues evenly
  * spaced stamp commands along that processed world-space path.
+ *
+ * Input attributes beyond position and time, meaning pressure and both tilt
+ * axes, are normalized at the boundary and carried unchanged through smoothing,
+ * resampling, and stamp placement. This class only transports those attributes;
+ * interpreting them is left to a later step.
  */
 export class Stroke {
   /** Brush whose fixed metrics place stamps and whose behavior consumers execute. */
@@ -69,12 +81,12 @@ export class Stroke {
 
   /** Returns defensive copies of every raw input sample in arrival order. */
   get rawSamples(): readonly StrokeSample[] {
-    return this.rawSampleStorage.map(copySample);
+    return this.rawSampleStorage.map(copyStrokeSample);
   }
 
   /** Returns defensive copies of the derived path samples in emission order. */
   get processedSamples(): readonly StrokeSample[] {
-    return this.processedSampleStorage.map(copySample);
+    return this.processedSampleStorage.map(copyStrokeSample);
   }
 
   /** Returns whether {@link end} has closed this stroke to further input. */
@@ -144,26 +156,30 @@ export class Stroke {
   }
 
   /**
-   * Saves one raw sample, smooths and resamples it, then advances stamp placement.
+   * Saves one raw input sample, smooths and resamples it, then advances stamp placement.
    *
-   * Raw samples remain unchanged. The first processed sample immediately queues
-   * a command, while later samples preserve independent resampling and stamp
-   * distance remainders across segment boundaries. This method never executes
-   * the brush.
+   * The sample is validated and normalized into a complete canonical sample
+   * before entering the pipeline, so omitted pressure and tilt fall back to the
+   * Core defaults. Raw samples remain unchanged. The first processed sample
+   * immediately queues a command, while later samples preserve independent
+   * resampling and stamp distance remainders across segment boundaries. This
+   * method never executes the brush.
    *
-   * @param sample - Continuous position and monotonically non-decreasing time.
+   * @param sample - Continuous position, timestamp, and optional pressure and
+   * tilt attributes.
    * @throws {ReverieError} The stroke has already ended.
-   * @throws {ReverieTypeError} A position component or timestamp is not a number.
-   * @throws {ReverieRangeError} A value is not finite or timestamp order regresses.
+   * @throws {ReverieTypeError} A supplied value is not a number.
+   * @throws {ReverieRangeError} Position or timestamp is not finite, timestamp
+   * order regresses, pressure leaves `[0, 1]`, or tilt leaves `[-90, 90]`.
    */
-  addSample(sample: StrokeSample): void {
+  addSample(sample: StrokeSampleInput): void {
     if (this.hasEnded) {
       throw ReverieError.from(ErrorDefinitions.STROKE.ALREADY_ENDED);
     }
 
     this.assertValidSample(sample);
 
-    const ownedSample = copySample(sample);
+    const ownedSample = normalizeStrokeSample(sample);
     const previousRawSample = this.lastRawSample;
 
     if (previousRawSample !== null) {
@@ -224,9 +240,15 @@ export class Stroke {
     this.hasEnded = true;
   }
 
-  /** Adds an owned position snapshot to the tail of the pending FIFO queue. */
-  private enqueueStamp(position: WorldPoint): void {
-    this.pendingStamps.push({ position: { ...position } });
+  /** Adds an owned resolved-input snapshot to the tail of the pending FIFO queue. */
+  private enqueueStamp(sample: StrokeSample): void {
+    this.pendingStamps.push({
+      position: { ...sample.position },
+      timestamp: sample.timestamp,
+      pressure: sample.pressure,
+      tiltX: sample.tiltX,
+      tiltY: sample.tiltY,
+    });
   }
 
   /** Stores one processed sample and advances brush stamp placement. */
@@ -237,22 +259,22 @@ export class Stroke {
     this.lastProcessedSample = sample;
 
     if (previousSample === null) {
-      this.enqueueStamp(sample.position);
+      this.enqueueStamp(sample);
       this.distanceSinceLastStamp = 0;
       return;
     }
 
     this.distanceSinceLastStamp = advanceStampPlacement(
-      previousSample.position,
-      sample.position,
+      previousSample,
+      sample,
       this.stampDistance,
       this.distanceSinceLastStamp,
-      (position) => this.enqueueStamp(position),
+      (stampSample) => this.enqueueStamp(stampSample),
     );
   }
 
   /** Rejects malformed, non-finite, or temporally regressive input samples. */
-  private assertValidSample(sample: StrokeSample): void {
+  private assertValidSample(sample: StrokeSampleInput): void {
     Stroke.assertNumber(sample.position.x, "sample.position.x");
     Stroke.assertNumber(sample.position.y, "sample.position.y");
     Stroke.assertNumber(sample.timestamp, "sample.timestamp");
@@ -289,6 +311,48 @@ export class Stroke {
         },
       );
     }
+
+    Stroke.assertValidPressure(sample.pressure);
+    Stroke.assertValidTilt(sample.tiltX, "tiltX");
+    Stroke.assertValidTilt(sample.tiltY, "tiltY");
+  }
+
+  /** Rejects a present pressure outside the inclusive unit interval. */
+  private static assertValidPressure(pressure: number | undefined): void {
+    if (pressure === undefined) {
+      return;
+    }
+
+    Stroke.assertNumber(pressure, "sample.pressure");
+
+    if (!isUnitInterval(pressure)) {
+      throw ReverieRangeError.from(ErrorDefinitions.STROKE.INVALID_PRESSURE, {
+        received: pressure,
+      });
+    }
+  }
+
+  /** Rejects a present tilt angle outside the accepted degree range. */
+  private static assertValidTilt(
+    tilt: number | undefined,
+    parameterName: string,
+  ): void {
+    if (tilt === undefined) {
+      return;
+    }
+
+    Stroke.assertNumber(tilt, `sample.${parameterName}`);
+
+    if (
+      !Number.isFinite(tilt) ||
+      tilt < MIN_TILT_DEGREES ||
+      tilt > MAX_TILT_DEGREES
+    ) {
+      throw ReverieRangeError.from(ErrorDefinitions.STROKE.INVALID_TILT, {
+        param: parameterName,
+        received: tilt,
+      });
+    }
   }
 
   /** Rejects a segment whose finite endpoints overflow distance arithmetic. */
@@ -318,12 +382,4 @@ export class Stroke {
       });
     }
   }
-}
-
-/** Copies nested position data so raw samples cannot be changed by callers. */
-function copySample(sample: StrokeSample): StrokeSample {
-  return {
-    position: { ...sample.position },
-    timestamp: sample.timestamp,
-  };
 }

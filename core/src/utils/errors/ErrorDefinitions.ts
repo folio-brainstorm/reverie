@@ -137,6 +137,16 @@ export const ErrorDefinitions = {
       template:
         "Stroke resample distance must be positive and finite, received `$received`.",
     },
+    INVALID_PRESSURE: {
+      code: "EC_STROKE_0010",
+      template:
+        "Stroke sample pressure must be a finite number between 0 and 1, but received `$received`.",
+    },
+    INVALID_TILT: {
+      code: "EC_STROKE_0011",
+      template:
+        "Stroke sample `$param` must be a finite number between -90 and 90 degrees, but received `$received`.",
+    },
   },
   TILE: {
     LOCAL_PIXEL_COORDINATE_OUT_OF_BOUNDS: {

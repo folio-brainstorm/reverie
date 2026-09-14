@@ -92,6 +92,25 @@ while (stroke.hasPendingStamps) {
 }
 ```
 
+每个 `addSample` 还可以携带归一化压力与倾角。这些属性会在平滑、重采样与
+Stamp Placement 中被一致地插值，并出现在每一条 `StampCommand` 上：
+
+```ts
+stroke.addSample({
+  position: { x: 100, y: 50 },
+  timestamp: 16,
+  pressure: 0.4,
+  tiltX: -20,
+  tiltY: 10,
+});
+```
+
+`pressure` 必须是 `[0, 1]` 内的有限数，`tiltX` / `tiltY` 必须是以度为单位、
+位于 `[-90, 90]` 内的有限数。省略时分别取默认值 `1`、`0`、`0`，因此
+`{ position, timestamp }` 形式的旧调用保持完全兼容。Step 17 只负责传递这些
+属性，不会用它们改变 Brush 尺寸、透明度或旋转。浏览器输入由 `@reverie/web`
+归一化：只有 `pointerType === "pen"` 的压力会被采信，鼠标与触摸一律取 `1`。
+
 ## Canvas Renderer
 
 `CanvasRenderer` 将稀疏 Raster 按照 Camera 当前视图绘制到 Canvas backing

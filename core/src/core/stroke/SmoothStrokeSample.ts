@@ -1,10 +1,13 @@
 import type { StrokeSample } from "../../interfaces/stroke/StrokeSample.js";
 
+import { copyStrokeSample } from "./CopyStrokeSample.js";
+
 /**
  * Applies one streaming exponential moving average step to sample position.
  *
- * The first input is copied unchanged. Later timestamps always come from the
- * current input because smoothing affects only spatial position.
+ * The first input is copied unchanged. Later timestamps and the extended input
+ * attributes always come from the current input because Step 17 smooths only
+ * spatial position.
  *
  * @param previous - Previous smoothed sample, or `null` for the first input.
  * @param current - Current raw input sample.
@@ -17,7 +20,7 @@ export function smoothStrokeSample(
   factor: number,
 ): StrokeSample {
   if (previous === null) {
-    return copySample(current);
+    return copyStrokeSample(current);
   }
 
   return {
@@ -30,13 +33,8 @@ export function smoothStrokeSample(
         (current.position.y - previous.position.y) * factor,
     },
     timestamp: current.timestamp,
-  };
-}
-
-/** Copies a sample so processing never retains caller-owned position data. */
-function copySample(sample: StrokeSample): StrokeSample {
-  return {
-    position: { ...sample.position },
-    timestamp: sample.timestamp,
+    pressure: current.pressure,
+    tiltX: current.tiltX,
+    tiltY: current.tiltY,
   };
 }

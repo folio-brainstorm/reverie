@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { CircleBrush, World } from "@reverie/core";
+import { CircleBrush, Stroke, World } from "@reverie/core";
 import {
   ExportRenderer,
   JPEGEncoder,
@@ -159,6 +159,173 @@ describe("ReverieCanvas drawing and lifecycle", () => {
     expect(() => reverie.render()).toThrow(
       `[${WebErrorDefinitions.REVERIE_CANVAS_DISPOSED.code}]`,
     );
+  });
+});
+
+describe("CanvasDrawingSession pointer input mapping", () => {
+  it("preserves pen pressure and tilt", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+    const addSample = vi.spyOn(Stroke.prototype, "addSample");
+
+    runtime.canvas.dispatchPointer("pointerdown", {
+      button: 0,
+      pointerId: 1,
+      clientX: 0.5,
+      clientY: 0.5,
+      timeStamp: 1,
+      pointerType: "pen",
+      pressure: 0.35,
+      tiltX: -20,
+      tiltY: 10,
+    });
+
+    expect(addSample).toHaveBeenCalledTimes(1);
+    expect(addSample).toHaveBeenCalledWith(
+      expect.objectContaining({ pressure: 0.35, tiltX: -20, tiltY: 10 }),
+    );
+    reverie.dispose();
+  });
+
+  it("ignores mouse pressure and resolves the Core default", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+    const addSample = vi.spyOn(Stroke.prototype, "addSample");
+
+    runtime.canvas.dispatchPointer("pointerdown", {
+      button: 0,
+      pointerId: 1,
+      clientX: 0.5,
+      clientY: 0.5,
+      timeStamp: 1,
+      pointerType: "mouse",
+      pressure: 0.5,
+    });
+
+    expect(addSample).toHaveBeenCalledWith(
+      expect.objectContaining({ pressure: 1 }),
+    );
+    reverie.dispose();
+  });
+
+  it("ignores touch pressure and resolves the Core default", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+    const addSample = vi.spyOn(Stroke.prototype, "addSample");
+
+    runtime.canvas.dispatchPointer("pointerdown", {
+      button: 0,
+      pointerId: 1,
+      clientX: 0.5,
+      clientY: 0.5,
+      timeStamp: 1,
+      pointerType: "touch",
+      pressure: 0.8,
+    });
+
+    expect(addSample).toHaveBeenCalledWith(
+      expect.objectContaining({ pressure: 1 }),
+    );
+    reverie.dispose();
+  });
+
+  it.each([0, 1.5, Number.NaN])(
+    "falls back to the Core default for unreliable pen pressure %s",
+    (pressure) => {
+      const runtime = createCanvasRuntime();
+      const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+      const addSample = vi.spyOn(Stroke.prototype, "addSample");
+
+      runtime.canvas.dispatchPointer("pointerdown", {
+        button: 0,
+        pointerId: 1,
+        clientX: 0.5,
+        clientY: 0.5,
+        timeStamp: 1,
+        pointerType: "pen",
+        pressure,
+      });
+
+      expect(addSample).toHaveBeenCalledWith(
+        expect.objectContaining({ pressure: 1 }),
+      );
+      reverie.dispose();
+    },
+  );
+
+  it("falls back to the Core default for non-finite tilt", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+    const addSample = vi.spyOn(Stroke.prototype, "addSample");
+
+    runtime.canvas.dispatchPointer("pointerdown", {
+      button: 0,
+      pointerId: 1,
+      clientX: 0.5,
+      clientY: 0.5,
+      timeStamp: 1,
+      pointerType: "pen",
+      pressure: 0.5,
+      tiltX: Number.NaN,
+      tiltY: Number.POSITIVE_INFINITY,
+    });
+
+    expect(addSample).toHaveBeenCalledWith(
+      expect.objectContaining({ tiltX: 0, tiltY: 0 }),
+    );
+    reverie.dispose();
+  });
+
+  it("keeps individual input values for each coalesced event", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+    const addSample = vi.spyOn(Stroke.prototype, "addSample");
+
+    runtime.canvas.dispatchPointer(
+      "pointerdown",
+      {
+        button: 0,
+        pointerId: 1,
+        clientX: 0.5,
+        clientY: 0.5,
+        timeStamp: 1,
+        pointerType: "pen",
+        pressure: 0.1,
+      },
+      [
+        {
+          button: 0,
+          pointerId: 1,
+          clientX: 1.5,
+          clientY: 0.5,
+          timeStamp: 2,
+          pointerType: "pen",
+          pressure: 0.4,
+          tiltX: -10,
+        },
+        {
+          button: 0,
+          pointerId: 1,
+          clientX: 2.5,
+          clientY: 0.5,
+          timeStamp: 3,
+          pointerType: "pen",
+          pressure: 0.9,
+          tiltX: 20,
+        },
+      ],
+    );
+
+    expect(addSample).toHaveBeenCalledTimes(2);
+    expect(addSample).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ pressure: 0.4, tiltX: -10, timestamp: 2 }),
+    );
+    expect(addSample).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ pressure: 0.9, tiltX: 20, timestamp: 3 }),
+    );
+    reverie.dispose();
   });
 });
 
@@ -460,6 +627,31 @@ interface TestPointerEvent {
   readonly clientX: number;
   readonly clientY: number;
   readonly timeStamp: number;
+  readonly pointerType?: string;
+  readonly pressure?: number;
+  readonly tiltX?: number;
+  readonly tiltY?: number;
+}
+
+/** Deterministic pointer fields applied before a test-specific override. */
+const DEFAULT_POINTER_FIELDS = {
+  button: 0,
+  pointerId: 0,
+  clientX: 0,
+  clientY: 0,
+  timeStamp: 0,
+  pointerType: "mouse",
+  pressure: 0.5,
+  tiltX: 0,
+  tiltY: 0,
+};
+
+/** Fills omitted pointer fields with deterministic Session defaults. */
+function createPointerFields(pointer: TestPointerEvent): PointerEvent {
+  return {
+    ...DEFAULT_POINTER_FIELDS,
+    ...pointer,
+  } as unknown as PointerEvent;
 }
 
 /** Fake observer exposing lifecycle state for assertions. */
@@ -570,12 +762,16 @@ class TestCanvas {
   }
 
   /** Dispatches sufficient PointerEvent behavior to registered Session handlers. */
-  dispatchPointer(type: string, pointer: TestPointerEvent): void {
+  dispatchPointer(
+    type: string,
+    pointer: TestPointerEvent,
+    coalescedEvents: readonly TestPointerEvent[] = [],
+  ): void {
     const event = {
-      ...pointer,
+      ...createPointerFields(pointer),
       preventDefault(): void {},
       getCoalescedEvents(): readonly PointerEvent[] {
-        return [];
+        return coalescedEvents.map(createPointerFields);
       },
     };
 

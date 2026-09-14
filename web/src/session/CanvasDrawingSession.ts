@@ -4,6 +4,7 @@ import type { CanvasRenderer } from "@reverie/renderer";
 
 import { WebErrorDefinitions } from "../errors/WebErrorDefinitions.js";
 import { WebError, WebRangeError, WebTypeError } from "../errors/WebErrors.js";
+import { resolvePointerStrokeInput } from "../input/ResolvePointerStrokeInput.js";
 import type { CanvasDrawingSessionConfig } from "../interfaces/session/CanvasDrawingSessionConfig.js";
 import { DrawingScheduler } from "../scheduler/DrawingScheduler.js";
 
@@ -158,9 +159,7 @@ export class CanvasDrawingSession {
       const ResizeObserverConstructor = runtimeWindow?.ResizeObserver;
 
       if (runtimeWindow === null || ResizeObserverConstructor === undefined) {
-        throw WebError.from(
-          WebErrorDefinitions.RESIZE_OBSERVER_UNAVAILABLE,
-        );
+        throw WebError.from(WebErrorDefinitions.RESIZE_OBSERVER_UNAVAILABLE);
       }
 
       this.runtimeWindow = runtimeWindow;
@@ -242,7 +241,10 @@ export class CanvasDrawingSession {
 
   /** Adds coalesced input only for the pointer that owns the active Stroke. */
   private continueStroke(event: PointerEvent): void {
-    if (event.pointerId !== this.activePointerId || this.activeStroke === null) {
+    if (
+      event.pointerId !== this.activePointerId ||
+      this.activeStroke === null
+    ) {
       return;
     }
 
@@ -260,7 +262,10 @@ export class CanvasDrawingSession {
     this.finishActiveStroke(true);
   }
 
-  /** Converts all represented CSS-pixel samples and drains generated commands. */
+  /**
+   * Converts all represented CSS-pixel samples, resolves their normalized input
+   * attributes, and drains the generated commands.
+   */
   private addPointerSamples(event: PointerEvent): void {
     const stroke = this.activeStroke;
 
@@ -274,12 +279,17 @@ export class CanvasDrawingSession {
       coalescedEvents.length > 0 ? coalescedEvents : [event];
 
     for (const pointerEvent of pointerEvents) {
+      const strokeInput = resolvePointerStrokeInput(pointerEvent);
+
       stroke.addSample({
         position: this.camera.screenToWorld({
           x: pointerEvent.clientX - bounds.left,
           y: pointerEvent.clientY - bounds.top,
         }),
         timestamp: pointerEvent.timeStamp,
+        pressure: strokeInput.pressure,
+        tiltX: strokeInput.tiltX,
+        tiltY: strokeInput.tiltY,
       });
     }
 
@@ -333,10 +343,7 @@ export class CanvasDrawingSession {
       runtimeWindow.devicePixelRatio > 0
         ? runtimeWindow.devicePixelRatio
         : 1;
-    const effectiveDpr = Math.min(
-      devicePixelRatio,
-      this.maxDevicePixelRatio,
-    );
+    const effectiveDpr = Math.min(devicePixelRatio, this.maxDevicePixelRatio);
     const width = Math.max(0, Math.round(bounds.width * effectiveDpr));
     const height = Math.max(0, Math.round(bounds.height * effectiveDpr));
 
