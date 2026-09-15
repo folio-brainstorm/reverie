@@ -1,16 +1,23 @@
-import { CircleBrush, Rasterizers } from "@reverie/core";
-import type { PixelCoord, RGBAColor, ScreenPoint } from "@reverie/core";
+import {
+  BrushImage,
+  CircleBrush,
+  ImageBrush,
+  Rasterizers,
+} from "@reverie/core";
+import type { Brush, PixelCoord, RGBAColor, ScreenPoint } from "@reverie/core";
 import type { ExportFormat, ExportRegion } from "@reverie/exporter";
 import { ReverieCanvas } from "@reverie/web";
 import type { ReverieDownloadOptions } from "@reverie/web";
 import type {
   CSSProperties,
+  ChangeEvent,
   PointerEvent as ReactPointerEvent,
   ReactElement,
 } from "react";
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
+import { decodeBrushImageFile } from "./DecodeBrushImageFile";
 import { exportRasterToConsole } from "./ExportRasterToConsole";
 
 const DRAWING_WIDTH = 1920;
@@ -30,7 +37,7 @@ const INITIAL_PAN_Y =
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 64;
 const WHEEL_ZOOM_SENSITIVITY = 0.0015;
-const INITIAL_BRUSH_SIZE = 1;
+const INITIAL_BRUSH_SIZE = 64;
 const INITIAL_BRUSH_OPACITY = 0.75;
 const INITIAL_BRUSH_SPACING = 0.2;
 const INITIAL_BRUSH_COLOR = "#ef6f61";
@@ -52,13 +59,14 @@ const EXPORT_REQUESTS: readonly ReverieDownloadOptions[] = [
   { format: "webp", filename: DEMO_FILE_BASE_NAME },
 ];
 
-/** Displays an interactive CircleBrush painting surface with camera controls. */
+/** Displays an interactive CircleBrush or uploaded ImageBrush painting surface. */
 export function App(): ReactElement {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasFrameRef = useRef<HTMLDivElement | null>(null);
   const reverieRef = useRef<ReverieCanvas | null>(null);
   const panPointerIdRef = useRef<number | null>(null);
   const lastPanPositionRef = useRef<ScreenPoint | null>(null);
+  const imageLoadRequestIdRef = useRef(0);
   const [panX, setPanX] = useState(INITIAL_PAN_X);
   const [panY, setPanY] = useState(INITIAL_PAN_Y);
   const [zoom, setZoom] = useState(INITIAL_ZOOM);
@@ -68,6 +76,9 @@ export function App(): ReactElement {
   const [brushOpacity, setBrushOpacity] = useState(INITIAL_BRUSH_OPACITY);
   const [brushSpacing, setBrushSpacing] = useState(INITIAL_BRUSH_SPACING);
   const [brushColor, setBrushColor] = useState(INITIAL_BRUSH_COLOR);
+  const [brushImage, setBrushImage] = useState<BrushImage | null>(null);
+  const [imageBrushName, setImageBrushName] = useState<string | null>(null);
+  const [isImageBrushLoading, setIsImageBrushLoading] = useState(false);
   const [isPainting, setIsPainting] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [drawingError, setDrawingError] = useState<string | null>(null);
@@ -86,12 +97,13 @@ export function App(): ReactElement {
       width: DRAWING_WIDTH,
       height: DRAWING_HEIGHT,
       tileSize: DRAWING_WIDTH,
-      brush: new CircleBrush({
-        size: brushSize,
-        color: colorFromHex(brushColor),
-        opacity: brushOpacity,
-        spacing: brushSpacing,
-      }),
+      brush: createDemoBrush(
+        null,
+        brushSize,
+        brushOpacity,
+        brushSpacing,
+        brushColor,
+      ),
       frameBudget: 8,
       onError: (error) => setDrawingError(formatDrawingError(error)),
       onStrokeStart: () => setIsPainting(true),
@@ -105,6 +117,7 @@ export function App(): ReactElement {
     canvasFrame.addEventListener("wheel", handleWheel, { passive: false });
 
     return () => {
+      imageLoadRequestIdRef.current += 1;
       canvasFrame.removeEventListener("wheel", handleWheel);
       reverie.dispose();
       reverieRef.current = null;
@@ -113,14 +126,15 @@ export function App(): ReactElement {
 
   useEffect(() => {
     reverieRef.current?.setBrush(
-      new CircleBrush({
-        size: brushSize,
-        color: colorFromHex(brushColor),
-        opacity: brushOpacity,
-        spacing: brushSpacing,
-      }),
+      createDemoBrush(
+        brushImage,
+        brushSize,
+        brushOpacity,
+        brushSpacing,
+        brushColor,
+      ),
     );
-  }, [brushColor, brushOpacity, brushSize, brushSpacing]);
+  }, [brushColor, brushImage, brushOpacity, brushSize, brushSpacing]);
 
   /**
    * Mirrors the camera's current view into React state so the DOM overlay
@@ -206,6 +220,51 @@ export function App(): ReactElement {
     reverie.camera.setZoom(INITIAL_ZOOM * FIT_CAMERA_ZOOM);
     reverie.render();
     publishCameraView();
+  };
+
+  const handleImageBrushUpload = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ): Promise<void> => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+
+    if (file === undefined) {
+      return;
+    }
+
+    const requestId = imageLoadRequestIdRef.current + 1;
+    imageLoadRequestIdRef.current = requestId;
+    setIsImageBrushLoading(true);
+    setDrawingError(null);
+
+    try {
+      const decodedImage = await decodeBrushImageFile(file);
+
+      if (requestId !== imageLoadRequestIdRef.current) {
+        return;
+      }
+
+      setBrushImage(decodedImage);
+      setImageBrushName(file.name);
+    } catch (error) {
+      if (requestId === imageLoadRequestIdRef.current) {
+        setDrawingError(
+          `Image Brush upload failed: ${formatDrawingError(error)}`,
+        );
+      }
+    } finally {
+      if (requestId === imageLoadRequestIdRef.current) {
+        setIsImageBrushLoading(false);
+      }
+    }
+  };
+
+  const useCircleBrush = (): void => {
+    imageLoadRequestIdRef.current += 1;
+    setBrushImage(null);
+    setImageBrushName(null);
+    setIsImageBrushLoading(false);
+    setDrawingError(null);
   };
 
   const handlePanStart = (event: ReactPointerEvent<HTMLDivElement>): void => {
@@ -341,7 +400,7 @@ export function App(): ReactElement {
   };
   const indicatorPixels: PixelCoord[] = [];
 
-  if (pointerScreenPosition !== null && !isPanning) {
+  if (pointerScreenPosition !== null && !isPanning && brushImage === null) {
     const pointerWorldPosition = {
       x: panX + pointerScreenPosition.x / cameraZoom,
       y: panY + pointerScreenPosition.y / cameraZoom,
@@ -367,12 +426,14 @@ export function App(): ReactElement {
     <main className="page-shell">
       <section className="demo-card">
         <header className="hero-copy">
-          <p className="eyebrow">Rêverie · Circle Brush</p>
+          <p className="eyebrow">
+            Rêverie · {brushImage === null ? "Circle Brush" : "Image Brush"}
+          </p>
           <h1>Paint directly in world space.</h1>
           <p className="intro">
-            Paint inside the 16 × 16 pixel canvas with the left mouse button.
-            Drag with the middle button to pan, and scroll over any point to
-            zoom around that exact position.
+            Upload a transparent image to use its alpha as the brush shape, or
+            keep the built-in circle. Paint with the left mouse button,
+            middle-drag to pan, and scroll to zoom around the cursor.
           </p>
         </header>
 
@@ -394,8 +455,8 @@ export function App(): ReactElement {
             <input
               type="range"
               min="0.5"
-              max="16"
-              step="0.25"
+              max="256"
+              step="0.5"
               value={brushSize}
               onChange={(event) =>
                 setBrushSize(Number(event.currentTarget.value))
@@ -434,6 +495,39 @@ export function App(): ReactElement {
               }
             />
           </label>
+
+          <div className="image-brush-control">
+            <div className="image-brush-heading">
+              <span>Brush shape</span>
+              <output>{brushImage === null ? "Circle" : "Image"}</output>
+            </div>
+            <div className="image-brush-actions">
+              <label className="image-upload-button">
+                <input
+                  accept="image/*"
+                  aria-label="Upload an Image Brush"
+                  className="visually-hidden"
+                  type="file"
+                  onChange={(event) => void handleImageBrushUpload(event)}
+                />
+                {isImageBrushLoading ? "Decoding…" : "Upload image"}
+              </label>
+              {brushImage !== null && (
+                <button
+                  className="image-brush-reset"
+                  type="button"
+                  onClick={useCircleBrush}
+                >
+                  Use circle
+                </button>
+              )}
+            </div>
+            <small title={imageBrushName ?? undefined}>
+              {brushImage === null
+                ? "Transparent pixels become empty brush coverage."
+                : `${imageBrushName ?? "Uploaded image"} · ${brushImage.width} × ${brushImage.height}`}
+            </small>
+          </div>
         </div>
 
         <div
@@ -487,8 +581,10 @@ export function App(): ReactElement {
             {drawingError ??
               exportStatus ??
               (isPanning ? "panning" : isPainting ? "stroke active" : "ready")}
-            {" · "}16 × 16 px · pan ({panX.toFixed(2)}, {panY.toFixed(2)}) ·
-            zoom {zoom.toFixed(2)}×
+            {" · "}
+            {brushImage === null ? "Circle Brush" : "Image Brush"} ·{" "}
+            {DRAWING_WIDTH} × {DRAWING_HEIGHT} px · pan ({panX.toFixed(2)},{" "}
+            {panY.toFixed(2)}) · zoom {zoom.toFixed(2)}×
           </div>
         </div>
 
@@ -531,6 +627,23 @@ export function App(): ReactElement {
       </section>
     </main>
   );
+}
+
+/** Creates the currently selected Demo brush without retaining UI state. */
+function createDemoBrush(
+  image: BrushImage | null,
+  size: number,
+  opacity: number,
+  spacing: number,
+  hexColor: string,
+): Brush {
+  const color = colorFromHex(hexColor);
+
+  if (image === null) {
+    return new CircleBrush({ size, color, opacity, spacing });
+  }
+
+  return new ImageBrush({ image, size, color, opacity, spacing });
 }
 
 /** Converts a browser color-input value into an opaque RGBA8 color. */

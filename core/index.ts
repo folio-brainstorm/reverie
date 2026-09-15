@@ -2,7 +2,12 @@
 export { Raster } from "./src/core/raster/index.js";
 export { RasterLayer, World } from "./src/core/world/index.js";
 export { Camera } from "./src/core/camera/index.js";
-export { CircleBrush, LinearDynamicsCurve } from "./src/core/brush/index.js";
+export {
+  BrushImage,
+  CircleBrush,
+  ImageBrush,
+  LinearDynamicsCurve,
+} from "./src/core/brush/index.js";
 export { Rasterizers } from "./src/core/rasterizer/index.js";
 export { Stroke } from "./src/core/stroke/index.js";
 export { blendSourceOver, paintPixel } from "./src/core/paint/index.js";
@@ -42,7 +47,11 @@ export type {
 } from "./src/interfaces/errors/ReverieError.js";
 export type { CameraConfig } from "./src/interfaces/camera/CameraConfig.js";
 export type { Brush } from "./src/interfaces/brush/Brush.js";
+export type { BrushAnchor } from "./src/interfaces/brush/BrushAnchor.js";
+export type { BrushImageConfig } from "./src/interfaces/brush/BrushImageConfig.js";
 export type { CircleBrushConfig } from "./src/interfaces/brush/CircleBrushConfig.js";
+export type { ImageBrushConfig } from "./src/interfaces/brush/ImageBrushConfig.js";
+export type { RGBABrushImageSource } from "./src/interfaces/brush/RGBABrushImageSource.js";
 export type { ResolvedBrushParameters } from "./src/interfaces/brush/ResolvedBrushParameters.js";
 export type { BrushDynamics } from "./src/interfaces/brush/dynamics/BrushDynamics.js";
 export type { BrushParameterDynamics } from "./src/interfaces/brush/dynamics/BrushParameterDynamics.js";

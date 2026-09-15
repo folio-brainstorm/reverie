@@ -1,7 +1,13 @@
+export { BrushImage } from "./BrushImage.js";
 export { CircleBrush } from "./CircleBrush.js";
+export { ImageBrush } from "./ImageBrush.js";
 export { LinearDynamicsCurve } from "./LinearDynamicsCurve.js";
 export type { Brush } from "../../interfaces/brush/Brush.js";
+export type { BrushAnchor } from "../../interfaces/brush/BrushAnchor.js";
+export type { BrushImageConfig } from "../../interfaces/brush/BrushImageConfig.js";
 export type { CircleBrushConfig } from "../../interfaces/brush/CircleBrushConfig.js";
+export type { ImageBrushConfig } from "../../interfaces/brush/ImageBrushConfig.js";
+export type { RGBABrushImageSource } from "../../interfaces/brush/RGBABrushImageSource.js";
 export type { ResolvedBrushParameters } from "../../interfaces/brush/ResolvedBrushParameters.js";
 export type { BrushDynamics } from "../../interfaces/brush/dynamics/BrushDynamics.js";
 export type { BrushParameterDynamics } from "../../interfaces/brush/dynamics/BrushParameterDynamics.js";

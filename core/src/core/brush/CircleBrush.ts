@@ -12,6 +12,7 @@ import { rasterizeCirclePixels } from "../../internal/rasterizer/RasterizeCircle
 import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
 import { ReverieRangeError } from "../../utils/errors/ReverieErrors.js";
 import { isValidRGBAColor } from "../../utils/number/color/IsValidRGBAColor.js";
+import { isPositiveFiniteNumber } from "../../utils/number/math/IsPositiveFiniteNumber.js";
 import { isUnitInterval } from "../../utils/number/math/IsUnitInterval.js";
 import { normalizeBrushDynamics } from "./NormalizeBrushDynamics.js";
 import { resolveBrushDynamics } from "./ResolveBrushDynamics.js";
@@ -184,9 +185,4 @@ export class CircleBrush implements Brush {
       },
     );
   }
-}
-
-/** Tests the positive, finite constraint used by brush diameter. */
-function isPositiveFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && value > 0;
 }

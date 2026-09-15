@@ -107,6 +107,40 @@ export const ErrorDefinitions = {
       code: "EC_BRUSH_0010",
       template: "Brush dynamics produced invalid resolved parameters.",
     },
+    INVALID_IMAGE_DIMENSIONS: {
+      code: "EC_BRUSH_0011",
+      template:
+        "Brush image dimensions must be positive safe integers with a safe pixel count.",
+    },
+    INVALID_IMAGE_ALPHA_BUFFER: {
+      code: "EC_BRUSH_0012",
+      template:
+        "Brush image alpha must be a Uint8Array of length `$expected`, but received length `$received`.",
+    },
+    INVALID_IMAGE_RGBA_BUFFER: {
+      code: "EC_BRUSH_0013",
+      template:
+        "Brush image RGBA pixels must be a byte array of length `$expected`, but received length `$received`.",
+    },
+    INVALID_BRUSH_IMAGE: {
+      code: "EC_BRUSH_0014",
+      template: "ImageBrush image must be a BrushImage instance.",
+    },
+    INVALID_IMAGE_ANCHOR: {
+      code: "EC_BRUSH_0015",
+      template:
+        "ImageBrush anchor must contain finite x and y values between 0 and 1.",
+    },
+    INVALID_IMAGE_STAMP_POSITION: {
+      code: "EC_BRUSH_0016",
+      template:
+        "ImageBrush stamp `$param` must be a finite number, but received `$received`.",
+    },
+    UNSAFE_IMAGE_STAMP_BOUNDS: {
+      code: "EC_BRUSH_0017",
+      template:
+        "ImageBrush destination pixel bounds exceed the safe integer range.",
+    },
   },
   WORLD: {
     INVALID_BOUNDS: {

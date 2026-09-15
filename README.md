@@ -69,6 +69,38 @@ const brush = new CircleBrush({
 brush.stamp(raster, { x: 50.5, y: 50.25 });
 ```
 
+## Image Brush
+
+`BrushImage` 是运行时中立、可重复使用的不可变 Alpha Mask；源图 RGB 会被忽略，
+最终颜色始终来自 `ImageBrush.color`。`size` 表示图像最长边的 World Space 长度，
+另一边按原始宽高比缩放；默认 anchor 为图像中心，也可传入 `[0, 1]` 范围内的
+归一化坐标：
+
+```ts
+import { BrushImage, ImageBrush } from "@reverie/core";
+
+const image = BrushImage.fromRGBA({
+  width: 2,
+  height: 1,
+  pixels: new Uint8ClampedArray([255, 255, 255, 255, 255, 255, 255, 96]),
+});
+const imageBrush = new ImageBrush({
+  image,
+  size: 40,
+  color: { r: 84, g: 153, b: 255, a: 255 },
+  opacity: 0.8,
+  spacing: 0.2,
+  anchor: { x: 0.5, y: 0.5 },
+});
+
+imageBrush.stamp(raster, { x: 50.5, y: 50.25 });
+```
+
+Stamp 会围绕 anchor 旋转，通过逆变换与双线性采样读取 Mask，并把图像边缘之外
+视为透明。省略 `BrushImage.alpha` 时会创建全不透明 Mask，适合没有 Alpha 通道的
+来源。图片文件的浏览器解码不属于 Core；`demo` 提供本地上传入口，将解码后的
+RGBA 转为 `BrushImage`，但不会保存上传文件或画笔设置。
+
 ## Stroke
 
 `Stroke` 保存连续 World Space 中的原始输入采样，并按照 `brush.size ×
@@ -114,9 +146,10 @@ Stamp 之间的速度，单位为 World Unit/ms；首条命令或非正时间差
 
 ## Brush Dynamics
 
-`CircleBrush` 可以独立配置 Pressure → Size、Pressure → Opacity、Velocity →
-Size、Velocity → Opacity 和 Tilt → Rotation。配置项存在即启用，`min` 表示相对
-基础值的最小比例；Pressure 和 Velocity 同时影响同一参数时，其归一化因子相乘：
+`CircleBrush` 与 `ImageBrush` 都可以独立配置 Pressure → Size、Pressure →
+Opacity、Velocity → Size、Velocity → Opacity 和 Tilt → Rotation。配置项存在即
+启用，`min` 表示相对基础值的最小比例；Pressure 和 Velocity 同时影响同一参数时，
+其归一化因子相乘：
 
 ```ts
 const dynamicBrush = new CircleBrush({
@@ -181,8 +214,8 @@ while (stroke.hasPendingStamps) {
 ```
 
 `demo` 提供了可直接按下并拖动绘画的连续 Stroke 画布，并可调整颜色、
-Brush Size、Spacing、Opacity、Pan 和 Zoom。绘制命令由主线程上的
-`DrawingScheduler` 按帧消费。
+Brush Size、Spacing、Opacity、Pan 和 Zoom，也可临时上传图片切换为 Image
+Brush。绘制命令由主线程上的 `DrawingScheduler` 按帧消费。
 
 ## Export Renderer
 
@@ -211,7 +244,7 @@ const image = exporter.render({
 alpha，不进行 premultiply、缩放或图层合成。`render()` 只输出原始 RGBA 数据，
 编码为实际图片文件由 `Image Encoders` 负责。
 
-`demo` 中的 “Export to console” 按钮会把当前画布导出为 16 × 16 的 RGBA
+`demo` 中的 “Export to console” 按钮会把当前画布导出为 1920 × 1080 的 RGBA
 buffer，并把完整的 `Uint8ClampedArray` 输出到浏览器控制台。
 
 ## Image Encoders

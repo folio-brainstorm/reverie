@@ -79,7 +79,7 @@ h1 {
 .brush-controls,
 .view-toolbar {
   display: grid;
-  grid-template-columns: minmax(76px, 0.45fr) repeat(3, minmax(125px, 1fr)) auto;
+  grid-template-columns: minmax(76px, 0.45fr) repeat(3, minmax(125px, 1fr));
   gap: 18px;
   align-items: end;
 }
@@ -231,6 +231,82 @@ input[type="range"] {
   cursor: pointer;
 }
 
+.image-brush-control {
+  display: grid;
+  min-width: 250px;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(140px, auto) auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  color: #d7d1dc;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.image-brush-heading,
+.image-brush-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.image-brush-actions {
+  justify-content: flex-start;
+}
+
+.image-upload-button {
+  display: inline-flex;
+  min-height: 42px;
+  padding: 0 18px;
+  justify-content: center;
+  align-items: center;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 12px;
+  color: #f7f0e6;
+  background: #3d3957;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    transform 140ms ease;
+}
+
+.image-upload-button:hover {
+  background: #504a70;
+  transform: translateY(-1px);
+}
+
+.image-upload-button:has(input:focus-visible) {
+  outline: 2px solid #f2ad76;
+  outline-offset: 3px;
+}
+
+.image-brush-reset {
+  color: #f7d8c3;
+  background: #423039;
+}
+
+.image-brush-control small {
+  max-width: 32ch;
+  overflow: hidden;
+  color: #aaa6b5;
+  font-weight: 500;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 button {
   min-height: 42px;
   padding: 0 18px;
@@ -269,6 +345,10 @@ canvas:focus-visible {
   .brush-controls,
   .view-toolbar {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .image-brush-control {
+    grid-template-columns: 1fr;
   }
 }
 
