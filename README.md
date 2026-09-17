@@ -182,10 +182,11 @@ const dynamicBrush = new CircleBrush({
 曲线。输入和输出均为 `[0, 1]`。Tilt 旋转以弧度解析；圆形 Brush 的像素结果不受
 旋转影响。未配置 dynamics 时仍使用原有固定参数快路径。
 
-## Deterministic Brush Jitter
+## Deterministic Brush Jitter and Scatter
 
-`CircleBrush` 与 `ImageBrush` 均支持可选的 `seed` 和 `jitter`。Jitter 在 Dynamics
-之后逐 Stamp 应用，不修改基础参数、原始输入或 Stamp 间距：
+`CircleBrush` 与 `ImageBrush` 均支持可选的 `seed`、`jitter` 和 `scatter`。
+每个 Stamp 依次执行 Dynamics、Jitter 和 Scatter；Scatter 只移动最终绘制位置，
+不修改基础参数、原始命令位置、路径数据或 Stamp 间距：
 
 ```ts
 import { CircleBrush, Stroke } from "@reverie/core";
@@ -200,6 +201,10 @@ const jitterBrush = new CircleBrush({
     opacity: 0.2,
     rotation: Math.PI / 12,
   },
+  scatter: {
+    along: 0.3,
+    across: 0.15,
+  },
 });
 const stroke = new Stroke({ brush: jitterBrush, strokeSequence: 7 });
 const replaySeed = stroke.strokeSeed;
@@ -210,6 +215,12 @@ const replay = new Stroke({ brush: jitterBrush, strokeSeed: replaySeed });
 `1`，最终尺寸截到非负数，透明度截到 `[0, 1]`；零尺寸或零透明度不绘制。
 `rotation` 是弧度表示的最大加性偏移；圆形 Brush 的旋转没有可见效果。三个
 幅度都必须是非负有限数，省略或 `0` 表示关闭；有限配置的计算若溢出则抛错。
+
+Scatter 的 `along` 与 `across` 是最终尺寸的比例，均为非负有限数，默认 `0`，
+并可大于 `1`。沿路径方向为 `(cos(direction), sin(direction))`，横向方向为
+`(-sin(direction), cos(direction))`；方向缺失时采用 `0`，即沿路径为 +X、横向为
++Y。每个分量使用独立的 `[-1, 1)` 样本乘以最终尺寸和对应比例。最终尺寸为
+零时不会计算 Scatter 或绘制；无 Scatter 时绘制坐标保持不变。
 
 Seed、笔画序号、Stamp 编号和 channel ID 均使用 `[0, 4294967295]` 内的整数；
 负数、小数、越界和非有限值会被拒绝。所有种子混合、乘法、移位及哈希步骤
@@ -239,15 +250,15 @@ const restoredCanvas = new ReverieCanvas({
 ```
 
 直接 `brush.stamp(raster, position)` 或旧命令缺少随机上下文时，使用 Brush seed
-和编号 `0`，所以不会因调用次数产生隐式变化。也可在命令中独立提供
-`strokeSeed` 与 `stampIndex`。Jitter 关闭时，旧命令和绘制行为保持兼容。
+和编号 `0`，方向采用 `0`，所以不会因调用次数产生隐式变化。也可在命令中独立提供
+`strokeSeed`、`stampIndex` 与 `direction`。Jitter 和 Scatter 均关闭时，旧命令和绘制行为保持兼容。
 `brush.resolveParameters()` 同样允许省略输入，使用中性 Dynamics 默认值和
 上述固定随机上下文；`stamp` 复用这个参数解析入口。
 
 随机基础设施可通过 `deriveStrokeSeed(brushSeed, strokeSequence)`、
 `sampleStampRandom(strokeSeed, stampIndex, channel)` 和冻结的
 `STAMP_RANDOM_CHANNELS` 使用。固定 channel ID 为 size `1`、rotation `2`、
-opacity `3`；新功能应使用新的稳定 ID。Sample 范围为 `[0, 1)`，
+opacity `3`、scatterAlong `4` 和 scatterAcross `5`；新功能应使用新的稳定 ID。Sample 范围为 `[0, 1)`，
 `sample * 2 - 1` 得到 `[-1, 1)`。按 seed、编号、channel 独立寻址，无可变 RNG
 流，也不依赖 `Math.random()`、Web API、渲染时机或 frame budget。
 Channel 会先进行 uint32 哈希再与 seed 混合，使两个参数具有不同角色。

@@ -2,10 +2,8 @@ import type { CirclePixelVisitor } from "../../interfaces/rasterizers/CirclePixe
 import type { Circle } from "../../interfaces/rasterizers/Rasterizers.js";
 
 import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
-import {
-  ReverieRangeError,
-  ReverieTypeError,
-} from "../../utils/errors/ReverieErrors.js";
+import { ReverieRangeError } from "../../utils/errors/ReverieErrors.js";
+import { assertFiniteCircleCenterComponent } from "../../utils/number/math/AssertFiniteCircleCenterComponent.js";
 import { isValidCircleRadius } from "../../utils/number/math/IsValidCircleRadius.js";
 
 /**
@@ -23,13 +21,16 @@ export function rasterizeCirclePixels(
 ): void {
   const { center, radius } = circle;
 
-  assertFiniteCenterComponent(center.x, "center.x");
-  assertFiniteCenterComponent(center.y, "center.y");
+  assertFiniteCircleCenterComponent(center.x, "center.x");
+  assertFiniteCircleCenterComponent(center.y, "center.y");
 
   if (!isValidCircleRadius(radius)) {
-    throw ReverieRangeError.from(ErrorDefinitions.COMMON.INVALID_CIRCLE_RADIUS, {
-      radius,
-    });
+    throw ReverieRangeError.from(
+      ErrorDefinitions.COMMON.INVALID_CIRCLE_RADIUS,
+      {
+        radius,
+      },
+    );
   }
 
   const minX = normalizeZero(Math.ceil(center.x - radius - 0.5));
@@ -70,33 +71,6 @@ function assertSafePixelBounds(
   if (!bounds.every(Number.isSafeInteger)) {
     throw ReverieRangeError.from(
       ErrorDefinitions.COMMON.UNSAFE_CIRCLE_PIXEL_BOUNDS,
-    );
-  }
-}
-
-/** Validates one continuous coordinate at the circle boundary. */
-function assertFiniteCenterComponent(
-  value: unknown,
-  parameterName: "center.x" | "center.y",
-): asserts value is number {
-  if (typeof value !== "number") {
-    throw ReverieTypeError.from(
-      ErrorDefinitions.COMMON.INVALID_COORDINATE_TYPE,
-      {
-        param: parameterName,
-        expected: "number",
-        received: typeof value,
-      },
-    );
-  }
-
-  if (!Number.isFinite(value)) {
-    throw ReverieRangeError.from(
-      ErrorDefinitions.COMMON.INVALID_CIRCLE_CENTER,
-      {
-        param: parameterName,
-        received: value,
-      },
     );
   }
 }

@@ -22,6 +22,7 @@ const BRUSH_FACTORIES = [
         color: COLOR,
         seed: 0xffffffff,
         jitter: { size: 0.3, opacity: 0.3, rotation: 0.5 },
+        scatter: { along: 0.25, across: 0.15 },
       });
     },
   },
@@ -40,6 +41,7 @@ const BRUSH_FACTORIES = [
         seed: 0xffffffff,
         dynamics: { rotation: { direction: {} } },
         jitter: { size: 0.3, opacity: 0.3, rotation: 0.5 },
+        scatter: { along: 0.25, across: 0.15 },
       });
     },
   },

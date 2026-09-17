@@ -3,6 +3,7 @@ import type { RGBAColor } from "../color/Colors.js";
 import type { BrushAnchor } from "./BrushAnchor.js";
 import type { BrushDynamics } from "./dynamics/BrushDynamics.js";
 import type { BrushJitter } from "./jitter/BrushJitter.js";
+import type { BrushScatter } from "./scatter/BrushScatter.js";
 
 /** Configuration for an alpha-mask image brush. */
 export interface ImageBrushConfig {
@@ -35,4 +36,7 @@ export interface ImageBrushConfig {
 
   /** Optional per-stamp variation applied after dynamics; disabled by default. */
   readonly jitter?: BrushJitter;
+
+  /** Optional final-position variation applied after dynamics and jitter. */
+  readonly scatter?: BrushScatter;
 }

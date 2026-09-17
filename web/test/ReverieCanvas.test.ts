@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CircleBrush, deriveStrokeSeed, Stroke, World } from "@reverie/core";
+import type { StampCommand } from "@reverie/core";
 import {
   ExportRenderer,
   JPEGEncoder,
@@ -473,18 +474,30 @@ describe("CanvasDrawingSession deterministic stroke seeds", () => {
     },
   );
 
-  it("keeps jitter pixels identical for equivalent individually delivered and coalesced input", () => {
-    const paint = (shouldCoalesce: boolean): Uint8ClampedArray => {
+  it("keeps jitter and scatter pixels identical for equivalent individually delivered and coalesced input", () => {
+    const paint = (
+      shouldCoalesce: boolean,
+    ): { pixels: Uint8ClampedArray; commands: StampCommand[] } => {
       const runtime = createCanvasRuntime();
+      const brush = new CircleBrush({
+        size: 4,
+        opacity: 0.6,
+        seed: 0x80000000,
+        color: { r: 0, g: 255, b: 0, a: 255 },
+        jitter: { size: 0.2, opacity: 0.2, rotation: 0.2 },
+        scatter: { along: 0.25, across: 0.15 },
+      });
+      const originalStamp = brush.stamp.bind(brush);
+      const commands: StampCommand[] = [];
+      vi.spyOn(brush, "stamp").mockImplementation((raster, position, input) => {
+        if (input !== undefined) {
+          commands.push({ ...input, position: { ...input.position } });
+        }
+        originalStamp(raster, position, input);
+      });
       const reverie = new ReverieCanvas({
         canvas: runtime.canvas,
-        brush: new CircleBrush({
-          size: 4,
-          opacity: 0.6,
-          seed: 0x80000000,
-          color: { r: 0, g: 255, b: 0, a: 255 },
-          jitter: { size: 0.2, opacity: 0.2, rotation: 0.2 },
-        }),
+        brush,
       });
       const first = {
         button: 0,
@@ -510,11 +523,13 @@ describe("CanvasDrawingSession deterministic stroke seeds", () => {
         raster: reverie.activeLayer.raster,
       }).render({ x: 0, y: 0, width: 16, height: 16 }).pixels;
       reverie.dispose();
-      return pixels;
+      return { pixels, commands };
     };
     const separate = paint(false);
-    expect(separate.some((byte) => byte > 0)).toBe(true);
-    expect(paint(true)).toEqual(separate);
+    expect(separate.pixels.some((byte) => byte > 0)).toBe(true);
+    const coalesced = paint(true);
+    expect(coalesced.commands).toEqual(separate.commands);
+    expect(coalesced.pixels).toEqual(separate.pixels);
   });
 });
 

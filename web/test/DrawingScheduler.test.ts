@@ -339,7 +339,7 @@ describe("DrawingScheduler lifecycle and failures", () => {
   });
 });
 
-describe("DrawingScheduler deterministic jitter", () => {
+describe("DrawingScheduler deterministic jitter and scatter", () => {
   it.each(["CircleBrush", "ImageBrush"])(
     "keeps %s pixels identical across frame budgets, clocks, and render delays",
     (brushName) => {
@@ -349,6 +349,7 @@ describe("DrawingScheduler deterministic jitter", () => {
         opacity: 0.6,
         seed: 0xffffffff,
         jitter: { size: 0.3, opacity: 0.3, rotation: 0.5 },
+        scatter: { along: 0.25, across: 0.15 },
       };
       const brush =
         brushName === "CircleBrush"

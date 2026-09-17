@@ -3,6 +3,7 @@ import type { NormalizedBrushJitter } from "../../interfaces/brush/jitter/Normal
 
 import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
 import { ReverieRangeError } from "../../utils/errors/ReverieErrors.js";
+import { resolveNonnegativeFiniteAmplitude } from "../../utils/number/math/ResolveNonnegativeFiniteAmplitude.js";
 
 /**
  * Validates optional jitter once and captures independent immutable amplitudes.
@@ -22,9 +23,21 @@ export function normalizeBrushJitter(
     throw ReverieRangeError.from(ErrorDefinitions.BRUSH.INVALID_JITTER_OBJECT);
   }
 
-  const rotation = resolveAmplitude(jitter.rotation, "jitter.rotation");
-  const size = resolveAmplitude(jitter.size, "jitter.size");
-  const opacity = resolveAmplitude(jitter.opacity, "jitter.opacity");
+  const rotation = resolveNonnegativeFiniteAmplitude(
+    jitter.rotation,
+    "jitter.rotation",
+    createInvalidAmplitudeError,
+  );
+  const size = resolveNonnegativeFiniteAmplitude(
+    jitter.size,
+    "jitter.size",
+    createInvalidAmplitudeError,
+  );
+  const opacity = resolveNonnegativeFiniteAmplitude(
+    jitter.opacity,
+    "jitter.opacity",
+    createInvalidAmplitudeError,
+  );
 
   if (rotation === 0 && size === 0 && opacity === 0) {
     return null;
@@ -33,20 +46,12 @@ export function normalizeBrushJitter(
   return Object.freeze({ rotation, size, opacity });
 }
 
-/** Rejects negative, nonnumeric, or non-finite configured amplitudes. */
-function resolveAmplitude(value: unknown, parameterName: string): number {
-  if (value === undefined) {
-    return 0;
-  }
-
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-    throw ReverieRangeError.from(
-      ErrorDefinitions.BRUSH.INVALID_JITTER_AMPLITUDE,
-      {
-        param: parameterName,
-      },
-    );
-  }
-
-  return value;
+/** Creates the jitter-specific error for an invalid configured amplitude. */
+function createInvalidAmplitudeError(parameterName: string): ReverieRangeError {
+  return ReverieRangeError.from(
+    ErrorDefinitions.BRUSH.INVALID_JITTER_AMPLITUDE,
+    {
+      param: parameterName,
+    },
+  );
 }

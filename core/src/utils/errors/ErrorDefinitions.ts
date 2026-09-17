@@ -158,6 +158,22 @@ export const ErrorDefinitions = {
       template:
         "Brush jitter arithmetic overflowed; reduce brush parameters or jitter amplitudes.",
     },
+    INVALID_SCATTER_OBJECT: {
+      code: "EC_BRUSH_0022",
+      template: "Brush scatter must be a non-array object.",
+    },
+    INVALID_SCATTER_AMPLITUDE: {
+      code: "EC_BRUSH_0023",
+      template: "Brush `$param` must be a non-negative finite number.",
+    },
+    INVALID_SCATTER_DIRECTION: {
+      code: "EC_BRUSH_0024",
+      template: "Brush scatter direction must be a finite number of radians.",
+    },
+    INVALID_SCATTER_RESULT: {
+      code: "EC_BRUSH_0025",
+      template: "Brush scatter produced a non-finite `$param`.",
+    },
   },
   RANDOM: {
     INVALID_UINT32: {

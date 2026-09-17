@@ -11,6 +11,7 @@ export type { RGBABrushImageSource } from "../../interfaces/brush/RGBABrushImage
 export type { ResolvedBrushParameters } from "../../interfaces/brush/ResolvedBrushParameters.js";
 export type { BrushDynamics } from "../../interfaces/brush/dynamics/BrushDynamics.js";
 export type { BrushJitter } from "../../interfaces/brush/jitter/BrushJitter.js";
+export type { BrushScatter } from "../../interfaces/brush/scatter/BrushScatter.js";
 export type { BrushParameterDynamics } from "../../interfaces/brush/dynamics/BrushParameterDynamics.js";
 export type { DirectionDynamics } from "../../interfaces/brush/dynamics/DirectionDynamics.js";
 export type { DynamicsCurve } from "../../interfaces/brush/dynamics/DynamicsCurve.js";

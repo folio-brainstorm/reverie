@@ -29,7 +29,13 @@ describe("deterministic stamp random channels", () => {
   );
 
   it("keeps independently addressed channels stable across unrelated calls", () => {
-    expect(STAMP_RANDOM_CHANNELS).toEqual({ size: 1, rotation: 2, opacity: 3 });
+    expect(STAMP_RANDOM_CHANNELS).toEqual({
+      size: 1,
+      rotation: 2,
+      opacity: 3,
+      scatterAlong: 4,
+      scatterAcross: 5,
+    });
     expect(Object.isFrozen(STAMP_RANDOM_CHANNELS)).toBe(true);
     const size = sampleStampRandom(0xffffffff, 7, STAMP_RANDOM_CHANNELS.size);
     const rotation = sampleStampRandom(
@@ -96,7 +102,7 @@ describe("deterministic stamp random channels", () => {
         samples.add(sample);
       }
     }
-    expect(samples.size).toBe(512 * 3);
+    expect(samples.size).toBe(512 * 5);
   });
 
   it.each([-1, 0.5, 0x100000000, Number.NaN, Infinity, -Infinity])(

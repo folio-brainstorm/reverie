@@ -6,7 +6,7 @@ import { STAMP_RANDOM_CHANNELS } from "../../config/random/StampRandomChannels.j
 import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
 import { ReverieRangeError } from "../../utils/errors/ReverieErrors.js";
 import { assertUint32 } from "../../utils/number/math/AssertUint32.js";
-import { sampleUint32Random } from "../../utils/random/SampleUint32Random.js";
+import { sampleSignedUint32Random } from "../../utils/random/SampleSignedUint32Random.js";
 
 /**
  * Applies isolated deterministic jitter to already resolved dynamics parameters.
@@ -40,20 +40,32 @@ export function resolveBrushJitter(
       ? resolved.size
       : resolved.size *
         (1 +
-          signedRandom(strokeSeed, stampIndex, STAMP_RANDOM_CHANNELS.size) *
+          sampleSignedUint32Random(
+            strokeSeed,
+            stampIndex,
+            STAMP_RANDOM_CHANNELS.size,
+          ) *
             jitter.size);
   const opacity =
     jitter.opacity === 0
       ? resolved.opacity
       : resolved.opacity *
         (1 +
-          signedRandom(strokeSeed, stampIndex, STAMP_RANDOM_CHANNELS.opacity) *
+          sampleSignedUint32Random(
+            strokeSeed,
+            stampIndex,
+            STAMP_RANDOM_CHANNELS.opacity,
+          ) *
             jitter.opacity);
   const rotation =
     jitter.rotation === 0
       ? resolved.rotation
       : resolved.rotation +
-        signedRandom(strokeSeed, stampIndex, STAMP_RANDOM_CHANNELS.rotation) *
+        sampleSignedUint32Random(
+          strokeSeed,
+          stampIndex,
+          STAMP_RANDOM_CHANNELS.rotation,
+        ) *
           jitter.rotation;
 
   // Reject overflow before clamping so Infinity cannot silently become valid paint.
@@ -72,9 +84,4 @@ export function resolveBrushJitter(
     opacity: Math.max(0, Math.min(1, opacity)),
     rotation,
   };
-}
-
-/** Converts one trusted channel sample into a signed scalar in `[-1, 1)`. */
-function signedRandom(seed: number, index: number, channel: number): number {
-  return sampleUint32Random(seed, index, channel) * 2 - 1;
 }

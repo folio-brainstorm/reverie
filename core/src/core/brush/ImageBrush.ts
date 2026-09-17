@@ -4,6 +4,7 @@ import type { ImageBrushConfig } from "../../interfaces/brush/ImageBrushConfig.j
 import type { ResolvedBrushParameters } from "../../interfaces/brush/ResolvedBrushParameters.js";
 import type { NormalizedBrushDynamics } from "../../interfaces/brush/dynamics/NormalizedBrushDynamics.js";
 import type { NormalizedBrushJitter } from "../../interfaces/brush/jitter/NormalizedBrushJitter.js";
+import type { NormalizedBrushScatter } from "../../interfaces/brush/scatter/NormalizedBrushScatter.js";
 import type { WorldPoint } from "../../interfaces/camera/WorldPoint.js";
 import type { RGBAColor } from "../../interfaces/color/Colors.js";
 import type { StampCommand } from "../../interfaces/stroke/StampCommand.js";
@@ -19,8 +20,10 @@ import { assertUint32 } from "../../utils/number/math/AssertUint32.js";
 import { BrushImage } from "./BrushImage.js";
 import { normalizeBrushDynamics } from "./NormalizeBrushDynamics.js";
 import { normalizeBrushJitter } from "./NormalizeBrushJitter.js";
+import { normalizeBrushScatter } from "./NormalizeBrushScatter.js";
 import { resolveBrushDynamics } from "./ResolveBrushDynamics.js";
 import { resolveBrushJitter } from "./ResolveBrushJitter.js";
+import { resolveBrushScatter } from "./ResolveBrushScatter.js";
 
 const DEFAULT_BRUSH_SPACING = 0.25;
 const DEFAULT_ANCHOR: BrushAnchor = Object.freeze({ x: 0.5, y: 0.5 });
@@ -57,6 +60,9 @@ export class ImageBrush implements Brush {
   /** Validated optional variation applied after dynamics. */
   private readonly jitter: NormalizedBrushJitter | null;
 
+  /** Validated optional final-position variation. */
+  private readonly scatter: NormalizedBrushScatter | null;
+
   /** Returns a copy of the straight-alpha RGBA8 paint color. */
   get color(): RGBAColor {
     return { ...this.internalColor };
@@ -70,9 +76,9 @@ export class ImageBrush implements Brush {
   /**
    * Creates an image brush with validated immutable paint and transform state.
    *
-   * @param config - Source mask, base parameters, anchor, dynamics, seed, and jitter.
+   * @param config - Source mask, base parameters, dynamics, seed, jitter, and scatter.
    * @throws {ReverieRangeError} The image, size, color, opacity, spacing,
-   * anchor, rotation, dynamics, uint32 seed, or jitter configuration is invalid.
+   * anchor, rotation, dynamics, uint32 seed, jitter, or scatter configuration is invalid.
    */
   constructor(config: ImageBrushConfig) {
     const {
@@ -126,10 +132,11 @@ export class ImageBrush implements Brush {
     this.internalAnchor = { ...anchor };
     this.dynamics = normalizeBrushDynamics(config.dynamics);
     this.jitter = normalizeBrushJitter(config.jitter);
+    this.scatter = normalizeBrushScatter(config.scatter);
   }
 
   /**
-   * Resolves dynamics, then deterministic jitter, for one actual stamp.
+   * Resolves dynamics and deterministic jitter for one actual stamp.
    *
    * @param input - Optional dynamics input with uint32 seed and stamp index;
    * omitted input uses neutral dynamics defaults, the brush seed, and index `0`.
@@ -160,7 +167,7 @@ export class ImageBrush implements Brush {
    * @param input - Optional dynamics and random context; absent random identity
    * uses the brush seed and stamp index `0` without invocation state.
    * @throws {ReverieRangeError} Used dynamics input, transformed position, or
-   * destination bounds, random identity, or jitter arithmetic are invalid.
+   * destination bounds, random identity, jitter arithmetic, or scatter result is invalid.
    */
   stamp(raster: Raster, position: WorldPoint, input?: StampCommand): void {
     if (
@@ -179,7 +186,15 @@ export class ImageBrush implements Brush {
 
     assertFinitePositionComponent(position.x, "position.x");
     assertFinitePositionComponent(position.y, "position.y");
-    this.paintTransformedImage(raster, position, resolved);
+
+    const paintPosition = resolveBrushScatter(
+      position,
+      resolved,
+      this.scatter,
+      this.seed,
+      input,
+    );
+    this.paintTransformedImage(raster, paintPosition, resolved);
   }
 
   /** Visits only the conservative transformed bounds using scalar inverse math. */
