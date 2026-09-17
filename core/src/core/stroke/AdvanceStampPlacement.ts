@@ -1,11 +1,14 @@
 import type { StrokeSample } from "../../interfaces/stroke/StrokeSample.js";
+import type { StampPlacementState } from "../../interfaces/stroke/StampPlacementState.js";
 
+import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
+import { ReverieRangeError } from "../../utils/errors/ReverieErrors.js";
 import { copyStrokeSample } from "./CopyStrokeSample.js";
 import { interpolateStrokeSample } from "./InterpolateStrokeSample.js";
 
 /**
- * Places evenly spaced samples on one linear segment while preserving distance
- * accumulated from earlier segments.
+ * Places dynamically spaced samples on one linear segment while preserving
+ * distance accumulated from earlier segments.
  *
  * Each placed stamp carries the input state interpolated at its own path
  * position rather than either endpoint's snapshot, so callers never observe a
@@ -13,51 +16,70 @@ import { interpolateStrokeSample } from "./InterpolateStrokeSample.js";
  *
  * @param start - Beginning of the current sample segment.
  * @param end - End of the current sample segment.
- * @param stampDistance - Positive finite distance between adjacent stamps.
+ * @param nextStampDistance - Positive finite interval owned by the preceding stamp.
  * @param distanceSinceLastStamp - Distance carried from preceding segments.
- * @param placeStamp - Consumer invoked for each newly placed sample.
- * @returns Trailing path distance since the final placed stamp.
+ * @param placeStamp - Consumer invoked for each newly placed sample; its return
+ * value is the interval owned by that newly emitted stamp.
+ * @returns Trailing distance and the interval required by the next placement.
+ * @throws {ReverieRangeError} Adding a valid interval cannot advance at the
+ * current numeric precision.
  */
 export function advanceStampPlacement(
   start: StrokeSample,
   end: StrokeSample,
-  stampDistance: number,
+  nextStampDistance: number,
   distanceSinceLastStamp: number,
-  placeStamp: (sample: StrokeSample) => void,
-): number {
+  placeStamp: (sample: StrokeSample) => number,
+): StampPlacementState {
   const deltaX = end.position.x - start.position.x;
   const deltaY = end.position.y - start.position.y;
   const segmentLength = Math.hypot(deltaX, deltaY);
 
   if (segmentLength === 0) {
-    return distanceSinceLastStamp;
+    return { distanceSinceLastStamp, nextStampDistance };
   }
 
-  const tolerance = Number.EPSILON * Math.max(1, stampDistance) * 16;
-  const distanceToFirstStamp = stampDistance - distanceSinceLastStamp;
+  const tolerance = Number.EPSILON * Math.max(1, nextStampDistance) * 16;
+  const distanceToFirstStamp = nextStampDistance - distanceSinceLastStamp;
 
   if (distanceToFirstStamp > segmentLength + tolerance) {
-    return distanceSinceLastStamp + segmentLength;
+    return {
+      distanceSinceLastStamp: distanceSinceLastStamp + segmentLength,
+      nextStampDistance,
+    };
   }
 
   let distanceAlongSegment = Math.min(distanceToFirstStamp, segmentLength);
   let lastStampDistance = distanceAlongSegment;
+  let activeStampDistance = nextStampDistance;
 
   while (distanceAlongSegment <= segmentLength + tolerance) {
     const clampedDistance = Math.min(distanceAlongSegment, segmentLength);
     const isSegmentEnd = segmentLength - clampedDistance <= tolerance;
     const interpolation = clampedDistance / segmentLength;
 
-    placeStamp(
+    activeStampDistance = placeStamp(
       isSegmentEnd
         ? copyStrokeSample(end)
         : interpolateStrokeSample(start, end, interpolation),
     );
 
     lastStampDistance = clampedDistance;
-    distanceAlongSegment += stampDistance;
+    const nextDistanceAlongSegment =
+      distanceAlongSegment + activeStampDistance;
+
+    if (nextDistanceAlongSegment <= distanceAlongSegment) {
+      throw ReverieRangeError.from(
+        ErrorDefinitions.STROKE.STAMP_PLACEMENT_NO_PROGRESS,
+      );
+    }
+
+    distanceAlongSegment = nextDistanceAlongSegment;
   }
 
   const trailingDistance = segmentLength - lastStampDistance;
-  return trailingDistance <= tolerance ? 0 : trailingDistance;
+  return {
+    distanceSinceLastStamp: trailingDistance <= tolerance ? 0 : trailingDistance,
+    nextStampDistance: activeStampDistance,
+  };
 }

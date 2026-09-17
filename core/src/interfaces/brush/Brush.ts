@@ -14,6 +14,18 @@ export interface Brush {
   readonly seed?: number;
 
   /**
+   * Resolves the positive world-space distance from this stamp to the next.
+   * Strokes use it when available so brush-specific dynamics and variation can
+   * determine distribution; legacy brushes fall back to {@link size} and
+   * {@link spacing}.
+   *
+   * @param input - Identity and interpolated input for the stamp that owns the
+   * outgoing interval.
+   * @returns A finite positive world-space placement interval.
+   */
+  resolveStampDistance?(input: StampCommand): number;
+
+  /**
    * Paints one stamp into a raster at a continuous world position.
    *
    * @param raster - Sparse raster that receives the stamp.

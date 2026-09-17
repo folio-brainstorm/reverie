@@ -24,6 +24,7 @@ import { normalizeBrushScatter } from "./NormalizeBrushScatter.js";
 import { resolveBrushDynamics } from "./ResolveBrushDynamics.js";
 import { resolveBrushJitter } from "./ResolveBrushJitter.js";
 import { resolveBrushScatter } from "./ResolveBrushScatter.js";
+import { resolveBrushStampDistance } from "./ResolveBrushStampDistance.js";
 
 const DEFAULT_BRUSH_SPACING = 0.25;
 
@@ -158,6 +159,24 @@ export class CircleBrush implements Brush {
       ),
       this.jitter,
       this.seed,
+      input,
+    );
+  }
+
+  /**
+   * Resolves the world-space distance from one stamp to its successor.
+   *
+   * @param input - Input and deterministic identity for the stamp that owns
+   * the outgoing interval.
+   * @returns A finite positive world-space interval.
+   */
+  resolveStampDistance(input: StampCommand): number {
+    return resolveBrushStampDistance(
+      this.resolveParameters(input).size,
+      this.size,
+      this.spacing,
+      this.jitter,
+      input.strokeSeed === undefined ? this.seed : input.strokeSeed,
       input,
     );
   }

@@ -38,12 +38,17 @@ export function normalizeBrushJitter(
     "jitter.opacity",
     createInvalidAmplitudeError,
   );
+  const spacing = resolveNonnegativeFiniteAmplitude(
+    jitter.spacing,
+    "jitter.spacing",
+    createInvalidAmplitudeError,
+  );
 
-  if (rotation === 0 && size === 0 && opacity === 0) {
+  if (rotation === 0 && size === 0 && opacity === 0 && spacing === 0) {
     return null;
   }
 
-  return Object.freeze({ rotation, size, opacity });
+  return Object.freeze({ rotation, size, opacity, spacing });
 }
 
 /** Creates the jitter-specific error for an invalid configured amplitude. */

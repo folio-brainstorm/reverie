@@ -35,6 +35,7 @@ describe("deterministic stamp random channels", () => {
       opacity: 3,
       scatterAlong: 4,
       scatterAcross: 5,
+      spacing: 6,
     });
     expect(Object.isFrozen(STAMP_RANDOM_CHANNELS)).toBe(true);
     const size = sampleStampRandom(0xffffffff, 7, STAMP_RANDOM_CHANNELS.size);
@@ -102,7 +103,7 @@ describe("deterministic stamp random channels", () => {
         samples.add(sample);
       }
     }
-    expect(samples.size).toBe(512 * 5);
+    expect(samples.size).toBe(512 * 6);
   });
 
   it.each([-1, 0.5, 0x100000000, Number.NaN, Infinity, -Infinity])(

@@ -8,4 +8,7 @@ export interface BrushJitter {
 
   /** Symmetric opacity multiplier amplitude, clamped to `[0, 1]` afterward. */
   readonly opacity?: number;
+
+  /** Symmetric multiplier amplitude applied to the outgoing stamp interval. */
+  readonly spacing?: number;
 }

@@ -5,4 +5,5 @@ export const STAMP_RANDOM_CHANNELS = Object.freeze({
   opacity: 0x00000003,
   scatterAlong: 0x00000004,
   scatterAcross: 0x00000005,
+  spacing: 0x00000006,
 });

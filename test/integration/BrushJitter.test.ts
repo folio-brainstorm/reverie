@@ -48,7 +48,7 @@ describe.each(BRUSH_FACTORIES)("$name deterministic jitter", ({ create }) => {
     });
   });
 
-  it.each([{}, { size: 0, opacity: 0, rotation: 0 }])(
+  it.each([{}, { size: 0, opacity: 0, rotation: 0, spacing: 0 }])(
     "leaves every resolved value and painted pixel unchanged when jitter is %j",
     (jitter) => {
       const config = {
@@ -332,7 +332,7 @@ describe.each(BRUSH_FACTORIES)("$name deterministic jitter", ({ create }) => {
     },
   );
 
-  it.each(["rotation", "size", "opacity"])(
+  it.each(["rotation", "size", "opacity", "spacing"])(
     "rejects invalid %s jitter amplitudes",
     (parameter) => {
       for (const invalid of [-1, -0.1, Number.NaN, Infinity, -Infinity]) {

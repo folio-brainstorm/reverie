@@ -59,8 +59,8 @@ export class Stroke {
   /** Streaming fixed-distance processed-path generator. */
   private readonly resampler: StrokeResampler;
 
-  /** Fixed world-space interval derived when the stroke is constructed. */
-  private readonly stampDistance: number;
+  /** Interval from the latest stamp to its successor. */
+  private nextStampDistance: number;
 
   /** Internally owned raw input facts in arrival order. */
   private readonly rawSampleStorage: StrokeSample[] = [];
@@ -176,7 +176,7 @@ export class Stroke {
     this.brush = config.brush;
     this.smoothing = smoothing;
     this.resampler = new StrokeResampler(resampleDistance);
-    this.stampDistance = stampDistance;
+    this.nextStampDistance = stampDistance;
   }
 
   /**
@@ -265,8 +265,12 @@ export class Stroke {
     this.hasEnded = true;
   }
 
-  /** Adds an owned resolved-input snapshot to the tail of the pending FIFO queue. */
-  private enqueueStamp(sample: StrokeSample): void {
+  /**
+   * Adds an owned resolved-input snapshot to the tail of the pending FIFO queue.
+   *
+   * @returns The positive interval owned by the emitted stamp.
+   */
+  private enqueueStamp(sample: StrokeSample): number {
     // Exhaustion fails instead of wrapping to a duplicate stamp identity.
     if (this.nextStampIndex > 0xffffffff) {
       throw ReverieRangeError.from(
@@ -276,7 +280,7 @@ export class Stroke {
     const velocity = deriveStampVelocity(this.lastStampSample, sample);
     const direction = deriveStampDirection(this.lastStampSample, sample);
 
-    this.pendingStamps.push({
+    const command: StampCommand = {
       position: { ...sample.position },
       strokeSeed: this.strokeSeed,
       stampIndex: this.nextStampIndex,
@@ -286,9 +290,13 @@ export class Stroke {
       tiltY: sample.tiltY,
       velocity,
       ...(direction === undefined ? {} : { direction }),
-    });
+    };
+    const nextStampDistance = this.resolveStampDistance(command);
+
+    this.pendingStamps.push(command);
     this.nextStampIndex += 1;
     this.lastStampSample = sample;
+    return nextStampDistance;
   }
 
   /** Stores one processed sample and advances brush stamp placement. */
@@ -299,18 +307,36 @@ export class Stroke {
     this.lastProcessedSample = sample;
 
     if (previousSample === null) {
-      this.enqueueStamp(sample);
+      this.nextStampDistance = this.enqueueStamp(sample);
       this.distanceSinceLastStamp = 0;
       return;
     }
 
-    this.distanceSinceLastStamp = advanceStampPlacement(
+    const placementState = advanceStampPlacement(
       previousSample,
       sample,
-      this.stampDistance,
+      this.nextStampDistance,
       this.distanceSinceLastStamp,
       (stampSample) => this.enqueueStamp(stampSample),
     );
+    this.distanceSinceLastStamp = placementState.distanceSinceLastStamp;
+    this.nextStampDistance = placementState.nextStampDistance;
+  }
+
+  /** Resolves and validates the interval owned by one queued stamp command. */
+  private resolveStampDistance(command: StampCommand): number {
+    const fallbackDistance = this.brush.size * this.brush.spacing;
+    const resolvedDistance =
+      this.brush.resolveStampDistance?.(command) ?? fallbackDistance;
+
+    if (!Number.isFinite(resolvedDistance) || resolvedDistance <= 0) {
+      throw ReverieRangeError.from(
+        ErrorDefinitions.STROKE.INVALID_RESOLVED_STAMP_DISTANCE,
+        { received: resolvedDistance },
+      );
+    }
+
+    return resolvedDistance;
   }
 
   /** Rejects malformed, non-finite, or temporally regressive input samples. */

@@ -174,6 +174,11 @@ export const ErrorDefinitions = {
       code: "EC_BRUSH_0025",
       template: "Brush scatter produced a non-finite `$param`.",
     },
+    INVALID_RESOLVED_SPACING: {
+      code: "EC_BRUSH_0026",
+      template:
+        "Brush dynamics and spacing jitter must produce a finite positive stamp interval.",
+    },
   },
   RANDOM: {
     INVALID_UINT32: {
@@ -256,6 +261,16 @@ export const ErrorDefinitions = {
       code: "EC_STROKE_0012",
       template:
         "Stroke stamp index space is exhausted after index 4294967295; start a new stroke.",
+    },
+    INVALID_RESOLVED_STAMP_DISTANCE: {
+      code: "EC_STROKE_0013",
+      template:
+        "Brush resolved stamp distance must be a finite positive number, but received `$received`.",
+    },
+    STAMP_PLACEMENT_NO_PROGRESS: {
+      code: "EC_STROKE_0014",
+      template:
+        "Stamp placement cannot advance with the resolved interval at the current numeric precision.",
     },
   },
   TILE: {
