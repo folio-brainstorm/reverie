@@ -15,6 +15,8 @@ import {
   ReverieTypeError,
 } from "../../utils/errors/ReverieErrors.js";
 import { isUnitInterval } from "../../utils/number/math/IsUnitInterval.js";
+import { assertUint32 } from "../../utils/number/math/AssertUint32.js";
+import { deriveStrokeSeed } from "../../utils/random/DeriveStrokeSeed.js";
 import { advanceStampPlacement } from "./AdvanceStampPlacement.js";
 import { copyStrokeSample } from "./CopyStrokeSample.js";
 import { deriveStampDirection } from "./DeriveStampDirection.js";
@@ -44,6 +46,12 @@ const DEFAULT_RESAMPLE_DISTANCE = 1;
 export class Stroke {
   /** Brush whose fixed metrics place stamps and whose behavior consumers execute. */
   readonly brush: Brush;
+
+  /** Final serializable uint32 seed, restorable independently of stroke sequence. */
+  readonly strokeSeed: number;
+
+  /** Next emission identity; queue consumption and compaction never reset it. */
+  private nextStampIndex = 0;
 
   /** Position EMA factor captured for the lifetime of the stroke. */
   private readonly smoothing: number;
@@ -112,12 +120,13 @@ export class Stroke {
   /**
    * Creates an empty stroke with fixed path-processing and brush intervals.
    *
-   * @param config - Brush and optional smoothing and resampling settings.
+   * @param config - Brush, path processing, recorded stroke sequence, or restored seed.
    * @throws {ReverieTypeError} A processing setting is not a number.
    * @throws {ReverieRangeError} Smoothing is outside `(0, 1]` or resample
    * distance is not positive and finite.
    * @throws {ReverieRangeError} Brush size and spacing do not produce a positive,
    * finite stamp distance.
+   * @throws {ReverieRangeError} A used seed or sequence is outside uint32.
    */
   constructor(config: StrokeConfig) {
     const smoothing =
@@ -154,6 +163,16 @@ export class Stroke {
       );
     }
 
+    if (config.strokeSeed === undefined) {
+      const brushSeed = config.brush.seed === undefined ? 0 : config.brush.seed;
+      const strokeSequence =
+        config.strokeSequence === undefined ? 0 : config.strokeSequence;
+      this.strokeSeed = deriveStrokeSeed(brushSeed, strokeSequence);
+    } else {
+      // A restored final seed does not consume or validate derivation inputs.
+      assertUint32(config.strokeSeed, "strokeSeed");
+      this.strokeSeed = config.strokeSeed >>> 0;
+    }
     this.brush = config.brush;
     this.smoothing = smoothing;
     this.resampler = new StrokeResampler(resampleDistance);
@@ -176,6 +195,7 @@ export class Stroke {
    * @throws {ReverieTypeError} A supplied value is not a number.
    * @throws {ReverieRangeError} Position or timestamp is not finite, timestamp
    * order regresses, pressure leaves `[0, 1]`, or tilt leaves `[-90, 90]`.
+   * @throws {ReverieRangeError} The uint32 stamp index space is exhausted.
    */
   addSample(sample: StrokeSampleInput): void {
     if (this.hasEnded) {
@@ -247,11 +267,19 @@ export class Stroke {
 
   /** Adds an owned resolved-input snapshot to the tail of the pending FIFO queue. */
   private enqueueStamp(sample: StrokeSample): void {
+    // Exhaustion fails instead of wrapping to a duplicate stamp identity.
+    if (this.nextStampIndex > 0xffffffff) {
+      throw ReverieRangeError.from(
+        ErrorDefinitions.STROKE.STAMP_INDEX_EXHAUSTED,
+      );
+    }
     const velocity = deriveStampVelocity(this.lastStampSample, sample);
     const direction = deriveStampDirection(this.lastStampSample, sample);
 
     this.pendingStamps.push({
       position: { ...sample.position },
+      strokeSeed: this.strokeSeed,
+      stampIndex: this.nextStampIndex,
       timestamp: sample.timestamp,
       pressure: sample.pressure,
       tiltX: sample.tiltX,
@@ -259,6 +287,7 @@ export class Stroke {
       velocity,
       ...(direction === undefined ? {} : { direction }),
     });
+    this.nextStampIndex += 1;
     this.lastStampSample = sample;
   }
 

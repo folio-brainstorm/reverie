@@ -1,5 +1,6 @@
 import type { RGBAColor } from "../color/Colors.js";
 import type { BrushDynamics } from "./dynamics/BrushDynamics.js";
+import type { BrushJitter } from "./jitter/BrushJitter.js";
 
 /** Configuration for a circular brush model. */
 export interface CircleBrushConfig {
@@ -20,4 +21,10 @@ export interface CircleBrushConfig {
 
   /** Optional per-stamp input mappings owned by this brush. */
   dynamics?: BrushDynamics;
+
+  /** Base unsigned 32-bit random seed. Defaults to `0`. */
+  readonly seed?: number;
+
+  /** Optional per-stamp variation applied after dynamics; disabled by default. */
+  readonly jitter?: BrushJitter;
 }

@@ -11,6 +11,12 @@ export interface StampCommand {
   /** Stable world-space snapshot at which the current stroke brush should stamp. */
   readonly position: WorldPoint;
 
+  /** Final serializable uint32 seed shared by every command in this stroke. */
+  readonly strokeSeed?: number;
+
+  /** Stroke-local uint32 emission index, starting at `0`; unrelated to scheduling. */
+  readonly stampIndex?: number;
+
   /** Path time interpolated at this stamp; populated by {@link Stroke}. */
   readonly timestamp?: number;
 

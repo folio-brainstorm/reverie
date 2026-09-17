@@ -23,6 +23,9 @@ export interface CanvasDrawingSessionConfig {
   /** Brush captured when each new Stroke begins. */
   readonly brush: Brush;
 
+  /** Initial uint32 stroke sequence for restoring session state. Defaults to `0`. */
+  readonly strokeSequence?: number;
+
   /** Optional externally owned command scheduler. */
   readonly scheduler?: DrawingScheduler;
 

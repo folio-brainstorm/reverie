@@ -951,6 +951,8 @@ describe("extended stroke sample input", () => {
         tiltX: 10,
         tiltY: -10,
         velocity: 0,
+        strokeSeed: stroke.strokeSeed,
+        stampIndex: 0,
       },
     ]);
   });
@@ -974,6 +976,8 @@ describe("extended stroke sample input", () => {
         tiltX: -12,
         tiltY: 8,
         velocity: 0,
+        strokeSeed: stroke.strokeSeed,
+        stampIndex: 0,
       },
     ]);
   });
@@ -987,6 +991,8 @@ describe("extended stroke sample input", () => {
       {
         ...normalizedSample({ x: 4, y: -3 }, 2),
         velocity: 0,
+        strokeSeed: stroke.strokeSeed,
+        stampIndex: 0,
       },
     ]);
   });

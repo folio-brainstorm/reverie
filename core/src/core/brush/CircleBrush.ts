@@ -2,6 +2,7 @@ import type { Brush } from "../../interfaces/brush/Brush.js";
 import type { CircleBrushConfig } from "../../interfaces/brush/CircleBrushConfig.js";
 import type { ResolvedBrushParameters } from "../../interfaces/brush/ResolvedBrushParameters.js";
 import type { NormalizedBrushDynamics } from "../../interfaces/brush/dynamics/NormalizedBrushDynamics.js";
+import type { NormalizedBrushJitter } from "../../interfaces/brush/jitter/NormalizedBrushJitter.js";
 import type { WorldPoint } from "../../interfaces/camera/WorldPoint.js";
 import type { RGBAColor } from "../../interfaces/color/Colors.js";
 import type { StampCommand } from "../../interfaces/stroke/StampCommand.js";
@@ -14,8 +15,11 @@ import { ReverieRangeError } from "../../utils/errors/ReverieErrors.js";
 import { isValidRGBAColor } from "../../utils/number/color/IsValidRGBAColor.js";
 import { isPositiveFiniteNumber } from "../../utils/number/math/IsPositiveFiniteNumber.js";
 import { isUnitInterval } from "../../utils/number/math/IsUnitInterval.js";
+import { assertUint32 } from "../../utils/number/math/AssertUint32.js";
 import { normalizeBrushDynamics } from "./NormalizeBrushDynamics.js";
+import { normalizeBrushJitter } from "./NormalizeBrushJitter.js";
 import { resolveBrushDynamics } from "./ResolveBrushDynamics.js";
+import { resolveBrushJitter } from "./ResolveBrushJitter.js";
 
 const DEFAULT_BRUSH_SPACING = 0.25;
 
@@ -39,6 +43,9 @@ export class CircleBrush implements Brush {
   /** Static rotation offset in radians. */
   readonly rotation: number;
 
+  /** Stable uint32 base seed for stroke derivation and direct stamps. */
+  readonly seed: number;
+
   /** Internally owned color so later config mutations cannot alter the brush. */
   private readonly internalColor: RGBAColor;
 
@@ -51,8 +58,11 @@ export class CircleBrush implements Brush {
   /** Validated dynamics owned by this brush, or `null` for the legacy path. */
   private readonly dynamics: NormalizedBrushDynamics | null;
 
-  /** Whether size or opacity input requires per-stamp paint parameters. */
-  private readonly hasPaintDynamics: boolean;
+  /** Validated optional variation applied after dynamics. */
+  private readonly jitter: NormalizedBrushJitter | null;
+
+  /** Whether dynamics or jitter requires per-stamp parameter resolution. */
+  private readonly hasPaintVariation: boolean;
 
   /** Returns a copy of the straight-alpha RGBA8 stamp color. */
   get color(): RGBAColor {
@@ -62,10 +72,11 @@ export class CircleBrush implements Brush {
   /**
    * Creates a circular brush with validated, immutable stamp parameters.
    *
-   * @param config - Diameter, RGBA8 color, opacity, spacing, rotation, and dynamics.
+   * @param config - Base paint parameters, dynamics, uint32 seed, and jitter.
    * @throws {ReverieRangeError} Size or spacing is not positive and finite,
    * opacity is outside the inclusive `0..1` range, rotation is not finite,
-   * color is not valid RGBA8, or a dynamics mapping is malformed.
+   * color is not valid RGBA8, a dynamics/jitter mapping is malformed, or seed
+   * is outside the uint32 range.
    */
   constructor(config: CircleBrushConfig) {
     const {
@@ -74,6 +85,7 @@ export class CircleBrush implements Brush {
       opacity = 1,
       spacing = DEFAULT_BRUSH_SPACING,
       rotation = 0,
+      seed = 0,
     } = config;
 
     if (!isPositiveFiniteNumber(size)) {
@@ -96,35 +108,47 @@ export class CircleBrush implements Brush {
       throw ReverieRangeError.from(ErrorDefinitions.COMMON.INVALID_RGBA_COLOR);
     }
 
+    assertUint32(seed, "brush.seed");
+
     this.size = size;
     this.opacity = opacity;
     this.spacing = spacing;
     this.rotation = rotation;
+    this.seed = seed >>> 0;
     this.internalColor = { ...color };
     this.effectiveAlpha = Math.round(color.a * opacity);
     this.normalizedEffectiveAlpha = this.effectiveAlpha / 255;
     this.dynamics = normalizeBrushDynamics(config.dynamics);
-    this.hasPaintDynamics =
-      this.dynamics !== null &&
-      (this.dynamics.size.pressure !== null ||
-        this.dynamics.size.velocity !== null ||
-        this.dynamics.opacity.pressure !== null ||
-        this.dynamics.opacity.velocity !== null);
+    this.jitter = normalizeBrushJitter(config.jitter);
+    this.hasPaintVariation =
+      this.jitter !== null ||
+      (this.dynamics !== null &&
+        (this.dynamics.size.pressure !== null ||
+          this.dynamics.size.velocity !== null ||
+          this.dynamics.opacity.pressure !== null ||
+          this.dynamics.opacity.velocity !== null));
   }
 
   /**
-   * Resolves this brush's immutable base values for one actual stamp.
+   * Resolves dynamics, then deterministic jitter, for one actual stamp.
    *
-   * @param input - Stamp input carrying pressure, velocity, direction, and tilt.
+   * @param input - Optional dynamics input with uint32 seed and stamp index;
+   * omitted input uses neutral dynamics defaults, the brush seed, and index `0`.
    * @returns Independent size, opacity, and radian rotation values.
-   * @throws {ReverieRangeError} Used input or a custom curve result is invalid.
+   * @throws {ReverieRangeError} Used input, identity, curve output, or jitter result
+   * is invalid.
    */
-  resolveParameters(input: StampCommand): ResolvedBrushParameters {
-    return resolveBrushDynamics(
-      this.size,
-      this.opacity,
-      this.rotation,
-      this.dynamics,
+  resolveParameters(input?: StampCommand): ResolvedBrushParameters {
+    return resolveBrushJitter(
+      resolveBrushDynamics(
+        this.size,
+        this.opacity,
+        this.rotation,
+        this.dynamics,
+        input,
+      ),
+      this.jitter,
+      this.seed,
       input,
     );
   }
@@ -134,14 +158,15 @@ export class CircleBrush implements Brush {
    *
    * @param raster - Sparse raster that receives the stamp.
    * @param position - Continuous world-space center of the stamp.
-   * @param input - Optional input context for this actual stamp.
+   * @param input - Optional dynamics and random context; absent random identity
+   * uses the brush seed and stamp index `0` without invocation state.
    * @throws {ReverieTypeError} A position component is not a number.
    * @throws {ReverieRangeError} A position is not finite or the resulting
    * pixel bounds exceed the safe integer range, or used dynamics input or curve
-   * output is invalid.
+   * output, random identity, or jitter arithmetic is invalid.
    */
   stamp(raster: Raster, position: WorldPoint, input?: StampCommand): void {
-    if (!this.hasPaintDynamics) {
+    if (!this.hasPaintVariation) {
       this.paintCircle(
         raster,
         position,
@@ -152,13 +177,11 @@ export class CircleBrush implements Brush {
       return;
     }
 
-    const resolved = resolveBrushDynamics(
-      this.size,
-      this.opacity,
-      this.rotation,
-      this.dynamics,
-      input,
-    );
+    const resolved = this.resolveParameters(input);
+
+    if (resolved.size <= 0 || resolved.opacity <= 0) {
+      return;
+    }
     const effectiveAlpha = Math.round(this.internalColor.a * resolved.opacity);
 
     this.paintCircle(

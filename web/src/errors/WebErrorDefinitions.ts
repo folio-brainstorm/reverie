@@ -90,4 +90,9 @@ export const WebErrorDefinitions = {
     code: "EC_WEB_0019",
     template: "Unsupported export format `$received`.",
   },
+  INVALID_STROKE_SEQUENCE: {
+    code: "EC_WEB_0020",
+    template:
+      "CanvasDrawingSession strokeSequence must be an integer between 0 and 4294967295.",
+  },
 } as const satisfies Record<string, ErrorDefinition>;

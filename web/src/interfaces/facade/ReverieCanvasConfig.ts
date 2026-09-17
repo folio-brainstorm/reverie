@@ -17,6 +17,9 @@ export interface ReverieCanvasConfig {
   /** Initial Brush; defaults to an opaque one-pixel black CircleBrush. */
   readonly brush?: Brush;
 
+  /** Initial uint32 stroke sequence for restoring the drawing session. Defaults to `0`. */
+  readonly strokeSequence?: number;
+
   /** Soft scheduler work budget per animation frame, in milliseconds. */
   readonly frameBudget?: number;
 

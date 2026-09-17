@@ -145,6 +145,25 @@ export const ErrorDefinitions = {
       code: "EC_BRUSH_0018",
       template: "Brush rotation must be a finite number of radians.",
     },
+    INVALID_JITTER_OBJECT: {
+      code: "EC_BRUSH_0019",
+      template: "Brush jitter must be a non-array object.",
+    },
+    INVALID_JITTER_AMPLITUDE: {
+      code: "EC_BRUSH_0020",
+      template: "Brush `$param` must be a non-negative finite number.",
+    },
+    INVALID_JITTER_PARAMETERS: {
+      code: "EC_BRUSH_0021",
+      template:
+        "Brush jitter arithmetic overflowed; reduce brush parameters or jitter amplitudes.",
+    },
+  },
+  RANDOM: {
+    INVALID_UINT32: {
+      code: "EC_RANDOM_0001",
+      template: "Random `$param` must be an integer between 0 and 4294967295.",
+    },
   },
   WORLD: {
     INVALID_BOUNDS: {
@@ -216,6 +235,11 @@ export const ErrorDefinitions = {
       code: "EC_STROKE_0011",
       template:
         "Stroke sample `$param` must be a finite number between -90 and 90 degrees, but received `$received`.",
+    },
+    STAMP_INDEX_EXHAUSTED: {
+      code: "EC_STROKE_0012",
+      template:
+        "Stroke stamp index space is exhausted after index 4294967295; start a new stroke.",
     },
   },
   TILE: {

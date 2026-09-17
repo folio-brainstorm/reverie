@@ -10,4 +10,10 @@ export interface StrokeConfig {
 
   /** Fixed processed-path interval in world units; defaults to `1`. */
   resampleDistance?: number;
+
+  /** Caller-owned uint32 sequence for seed derivation; ignored when restoring a seed. Defaults to `0`. */
+  strokeSequence?: number;
+
+  /** Restored final uint32 seed; overrides derivation from brush seed and sequence. */
+  strokeSeed?: number;
 }

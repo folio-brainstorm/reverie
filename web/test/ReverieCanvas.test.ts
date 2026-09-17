@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { CircleBrush, Stroke, World } from "@reverie/core";
+import { CircleBrush, deriveStrokeSeed, Stroke, World } from "@reverie/core";
 import {
   ExportRenderer,
   JPEGEncoder,
@@ -9,6 +9,7 @@ import {
 } from "@reverie/exporter";
 
 import {
+  CanvasDrawingSession,
   ReverieCanvas,
   WebError,
   WebErrorDefinitions,
@@ -357,6 +358,163 @@ describe("CanvasDrawingSession pointer input mapping", () => {
       expect.objectContaining({ pressure: 0.9, tiltX: 20, timestamp: 3 }),
     );
     reverie.dispose();
+  });
+});
+
+describe("CanvasDrawingSession deterministic stroke seeds", () => {
+  it("derives different seeds for successive strokes before scheduled execution", () => {
+    const runtime = createCanvasRuntime();
+    const brush = new CircleBrush({
+      size: 4,
+      seed: 0xffffffff,
+      color: { r: 0, g: 255, b: 0, a: 255 },
+      jitter: { size: 0.2 },
+    });
+    const paint = vi.spyOn(brush, "stamp");
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas, brush });
+    for (let index = 0; index < 2; index += 1) {
+      const pointer = {
+        button: 0,
+        pointerId: index + 1,
+        clientX: 4.5,
+        clientY: 4.5,
+        timeStamp: 1,
+      };
+      runtime.canvas.dispatchPointer("pointerdown", pointer);
+      runtime.canvas.dispatchPointer("pointerup", pointer);
+    }
+    expect(reverie.session.nextStrokeSequence).toBe(2);
+    expect(paint).not.toHaveBeenCalled();
+    runtime.runNextFrame();
+    expect(paint.mock.calls.map((call) => call[2]?.strokeSeed)).toEqual([
+      deriveStrokeSeed(brush.seed, 0),
+      deriveStrokeSeed(brush.seed, 1),
+    ]);
+    expect(paint.mock.calls.map((call) => call[2]?.stampIndex)).toEqual([0, 0]);
+    reverie.dispose();
+  });
+
+  it.each([
+    [0, 1],
+    [7, 8],
+    [0x80000000, 0x80000001],
+    [0xffffffff, 0],
+  ])(
+    "restores facade sequence %s and advances it to %s",
+    (strokeSequence, nextSequence) => {
+      const runtime = createCanvasRuntime();
+      const config: ReverieCanvasConfig = {
+        canvas: runtime.canvas,
+        strokeSequence,
+      };
+      const reverie = new ReverieCanvas(config);
+      const paint = vi.spyOn(reverie.brush, "stamp");
+      expect(reverie.session.nextStrokeSequence).toBe(strokeSequence);
+      const pointer = {
+        button: 0,
+        pointerId: 1,
+        clientX: 0.5,
+        clientY: 0.5,
+        timeStamp: 1,
+      };
+      runtime.canvas.dispatchPointer("pointerdown", pointer);
+      expect(reverie.session.nextStrokeSequence).toBe(nextSequence);
+      runtime.canvas.dispatchPointer("pointerup", pointer);
+      runtime.runNextFrame();
+      expect(paint.mock.calls[0]?.[2]?.strokeSeed).toBe(
+        deriveStrokeSeed(0, strokeSequence),
+      );
+      reverie.dispose();
+    },
+  );
+
+  it("does not consume a sequence for ignored pointer-down events", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+    const pointer = {
+      button: 0,
+      pointerId: 1,
+      clientX: 0.5,
+      clientY: 0.5,
+      timeStamp: 1,
+    };
+    runtime.canvas.dispatchPointer("pointerdown", { ...pointer, button: 1 });
+    expect(reverie.session.nextStrokeSequence).toBe(0);
+    runtime.canvas.dispatchPointer("pointerdown", pointer);
+    runtime.canvas.dispatchPointer("pointerdown", { ...pointer, pointerId: 2 });
+    expect(reverie.session.nextStrokeSequence).toBe(1);
+    reverie.dispose();
+  });
+
+  it.each([-1, 0.5, 0x100000000, Number.NaN, Infinity, -Infinity])(
+    "rejects invalid initial stroke sequence %s",
+    (strokeSequence) => {
+      const runtime = createCanvasRuntime();
+      const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+      expect(
+        () =>
+          new CanvasDrawingSession({
+            canvas: runtime.canvas,
+            raster: reverie.activeLayer.raster,
+            camera: reverie.camera,
+            renderer: reverie.renderer,
+            brush: reverie.brush,
+            strokeSequence,
+          }),
+      ).toThrow(`[${WebErrorDefinitions.INVALID_STROKE_SEQUENCE.code}]`);
+      const config: ReverieCanvasConfig = {
+        canvas: runtime.canvas,
+        strokeSequence,
+      };
+      expect(() => new ReverieCanvas(config)).toThrow(
+        `[${WebErrorDefinitions.INVALID_STROKE_SEQUENCE.code}]`,
+      );
+      reverie.dispose();
+    },
+  );
+
+  it("keeps jitter pixels identical for equivalent individually delivered and coalesced input", () => {
+    const paint = (shouldCoalesce: boolean): Uint8ClampedArray => {
+      const runtime = createCanvasRuntime();
+      const reverie = new ReverieCanvas({
+        canvas: runtime.canvas,
+        brush: new CircleBrush({
+          size: 4,
+          opacity: 0.6,
+          seed: 0x80000000,
+          color: { r: 0, g: 255, b: 0, a: 255 },
+          jitter: { size: 0.2, opacity: 0.2, rotation: 0.2 },
+        }),
+      });
+      const first = {
+        button: 0,
+        pointerId: 1,
+        clientX: 2.5,
+        clientY: 4.5,
+        timeStamp: 1,
+      };
+      const middle = { ...first, clientX: 6.5, timeStamp: 5 };
+      const last = { ...first, clientX: 10.5, timeStamp: 9 };
+      runtime.canvas.dispatchPointer("pointerdown", first);
+      if (shouldCoalesce) {
+        runtime.canvas.dispatchPointer("pointermove", last, [middle, last]);
+      } else {
+        runtime.runNextFrame();
+        runtime.canvas.dispatchPointer("pointermove", middle);
+        runtime.runNextFrame();
+        runtime.canvas.dispatchPointer("pointermove", last);
+      }
+      runtime.canvas.dispatchPointer("pointerup", last);
+      runtime.runNextFrame();
+      const pixels = new ExportRenderer({
+        raster: reverie.activeLayer.raster,
+      }).render({ x: 0, y: 0, width: 16, height: 16 }).pixels;
+      reverie.dispose();
+      return pixels;
+    };
+    const separate = paint(false);
+    expect(separate.some((byte) => byte > 0)).toBe(true);
+    expect(paint(true)).toEqual(separate);
   });
 });
 

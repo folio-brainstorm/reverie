@@ -182,6 +182,76 @@ const dynamicBrush = new CircleBrush({
 曲线。输入和输出均为 `[0, 1]`。Tilt 旋转以弧度解析；圆形 Brush 的像素结果不受
 旋转影响。未配置 dynamics 时仍使用原有固定参数快路径。
 
+## Deterministic Brush Jitter
+
+`CircleBrush` 与 `ImageBrush` 均支持可选的 `seed` 和 `jitter`。Jitter 在 Dynamics
+之后逐 Stamp 应用，不修改基础参数、原始输入或 Stamp 间距：
+
+```ts
+import { CircleBrush, Stroke } from "@reverie/core";
+
+const jitterBrush = new CircleBrush({
+  size: 20,
+  color: { r: 0, g: 255, b: 0, a: 255 },
+  opacity: 0.8,
+  seed: 123,
+  jitter: {
+    size: 0.2,
+    opacity: 0.2,
+    rotation: Math.PI / 12,
+  },
+});
+const stroke = new Stroke({ brush: jitterBrush, strokeSequence: 7 });
+const replaySeed = stroke.strokeSeed;
+const replay = new Stroke({ brush: jitterBrush, strokeSeed: replaySeed });
+```
+
+`size` / `opacity` 是对称乘数的幅度：`0.2` 对应 `[0.8, 1.2]`。比例允许大于
+`1`，最终尺寸截到非负数，透明度截到 `[0, 1]`；零尺寸或零透明度不绘制。
+`rotation` 是弧度表示的最大加性偏移；圆形 Brush 的旋转没有可见效果。三个
+幅度都必须是非负有限数，省略或 `0` 表示关闭；有限配置的计算若溢出则抛错。
+
+Seed、笔画序号、Stamp 编号和 channel ID 均使用 `[0, 4294967295]` 内的整数；
+负数、小数、越界和非有限值会被拒绝。所有种子混合、乘法、移位及哈希步骤
+显式保持 uint32 语义，乘法采用 `Math.imul`，中间结果按 `2^32` 取模。
+Brush seed 默认 `0`；Core 不使用全局计数器，独立调用方负责递增并记录
+`strokeSequence`（默认 `0`）。显式 `strokeSeed` 是最终种子，会覆盖派生过程，
+包括显式值 `0`。恢复最终种子时，不使用也不校验 Brush seed 和笔画序号。
+
+Stroke 为每条实际生成的命令附带最终 `strokeSeed` 和从 `0` 开始的 `stampIndex`。
+编号不随队列消费或调度分帧改变；超过 uint32 编号空间会抛出
+`ErrorCodes.STROKE.STAMP_INDEX_EXHAUSTED`，而非重复编号。
+`@reverie/web` 的 `CanvasDrawingSession` 自动递增笔画序号，并在 uint32 上限后
+回到 `0`；保存时可读取 `session.nextStrokeSequence`，恢复时传入
+`ReverieCanvasConfig` 或 `CanvasDrawingSessionConfig` 的 `strokeSequence`。
+固定 seed 空间在完整循环后会重用序列。
+
+```ts
+import { ReverieCanvas } from "@reverie/web";
+
+const savedSequence = reverie.session.nextStrokeSequence;
+reverie.dispose();
+const restoredCanvas = new ReverieCanvas({
+  canvas,
+  brush: jitterBrush,
+  strokeSequence: savedSequence,
+});
+```
+
+直接 `brush.stamp(raster, position)` 或旧命令缺少随机上下文时，使用 Brush seed
+和编号 `0`，所以不会因调用次数产生隐式变化。也可在命令中独立提供
+`strokeSeed` 与 `stampIndex`。Jitter 关闭时，旧命令和绘制行为保持兼容。
+`brush.resolveParameters()` 同样允许省略输入，使用中性 Dynamics 默认值和
+上述固定随机上下文；`stamp` 复用这个参数解析入口。
+
+随机基础设施可通过 `deriveStrokeSeed(brushSeed, strokeSequence)`、
+`sampleStampRandom(strokeSeed, stampIndex, channel)` 和冻结的
+`STAMP_RANDOM_CHANNELS` 使用。固定 channel ID 为 size `1`、rotation `2`、
+opacity `3`；新功能应使用新的稳定 ID。Sample 范围为 `[0, 1)`，
+`sample * 2 - 1` 得到 `[-1, 1)`。按 seed、编号、channel 独立寻址，无可变 RNG
+流，也不依赖 `Math.random()`、Web API、渲染时机或 frame budget。
+Channel 会先进行 uint32 哈希再与 seed 混合，使两个参数具有不同角色。
+
 ## Canvas Renderer
 
 `CanvasRenderer` 将稀疏 Raster 按照 Camera 当前视图绘制到 Canvas backing

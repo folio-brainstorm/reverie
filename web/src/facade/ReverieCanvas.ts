@@ -50,7 +50,8 @@ export class ReverieCanvas {
    * a fixed World at origin `(0, 0)`.
    *
    * @param config - Canvas, optional dimensions, models, and runtime callbacks.
-   * @throws {WebRangeError} Dimensions are incomplete or invalid.
+   * @throws {WebRangeError} Dimensions are incomplete/invalid or the initial
+   * stroke sequence is outside the uint32 range.
    * @throws Construction and attachment errors from owned dependencies when no
    * `onError` callback handles an attachment failure.
    */
@@ -74,6 +75,9 @@ export class ReverieCanvas {
       camera: this.camera,
       renderer: this.renderer,
       brush: config.brush ?? ReverieCanvas.createDefaultBrush(),
+      ...(config.strokeSequence === undefined
+        ? {}
+        : { strokeSequence: config.strokeSequence }),
       ...(config.frameBudget === undefined
         ? {}
         : { frameBudget: config.frameBudget }),

@@ -2,6 +2,7 @@ import type { BrushImage } from "../../core/brush/BrushImage.js";
 import type { RGBAColor } from "../color/Colors.js";
 import type { BrushAnchor } from "./BrushAnchor.js";
 import type { BrushDynamics } from "./dynamics/BrushDynamics.js";
+import type { BrushJitter } from "./jitter/BrushJitter.js";
 
 /** Configuration for an alpha-mask image brush. */
 export interface ImageBrushConfig {
@@ -28,4 +29,10 @@ export interface ImageBrushConfig {
 
   /** Optional per-stamp size, opacity, and rotation mappings. */
   readonly dynamics?: BrushDynamics;
+
+  /** Base unsigned 32-bit random seed. Defaults to `0`. */
+  readonly seed?: number;
+
+  /** Optional per-stamp variation applied after dynamics; disabled by default. */
+  readonly jitter?: BrushJitter;
 }

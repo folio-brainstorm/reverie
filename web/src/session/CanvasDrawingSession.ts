@@ -41,6 +41,8 @@ export class CanvasDrawingSession {
   private readonly onStrokeEnd: (() => void) | undefined;
   private activeStroke: Stroke | null = null;
   private activePointerId: number | null = null;
+  /** Caller-visible uint32 identity for the next stroke; independent of frames. */
+  private strokeSequence = 0;
   private resizeObserver: ResizeObserver | null = null;
   private runtimeWindow: Window | null = null;
   private isAttached = false;
@@ -85,19 +87,35 @@ export class CanvasDrawingSession {
     return this.activeStroke !== null;
   }
 
+  /** Returns the uint32 sequence to record when saving this drawing session. */
+  get nextStrokeSequence(): number {
+    return this.strokeSequence;
+  }
+
   /**
    * Creates an unattached Web drawing Session.
    *
    * @param config - Canvas, models, renderer, brush, and optional runtime hooks.
    * @throws {WebError} The optional layer does not own the supplied Raster.
    * @throws {WebTypeError} The maximum DPR is not a number.
-   * @throws {WebRangeError} The maximum DPR is not positive and finite.
+   * @throws {WebRangeError} Maximum DPR or the initial uint32 stroke sequence is invalid.
    */
   constructor(config: CanvasDrawingSessionConfig) {
     const maxDevicePixelRatio =
       config.maxDevicePixelRatio ?? DEFAULT_MAX_DEVICE_PIXEL_RATIO;
 
     CanvasDrawingSession.assertValidMaxDevicePixelRatio(maxDevicePixelRatio);
+
+    const strokeSequence =
+      config.strokeSequence === undefined ? 0 : config.strokeSequence;
+    if (
+      !Number.isInteger(strokeSequence) ||
+      strokeSequence < 0 ||
+      strokeSequence > 0xffffffff
+    ) {
+      throw WebRangeError.from(WebErrorDefinitions.INVALID_STROKE_SEQUENCE);
+    }
+    this.strokeSequence = strokeSequence >>> 0;
 
     if (config.layer !== undefined && config.layer.raster !== config.raster) {
       throw WebError.from(WebErrorDefinitions.SESSION_LAYER_RASTER_MISMATCH);
@@ -234,7 +252,11 @@ export class CanvasDrawingSession {
     event.preventDefault();
     this.canvas.setPointerCapture(event.pointerId);
     this.activePointerId = event.pointerId;
-    this.activeStroke = new Stroke({ brush: this.currentBrush });
+    this.activeStroke = new Stroke({
+      brush: this.currentBrush,
+      strokeSequence: this.strokeSequence,
+    });
+    this.strokeSequence = (this.strokeSequence + 1) >>> 0;
     this.onStrokeStart?.();
     this.addPointerSamples(event);
   }

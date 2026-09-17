@@ -11,6 +11,9 @@ export {
 export { Rasterizers } from "./src/core/rasterizer/index.js";
 export { Stroke } from "./src/core/stroke/index.js";
 export { blendSourceOver, paintPixel } from "./src/core/paint/index.js";
+export { deriveStrokeSeed } from "./src/utils/random/DeriveStrokeSeed.js";
+export { sampleStampRandom } from "./src/utils/random/SampleStampRandom.js";
+export { STAMP_RANDOM_CHANNELS } from "./src/config/random/StampRandomChannels.js";
 // #if DEBUG
 export { Tile } from "./src/core/tile/index.js";
 // #endif
@@ -54,6 +57,7 @@ export type { ImageBrushConfig } from "./src/interfaces/brush/ImageBrushConfig.j
 export type { RGBABrushImageSource } from "./src/interfaces/brush/RGBABrushImageSource.js";
 export type { ResolvedBrushParameters } from "./src/interfaces/brush/ResolvedBrushParameters.js";
 export type { BrushDynamics } from "./src/interfaces/brush/dynamics/BrushDynamics.js";
+export type { BrushJitter } from "./src/interfaces/brush/jitter/BrushJitter.js";
 export type { BrushParameterDynamics } from "./src/interfaces/brush/dynamics/BrushParameterDynamics.js";
 export type { DirectionDynamics } from "./src/interfaces/brush/dynamics/DirectionDynamics.js";
 export type { DynamicsCurve } from "./src/interfaces/brush/dynamics/DynamicsCurve.js";

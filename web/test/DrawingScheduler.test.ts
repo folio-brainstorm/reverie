@@ -1,7 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { Raster } from "@reverie/core";
-import type { Brush } from "@reverie/core";
+import {
+  BrushImage,
+  CircleBrush,
+  ImageBrush,
+  Raster,
+  Stroke,
+} from "@reverie/core";
+import type { Brush, StampCommand } from "@reverie/core";
+import { ExportRenderer } from "@reverie/exporter";
 
 import {
   DrawingScheduler,
@@ -117,6 +124,8 @@ describe("DrawingScheduler frame execution", () => {
       tiltY: 30,
       velocity: 0.5,
       direction: Math.PI / 4,
+      strokeSeed: 0xffffffff,
+      stampIndex: 7,
     };
     const stampBrush = vi.fn<Brush["stamp"]>();
     const brush: Brush = { size: 1, spacing: 1, stamp: stampBrush };
@@ -328,6 +337,89 @@ describe("DrawingScheduler lifecycle and failures", () => {
       `[${WebErrorDefinitions.SCHEDULER_FAILED.code}]`,
     );
   });
+});
+
+describe("DrawingScheduler deterministic jitter", () => {
+  it.each(["CircleBrush", "ImageBrush"])(
+    "keeps %s pixels identical across frame budgets, clocks, and render delays",
+    (brushName) => {
+      const config = {
+        size: 6,
+        color: { r: 84, g: 153, b: 255, a: 255 },
+        opacity: 0.6,
+        seed: 0xffffffff,
+        jitter: { size: 0.3, opacity: 0.3, rotation: 0.5 },
+      };
+      const brush =
+        brushName === "CircleBrush"
+          ? new CircleBrush(config)
+          : new ImageBrush({
+              ...config,
+              image: new BrushImage({
+                width: 2,
+                height: 1,
+                alpha: new Uint8Array([255, 96]),
+              }),
+              dynamics: { rotation: { direction: {} } },
+            });
+      const stroke = new Stroke({ brush, strokeSequence: 17 });
+      stroke.addSample({ position: { x: 0.5, y: 0.5 }, timestamp: 0 });
+      stroke.addSample({ position: { x: 20.5, y: 0.5 }, timestamp: 20 });
+      stroke.addSample({ position: { x: 20.5, y: 12.5 }, timestamp: 32 });
+      stroke.end();
+      const commands: StampCommand[] = [];
+      for (
+        let stamp = stroke.nextStamp();
+        stamp !== undefined;
+        stamp = stroke.nextStamp()
+      ) {
+        commands.push(stamp);
+      }
+
+      const paint = (
+        frameBudget: number,
+        frameDelay: number,
+      ): Uint8ClampedArray => {
+        const driver = new ManualFrameDriver();
+        const raster = new Raster({ tileSize: 16 });
+        const timedBrush: Brush = {
+          size: brush.size,
+          spacing: brush.spacing,
+          seed: brush.seed,
+          stamp(target, position, input): void {
+            brush.stamp(target, position, input);
+            driver.advanceTime(2);
+          },
+        };
+        const scheduler = new DrawingScheduler({
+          frameBudget,
+          frameDriver: driver,
+          onRender: () => driver.advanceTime(frameDelay),
+        });
+        for (const stamp of commands) {
+          scheduler.enqueue({ brush: timedBrush, raster, stamp });
+        }
+        while (!scheduler.idle) {
+          driver.advanceTime(frameDelay);
+          driver.runNextFrame();
+        }
+        expect(driver.requestCount).toBe(
+          frameBudget === 1 ? commands.length : 1,
+        );
+        scheduler.dispose();
+        return new ExportRenderer({ raster }).render({
+          x: -8,
+          y: -8,
+          width: 40,
+          height: 32,
+        }).pixels;
+      };
+
+      const buffered = paint(100, 0);
+      expect(buffered.some((byte) => byte > 0)).toBe(true);
+      expect(paint(1, 1000)).toEqual(buffered);
+    },
+  );
 });
 
 describe("WebFrameDriver", () => {

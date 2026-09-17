@@ -3,6 +3,7 @@ import type { BrushAnchor } from "../../interfaces/brush/BrushAnchor.js";
 import type { ImageBrushConfig } from "../../interfaces/brush/ImageBrushConfig.js";
 import type { ResolvedBrushParameters } from "../../interfaces/brush/ResolvedBrushParameters.js";
 import type { NormalizedBrushDynamics } from "../../interfaces/brush/dynamics/NormalizedBrushDynamics.js";
+import type { NormalizedBrushJitter } from "../../interfaces/brush/jitter/NormalizedBrushJitter.js";
 import type { WorldPoint } from "../../interfaces/camera/WorldPoint.js";
 import type { RGBAColor } from "../../interfaces/color/Colors.js";
 import type { StampCommand } from "../../interfaces/stroke/StampCommand.js";
@@ -14,9 +15,12 @@ import { ReverieRangeError } from "../../utils/errors/ReverieErrors.js";
 import { isValidRGBAColor } from "../../utils/number/color/IsValidRGBAColor.js";
 import { isPositiveFiniteNumber } from "../../utils/number/math/IsPositiveFiniteNumber.js";
 import { isUnitInterval } from "../../utils/number/math/IsUnitInterval.js";
+import { assertUint32 } from "../../utils/number/math/AssertUint32.js";
 import { BrushImage } from "./BrushImage.js";
 import { normalizeBrushDynamics } from "./NormalizeBrushDynamics.js";
+import { normalizeBrushJitter } from "./NormalizeBrushJitter.js";
 import { resolveBrushDynamics } from "./ResolveBrushDynamics.js";
+import { resolveBrushJitter } from "./ResolveBrushJitter.js";
 
 const DEFAULT_BRUSH_SPACING = 0.25;
 const DEFAULT_ANCHOR: BrushAnchor = Object.freeze({ x: 0.5, y: 0.5 });
@@ -38,6 +42,9 @@ export class ImageBrush implements Brush {
   /** Static rotation offset in radians. */
   readonly rotation: number;
 
+  /** Stable uint32 base seed for stroke derivation and direct stamps. */
+  readonly seed: number;
+
   /** Internally owned paint color, independent from source image RGB. */
   private readonly internalColor: RGBAColor;
 
@@ -46,6 +53,9 @@ export class ImageBrush implements Brush {
 
   /** Validated optional per-stamp mappings shared with CircleBrush. */
   private readonly dynamics: NormalizedBrushDynamics | null;
+
+  /** Validated optional variation applied after dynamics. */
+  private readonly jitter: NormalizedBrushJitter | null;
 
   /** Returns a copy of the straight-alpha RGBA8 paint color. */
   get color(): RGBAColor {
@@ -60,9 +70,9 @@ export class ImageBrush implements Brush {
   /**
    * Creates an image brush with validated immutable paint and transform state.
    *
-   * @param config - Source mask, base parameters, anchor, and optional dynamics.
+   * @param config - Source mask, base parameters, anchor, dynamics, seed, and jitter.
    * @throws {ReverieRangeError} The image, size, color, opacity, spacing,
-   * anchor, rotation, or dynamics configuration is invalid.
+   * anchor, rotation, dynamics, uint32 seed, or jitter configuration is invalid.
    */
   constructor(config: ImageBrushConfig) {
     const {
@@ -73,6 +83,7 @@ export class ImageBrush implements Brush {
       spacing = DEFAULT_BRUSH_SPACING,
       anchor = DEFAULT_ANCHOR,
       rotation = 0,
+      seed = 0,
     } = config;
 
     if (!(image instanceof BrushImage)) {
@@ -103,29 +114,40 @@ export class ImageBrush implements Brush {
       throw ReverieRangeError.from(ErrorDefinitions.BRUSH.INVALID_ROTATION);
     }
 
+    assertUint32(seed, "brush.seed");
+
     this.image = image;
     this.size = size;
     this.opacity = opacity;
     this.spacing = spacing;
     this.rotation = rotation;
+    this.seed = seed >>> 0;
     this.internalColor = { ...color };
     this.internalAnchor = { ...anchor };
     this.dynamics = normalizeBrushDynamics(config.dynamics);
+    this.jitter = normalizeBrushJitter(config.jitter);
   }
 
   /**
-   * Resolves this brush's base values through the shared dynamics layer.
+   * Resolves dynamics, then deterministic jitter, for one actual stamp.
    *
-   * @param input - Stamp input carrying pressure, velocity, direction, and tilt.
+   * @param input - Optional dynamics input with uint32 seed and stamp index;
+   * omitted input uses neutral dynamics defaults, the brush seed, and index `0`.
    * @returns Independent size, opacity, and radian rotation values.
-   * @throws {ReverieRangeError} Used input or a custom curve result is invalid.
+   * @throws {ReverieRangeError} Used input, identity, curve output, or jitter result
+   * is invalid.
    */
-  resolveParameters(input: StampCommand): ResolvedBrushParameters {
-    return resolveBrushDynamics(
-      this.size,
-      this.opacity,
-      this.rotation,
-      this.dynamics,
+  resolveParameters(input?: StampCommand): ResolvedBrushParameters {
+    return resolveBrushJitter(
+      resolveBrushDynamics(
+        this.size,
+        this.opacity,
+        this.rotation,
+        this.dynamics,
+        input,
+      ),
+      this.jitter,
+      this.seed,
       input,
     );
   }
@@ -135,9 +157,10 @@ export class ImageBrush implements Brush {
    *
    * @param raster - Sparse raster receiving the transformed stamp.
    * @param position - World-space position occupied by the configured anchor.
-   * @param input - Optional input context for per-stamp dynamics.
+   * @param input - Optional dynamics and random context; absent random identity
+   * uses the brush seed and stamp index `0` without invocation state.
    * @throws {ReverieRangeError} Used dynamics input, transformed position, or
-   * destination bounds are invalid.
+   * destination bounds, random identity, or jitter arithmetic are invalid.
    */
   stamp(raster: Raster, position: WorldPoint, input?: StampCommand): void {
     if (
@@ -148,13 +171,7 @@ export class ImageBrush implements Brush {
       return;
     }
 
-    const resolved = resolveBrushDynamics(
-      this.size,
-      this.opacity,
-      this.rotation,
-      this.dynamics,
-      input,
-    );
+    const resolved = this.resolveParameters(input);
 
     if (resolved.size <= 0 || resolved.opacity <= 0) {
       return;
