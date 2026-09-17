@@ -35,6 +35,9 @@ export class ImageBrush implements Brush {
   /** Distance between stamps expressed as a proportion of {@link size}. */
   readonly spacing: number;
 
+  /** Static rotation offset in radians. */
+  readonly rotation: number;
+
   /** Internally owned paint color, independent from source image RGB. */
   private readonly internalColor: RGBAColor;
 
@@ -59,7 +62,7 @@ export class ImageBrush implements Brush {
    *
    * @param config - Source mask, base parameters, anchor, and optional dynamics.
    * @throws {ReverieRangeError} The image, size, color, opacity, spacing,
-   * anchor, or dynamics configuration is invalid.
+   * anchor, rotation, or dynamics configuration is invalid.
    */
   constructor(config: ImageBrushConfig) {
     const {
@@ -69,6 +72,7 @@ export class ImageBrush implements Brush {
       opacity = 1,
       spacing = DEFAULT_BRUSH_SPACING,
       anchor = DEFAULT_ANCHOR,
+      rotation = 0,
     } = config;
 
     if (!(image instanceof BrushImage)) {
@@ -95,10 +99,15 @@ export class ImageBrush implements Brush {
       throw ReverieRangeError.from(ErrorDefinitions.BRUSH.INVALID_IMAGE_ANCHOR);
     }
 
+    if (typeof rotation !== "number" || !Number.isFinite(rotation)) {
+      throw ReverieRangeError.from(ErrorDefinitions.BRUSH.INVALID_ROTATION);
+    }
+
     this.image = image;
     this.size = size;
     this.opacity = opacity;
     this.spacing = spacing;
+    this.rotation = rotation;
     this.internalColor = { ...color };
     this.internalAnchor = { ...anchor };
     this.dynamics = normalizeBrushDynamics(config.dynamics);
@@ -107,12 +116,18 @@ export class ImageBrush implements Brush {
   /**
    * Resolves this brush's base values through the shared dynamics layer.
    *
-   * @param input - Stamp input carrying pressure, velocity, and tilt.
+   * @param input - Stamp input carrying pressure, velocity, direction, and tilt.
    * @returns Independent size, opacity, and radian rotation values.
    * @throws {ReverieRangeError} Used input or a custom curve result is invalid.
    */
   resolveParameters(input: StampCommand): ResolvedBrushParameters {
-    return resolveBrushDynamics(this.size, this.opacity, this.dynamics, input);
+    return resolveBrushDynamics(
+      this.size,
+      this.opacity,
+      this.rotation,
+      this.dynamics,
+      input,
+    );
   }
 
   /**
@@ -136,6 +151,7 @@ export class ImageBrush implements Brush {
     const resolved = resolveBrushDynamics(
       this.size,
       this.opacity,
+      this.rotation,
       this.dynamics,
       input,
     );

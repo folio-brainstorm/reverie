@@ -23,6 +23,9 @@ export interface ImageBrushConfig {
   /** Normalized image point placed at the stamp position. Defaults to center. */
   readonly anchor?: BrushAnchor;
 
+  /** Static rotation offset in radians. Defaults to `0`. */
+  readonly rotation?: number;
+
   /** Optional per-stamp size, opacity, and rotation mappings. */
   readonly dynamics?: BrushDynamics;
 }

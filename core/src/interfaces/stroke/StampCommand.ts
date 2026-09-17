@@ -3,9 +3,9 @@ import type { WorldPoint } from "../camera/WorldPoint.js";
 /**
  * Describes one brush stamp waiting to be executed by an external consumer.
  *
- * {@link Stroke} always resolves and populates every input attribute. They stay
- * optional so commands assembled by hand, such as in tests or custom replay
- * code, remain valid without supplying dynamics they do not model.
+ * {@link Stroke} resolves pressure, tilt, and velocity for every command, then
+ * adds direction only when a preceding stamp provides real displacement. All
+ * fields stay optional so hand-authored or legacy replay commands remain valid.
  */
 export interface StampCommand {
   /** Stable world-space snapshot at which the current stroke brush should stamp. */
@@ -28,4 +28,10 @@ export interface StampCommand {
    * The first stamp and a non-positive time delta resolve to `0`.
    */
   readonly velocity?: number;
+
+  /**
+   * World-space angle from the preceding actual stamp in radians.
+   * The first stamp and zero-distance progression leave it unavailable.
+   */
+  readonly direction?: number;
 }

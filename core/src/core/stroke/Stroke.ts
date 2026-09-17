@@ -17,6 +17,7 @@ import {
 import { isUnitInterval } from "../../utils/number/math/IsUnitInterval.js";
 import { advanceStampPlacement } from "./AdvanceStampPlacement.js";
 import { copyStrokeSample } from "./CopyStrokeSample.js";
+import { deriveStampDirection } from "./DeriveStampDirection.js";
 import { deriveStampVelocity } from "./DeriveStampVelocity.js";
 import { normalizeStrokeSample } from "./NormalizeStrokeSample.js";
 import { smoothStrokeSample } from "./SmoothStrokeSample.js";
@@ -77,7 +78,7 @@ export class Stroke {
   /** Path length accumulated after the most recent brush stamp. */
   private distanceSinceLastStamp = 0;
 
-  /** Most recent actual stamp used to derive stroke-local velocity. */
+  /** Most recent actual stamp used to derive stroke-local motion. */
   private lastStampSample: StrokeSample | null = null;
 
   /** Whether this stroke refuses further samples. */
@@ -247,6 +248,7 @@ export class Stroke {
   /** Adds an owned resolved-input snapshot to the tail of the pending FIFO queue. */
   private enqueueStamp(sample: StrokeSample): void {
     const velocity = deriveStampVelocity(this.lastStampSample, sample);
+    const direction = deriveStampDirection(this.lastStampSample, sample);
 
     this.pendingStamps.push({
       position: { ...sample.position },
@@ -255,6 +257,7 @@ export class Stroke {
       tiltX: sample.tiltX,
       tiltY: sample.tiltY,
       velocity,
+      ...(direction === undefined ? {} : { direction }),
     });
     this.lastStampSample = sample;
   }

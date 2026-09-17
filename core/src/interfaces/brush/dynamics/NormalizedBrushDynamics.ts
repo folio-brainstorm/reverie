@@ -21,5 +21,6 @@ export interface NormalizedBrushParameterDynamics {
 export interface NormalizedBrushDynamics {
   readonly size: NormalizedBrushParameterDynamics;
   readonly opacity: NormalizedBrushParameterDynamics;
+  readonly hasDirectionRotation: boolean;
   readonly hasTiltRotation: boolean;
 }

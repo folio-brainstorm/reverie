@@ -91,6 +91,10 @@ const imageBrush = new ImageBrush({
   opacity: 0.8,
   spacing: 0.2,
   anchor: { x: 0.5, y: 0.5 },
+  rotation: -Math.PI / 2,
+  dynamics: {
+    rotation: { direction: {} },
+  },
 });
 
 imageBrush.stamp(raster, { x: 50.5, y: 50.25 });
@@ -141,21 +145,26 @@ stroke.addSample({
 位于 `[-90, 90]` 内的有限数。省略时分别取默认值 `1`、`0`、`0`，因此
 `{ position, timestamp }` 形式的旧调用保持完全兼容。每条命令还包含相邻实际
 Stamp 之间的速度，单位为 World Unit/ms；首条命令或非正时间差使用 `0`。
+从第二个实际 Stamp 开始，命令还会包含由相邻 Stamp World Position 通过
+`atan2(dy, dx)` 推导的弧度方向；首个 Stamp 没有真实方向，零距离也不会伪造
+方向值。
 浏览器输入由 `@reverie/web` 归一化：只有 `pointerType === "pen"` 的压力会被
 采信，鼠标与触摸一律取 `1`。
 
 ## Brush Dynamics
 
 `CircleBrush` 与 `ImageBrush` 都可以独立配置 Pressure → Size、Pressure →
-Opacity、Velocity → Size、Velocity → Opacity 和 Tilt → Rotation。配置项存在即
-启用，`min` 表示相对基础值的最小比例；Pressure 和 Velocity 同时影响同一参数时，
-其归一化因子相乘：
+Opacity、Velocity → Size、Velocity → Opacity、Direction → Rotation 和 Tilt →
+Rotation。顶层 `rotation` 是静态弧度偏移；Direction 与 Tilt 配置项存在即启用，
+最终角度按 Base + Direction + Tilt 相加。`min` 表示相对基础值的最小比例；
+Pressure 和 Velocity 同时影响同一参数时，其归一化因子相乘：
 
 ```ts
 const dynamicBrush = new CircleBrush({
   size: 20,
   color: { r: 0, g: 255, b: 0, a: 255 },
   opacity: 0.8,
+  rotation: Math.PI / 8,
   dynamics: {
     size: {
       pressure: { min: 0.2 },
@@ -164,7 +173,7 @@ const dynamicBrush = new CircleBrush({
     opacity: {
       pressure: { min: 0.1 },
     },
-    rotation: { tilt: {} },
+    rotation: { direction: {}, tilt: {} },
   },
 });
 ```
@@ -215,7 +224,8 @@ while (stroke.hasPendingStamps) {
 
 `demo` 提供了可直接按下并拖动绘画的连续 Stroke 画布，并可调整颜色、
 Brush Size、Spacing、Opacity、Pan 和 Zoom，也可临时上传图片切换为 Image
-Brush。绘制命令由主线程上的 `DrawingScheduler` 按帧消费。
+Brush；上传的非对称 Brush Tip 默认沿实际 Stamp 路径旋转。绘制命令由主线程上的
+`DrawingScheduler` 按帧消费。
 
 ## Export Renderer
 

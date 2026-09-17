@@ -15,6 +15,9 @@ export interface CircleBrushConfig {
   /** Stamp-distance proportion relative to size. Defaults to `0.25`. */
   spacing?: number;
 
+  /** Static rotation offset in radians. Defaults to `0`. */
+  rotation?: number;
+
   /** Optional per-stamp input mappings owned by this brush. */
   dynamics?: BrushDynamics;
 }

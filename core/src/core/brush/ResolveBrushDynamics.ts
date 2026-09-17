@@ -27,6 +27,7 @@ const DEGREES_TO_RADIANS = Math.PI / 180;
  *
  * @param baseSize - Validated positive brush diameter in world units.
  * @param baseOpacity - Validated base opacity in the inclusive range `[0, 1]`.
+ * @param baseRotation - Validated static rotation offset in radians.
  * @param dynamics - Validated mappings captured by the brush constructor.
  * @param input - Optional stamp input; omitted values use neutral Core defaults.
  * @returns Size, opacity, and rotation resolved for this stamp only.
@@ -35,11 +36,12 @@ const DEGREES_TO_RADIANS = Math.PI / 180;
 export function resolveBrushDynamics(
   baseSize: number,
   baseOpacity: number,
+  baseRotation: number,
   dynamics: NormalizedBrushDynamics | null,
   input?: StampCommand,
 ): ResolvedBrushParameters {
   if (dynamics === null) {
-    return { size: baseSize, opacity: baseOpacity, rotation: 0 };
+    return { size: baseSize, opacity: baseOpacity, rotation: baseRotation };
   }
 
   const sizeFactor = resolveParameterFactor(
@@ -55,7 +57,10 @@ export function resolveBrushDynamics(
   const resolved = {
     size: baseSize * sizeFactor,
     opacity: baseOpacity * opacityFactor,
-    rotation: dynamics.hasTiltRotation ? resolveTiltRotation(input) : 0,
+    rotation:
+      baseRotation +
+      (dynamics.hasDirectionRotation ? resolveDirectionRotation(input) : 0) +
+      (dynamics.hasTiltRotation ? resolveTiltRotation(input) : 0),
   };
 
   if (
@@ -70,6 +75,21 @@ export function resolveBrushDynamics(
   }
 
   return resolved;
+}
+
+/** Resolves an optional finite path direction to its additive angle. */
+function resolveDirectionRotation(input: StampCommand | undefined): number {
+  const direction = input?.direction;
+
+  if (direction === undefined) {
+    return 0;
+  }
+
+  if (typeof direction !== "number" || !Number.isFinite(direction)) {
+    throwInvalidInput("dynamics.rotation.direction.input");
+  }
+
+  return direction;
 }
 
 /** Multiplies every enabled normalized factor for one scalar parameter. */

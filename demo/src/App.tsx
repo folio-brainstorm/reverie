@@ -524,8 +524,8 @@ export function App(): ReactElement {
             </div>
             <small title={imageBrushName ?? undefined}>
               {brushImage === null
-                ? "Transparent pixels become empty brush coverage."
-                : `${imageBrushName ?? "Uploaded image"} · ${brushImage.width} × ${brushImage.height}`}
+                ? "Transparent pixels become empty coverage; uploaded tips follow the path."
+                : `${imageBrushName ?? "Uploaded image"} · ${brushImage.width} × ${brushImage.height} · follows path`}
             </small>
           </div>
         </div>
@@ -629,7 +629,7 @@ export function App(): ReactElement {
   );
 }
 
-/** Creates the currently selected Demo brush without retaining UI state. */
+/** Creates the selected Demo brush, enabling path following for image tips. */
 function createDemoBrush(
   image: BrushImage | null,
   size: number,
@@ -643,7 +643,14 @@ function createDemoBrush(
     return new CircleBrush({ size, color, opacity, spacing });
   }
 
-  return new ImageBrush({ image, size, color, opacity, spacing });
+  return new ImageBrush({
+    image,
+    size,
+    color,
+    opacity,
+    spacing,
+    dynamics: { rotation: { direction: {} } },
+  });
 }
 
 /** Converts a browser color-input value into an opaque RGBA8 color. */

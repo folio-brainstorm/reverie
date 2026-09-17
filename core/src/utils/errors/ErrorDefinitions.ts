@@ -141,6 +141,10 @@ export const ErrorDefinitions = {
       template:
         "ImageBrush destination pixel bounds exceed the safe integer range.",
     },
+    INVALID_ROTATION: {
+      code: "EC_BRUSH_0018",
+      template: "Brush rotation must be a finite number of radians.",
+    },
   },
   WORLD: {
     INVALID_BOUNDS: {

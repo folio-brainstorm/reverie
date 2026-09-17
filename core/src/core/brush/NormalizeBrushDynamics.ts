@@ -26,7 +26,7 @@ const EMPTY_PARAMETER_DYNAMICS: NormalizedBrushParameterDynamics =
  *
  * @param dynamics - Public dynamics configuration supplied to a brush.
  * @returns Immutable normalized mappings, or `null` when no mapping is enabled.
- * @throws {ReverieRangeError} A dynamics object, ratio, velocity, or curve is invalid.
+ * @throws {ReverieRangeError} A dynamics object, marker, ratio, velocity, or curve is invalid.
  */
 export function normalizeBrushDynamics(
   dynamics: BrushDynamics | undefined,
@@ -42,7 +42,7 @@ export function normalizeBrushDynamics(
     dynamics.opacity,
     "dynamics.opacity",
   );
-  const hasTiltRotation = normalizeRotationDynamics(
+  const rotation = normalizeRotationDynamics(
     dynamics.rotation,
     "dynamics.rotation",
   );
@@ -52,11 +52,15 @@ export function normalizeBrushDynamics(
     opacity.pressure !== null ||
     opacity.velocity !== null;
 
-  if (!hasScalarDynamics && !hasTiltRotation) {
+  if (
+    !hasScalarDynamics &&
+    !rotation.hasDirectionRotation &&
+    !rotation.hasTiltRotation
+  ) {
     return null;
   }
 
-  return Object.freeze({ size, opacity, hasTiltRotation });
+  return Object.freeze({ size, opacity, ...rotation });
 }
 
 /** Normalizes the pressure and velocity mappings for one scalar parameter. */
@@ -129,23 +133,29 @@ function normalizeVelocityDynamics(
   });
 }
 
-/** Reports whether a validated rotation object enables tilt orientation. */
+/** Validates rotation markers and reports which contributions are enabled. */
 function normalizeRotationDynamics(
   dynamics: RotationDynamics | undefined,
   parameterName: string,
-): boolean {
+): Pick<NormalizedBrushDynamics, "hasDirectionRotation" | "hasTiltRotation"> {
   if (dynamics === undefined) {
-    return false;
+    return { hasDirectionRotation: false, hasTiltRotation: false };
   }
 
   assertObject(dynamics, parameterName);
 
-  if (dynamics.tilt === undefined) {
-    return false;
+  if (dynamics.direction !== undefined) {
+    assertObject(dynamics.direction, `${parameterName}.direction`);
   }
 
-  assertObject(dynamics.tilt, `${parameterName}.tilt`);
-  return true;
+  if (dynamics.tilt !== undefined) {
+    assertObject(dynamics.tilt, `${parameterName}.tilt`);
+  }
+
+  return {
+    hasDirectionRotation: dynamics.direction !== undefined,
+    hasTiltRotation: dynamics.tilt !== undefined,
+  };
 }
 
 /** Validates a mapping's minimum ratio and supplies the zero default. */

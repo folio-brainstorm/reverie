@@ -116,6 +116,7 @@ describe("DrawingScheduler frame execution", () => {
       tiltX: -20,
       tiltY: 30,
       velocity: 0.5,
+      direction: Math.PI / 4,
     };
     const stampBrush = vi.fn<Brush["stamp"]>();
     const brush: Brush = { size: 1, spacing: 1, stamp: stampBrush };

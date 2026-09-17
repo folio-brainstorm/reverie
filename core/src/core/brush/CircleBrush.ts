@@ -36,6 +36,9 @@ export class CircleBrush implements Brush {
   /** Distance between stamps expressed as a proportion of {@link size}. */
   readonly spacing: number;
 
+  /** Static rotation offset in radians. */
+  readonly rotation: number;
+
   /** Internally owned color so later config mutations cannot alter the brush. */
   private readonly internalColor: RGBAColor;
 
@@ -59,10 +62,10 @@ export class CircleBrush implements Brush {
   /**
    * Creates a circular brush with validated, immutable stamp parameters.
    *
-   * @param config - Diameter, RGBA8 color, opacity, spacing, and dynamics.
+   * @param config - Diameter, RGBA8 color, opacity, spacing, rotation, and dynamics.
    * @throws {ReverieRangeError} Size or spacing is not positive and finite,
-   * opacity is outside the inclusive `0..1` range, color is not valid RGBA8,
-   * or a dynamics mapping is malformed.
+   * opacity is outside the inclusive `0..1` range, rotation is not finite,
+   * color is not valid RGBA8, or a dynamics mapping is malformed.
    */
   constructor(config: CircleBrushConfig) {
     const {
@@ -70,6 +73,7 @@ export class CircleBrush implements Brush {
       color,
       opacity = 1,
       spacing = DEFAULT_BRUSH_SPACING,
+      rotation = 0,
     } = config;
 
     if (!isPositiveFiniteNumber(size)) {
@@ -84,6 +88,10 @@ export class CircleBrush implements Brush {
       throw ReverieRangeError.from(ErrorDefinitions.BRUSH.INVALID_SPACING);
     }
 
+    if (typeof rotation !== "number" || !Number.isFinite(rotation)) {
+      throw ReverieRangeError.from(ErrorDefinitions.BRUSH.INVALID_ROTATION);
+    }
+
     if (!isValidRGBAColor(color)) {
       throw ReverieRangeError.from(ErrorDefinitions.COMMON.INVALID_RGBA_COLOR);
     }
@@ -91,6 +99,7 @@ export class CircleBrush implements Brush {
     this.size = size;
     this.opacity = opacity;
     this.spacing = spacing;
+    this.rotation = rotation;
     this.internalColor = { ...color };
     this.effectiveAlpha = Math.round(color.a * opacity);
     this.normalizedEffectiveAlpha = this.effectiveAlpha / 255;
@@ -106,12 +115,18 @@ export class CircleBrush implements Brush {
   /**
    * Resolves this brush's immutable base values for one actual stamp.
    *
-   * @param input - Stamp input carrying pressure, velocity, and tilt.
+   * @param input - Stamp input carrying pressure, velocity, direction, and tilt.
    * @returns Independent size, opacity, and radian rotation values.
    * @throws {ReverieRangeError} Used input or a custom curve result is invalid.
    */
   resolveParameters(input: StampCommand): ResolvedBrushParameters {
-    return resolveBrushDynamics(this.size, this.opacity, this.dynamics, input);
+    return resolveBrushDynamics(
+      this.size,
+      this.opacity,
+      this.rotation,
+      this.dynamics,
+      input,
+    );
   }
 
   /**
@@ -140,6 +155,7 @@ export class CircleBrush implements Brush {
     const resolved = resolveBrushDynamics(
       this.size,
       this.opacity,
+      this.rotation,
       this.dynamics,
       input,
     );
