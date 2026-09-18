@@ -1,4 +1,6 @@
 import { MAX_CHANNEL_VALUE } from "../../config/color/RgbaChannelConstants.js";
+import type { LayerBlendMode } from "../../interfaces/world/LayerBlendMode.js";
+import { blendRgbChannel } from "../../internal/color/BlendRgbChannel.js";
 import { blendSourceOverChannel } from "../../internal/color/BlendSourceOverChannel.js";
 import { roundAndClampChannel } from "../../internal/color/RoundAndClampChannel.js";
 
@@ -10,6 +12,7 @@ import { roundAndClampChannel } from "../../internal/color/RoundAndClampChannel.
  * @param destination - Destination byte storage modified in place.
  * @param destinationOffset - Valid offset of four destination channels.
  * @param opacity - Validated layer opacity in [0, 1].
+ * @param blendMode - RGB blend operation, defaulting to normal Source Over.
  */
 export function compositeRgbaSourceOverInPlace(
   source: Uint8ClampedArray,
@@ -17,6 +20,7 @@ export function compositeRgbaSourceOverInPlace(
   destination: Uint8ClampedArray,
   destinationOffset: number,
   opacity: number,
+  blendMode: LayerBlendMode = "normal",
 ): void {
   const sourceAlpha =
     ((source[sourceOffset + 3] ?? 0) / MAX_CHANNEL_VALUE) * opacity;
@@ -24,7 +28,10 @@ export function compositeRgbaSourceOverInPlace(
     return;
   }
   const destinationAlphaByte = destination[destinationOffset + 3] ?? 0;
-  if (sourceAlpha === 1 || destinationAlphaByte === 0) {
+  if (
+    blendMode === "normal" &&
+    (sourceAlpha === 1 || destinationAlphaByte === 0)
+  ) {
     for (let channel = 0; channel < 3; channel += 1) {
       destination[destinationOffset + channel] =
         source[sourceOffset + channel] ?? 0;
@@ -37,9 +44,21 @@ export function compositeRgbaSourceOverInPlace(
   const destinationWeight =
     (destinationAlphaByte / MAX_CHANNEL_VALUE) * (1 - sourceAlpha);
   const outputAlpha = sourceAlpha + destinationWeight;
+  const destinationAlpha = destinationAlphaByte / MAX_CHANNEL_VALUE;
   for (let channel = 0; channel < 3; channel += 1) {
+    const sourceByte = source[sourceOffset + channel] ?? 0;
+    const sourceChannel =
+      destinationAlpha === 0
+        ? sourceByte
+        : (1 - destinationAlpha) * sourceByte +
+          destinationAlpha *
+            blendRgbChannel(
+              sourceByte,
+              destination[destinationOffset + channel] ?? 0,
+              blendMode,
+            );
     destination[destinationOffset + channel] = blendSourceOverChannel(
-      source[sourceOffset + channel] ?? 0,
+      sourceChannel,
       destination[destinationOffset + channel] ?? 0,
       sourceAlpha,
       destinationWeight,

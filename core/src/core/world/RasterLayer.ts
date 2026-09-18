@@ -2,11 +2,16 @@ import type { Brush } from "../../interfaces/brush/Brush.js";
 import type { WorldPoint } from "../../interfaces/camera/WorldPoint.js";
 import type { StampCommand } from "../../interfaces/stroke/StampCommand.js";
 import type { WorldBounds } from "../../interfaces/world/WorldBounds.js";
+import type { LayerBlendMode } from "../../interfaces/world/LayerBlendMode.js";
 
 import { RasterPaintTarget } from "../../internal/paint-target/RasterPaintTarget.js";
 import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
-import { ReverieRangeError } from "../../utils/errors/ReverieErrors.js";
+import {
+  ReverieRangeError,
+  ReverieTypeError,
+} from "../../utils/errors/ReverieErrors.js";
 import { Raster } from "../raster/Raster.js";
+import { isLayerBlendMode } from "./IsLayerBlendMode.js";
 
 /** Owns an unbounded Raster and applies its World's bounds while painting. */
 export class RasterLayer {
@@ -30,6 +35,7 @@ export class RasterLayer {
   /** Whether this layer participates in composition. */
   visible: boolean = true;
   private currentOpacity = 1;
+  private currentBlendMode: LayerBlendMode = "normal";
 
   /** Non-destructive composition opacity in the inclusive range [0, 1]. */
   get opacity(): number {
@@ -47,6 +53,24 @@ export class RasterLayer {
       );
     }
     this.currentOpacity = value;
+  }
+
+  /** Blend operation used when this layer is composed into its World. */
+  get blendMode(): LayerBlendMode {
+    return this.currentBlendMode;
+  }
+
+  /**
+   * Changes composition mode without rewriting Raster pixels.
+   * @throws {ReverieTypeError} The value is not a supported blend mode.
+   */
+  set blendMode(value: LayerBlendMode) {
+    if (!isLayerBlendMode(value)) {
+      throw ReverieTypeError.from(
+        ErrorDefinitions.WORLD.INVALID_LAYER_BLEND_MODE,
+      );
+    }
+    this.currentBlendMode = value;
   }
   /** Sparse pixel storage owned by this layer. */
   readonly raster: Raster;

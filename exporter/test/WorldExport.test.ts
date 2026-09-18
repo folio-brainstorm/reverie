@@ -73,6 +73,19 @@ describe("World export composition", () => {
     },
   );
 
+  it("applies a layer blend mode before layer opacity", () => {
+    const world = new World({ tileSize: 2 });
+    world
+      .getLayer(0)
+      .raster.setPixel({ x: 0, y: 0 }, { r: 100, g: 100, b: 100, a: 255 });
+    const top = world.addLayer();
+    top.raster.setPixel({ x: 0, y: 0 }, { r: 200, g: 150, b: 50, a: 255 });
+    top.blendMode = "multiply";
+    expect(
+      Array.from(new ExportRenderer({ world }).render(REGION).pixels),
+    ).toEqual([78, 59, 20, 255]);
+  });
+
   it("multiplies pixel alpha by layer opacity with straight RGB", () => {
     const world = new World({ tileSize: 2 });
     const bottom = world.getLayer(0);

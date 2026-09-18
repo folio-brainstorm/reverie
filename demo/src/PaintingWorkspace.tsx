@@ -7,10 +7,16 @@ import type {
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
-import { CircleBrush, ImageBrush } from "@reverie/core";
+import {
+  CircleBrush,
+  ImageBrush,
+  isLayerBlendMode,
+  LAYER_BLEND_MODES,
+} from "@reverie/core";
 import type {
   Brush,
   BrushImage,
+  LayerBlendMode,
   RasterLayer,
   RGBAColor,
   ScreenPoint,
@@ -347,6 +353,17 @@ export function PaintingWorkspace({
   ): void => {
     layer.opacity = Number(event.currentTarget.value);
     refreshLayers();
+  };
+
+  const handleLayerBlendModeChange = (
+    layer: RasterLayer,
+    event: ChangeEvent<HTMLSelectElement>,
+  ): void => {
+    const value = event.currentTarget.value;
+    if (isLayerBlendMode(value)) {
+      layer.blendMode = value;
+      refreshLayers();
+    }
   };
 
   const handleLayerNameChange = (
@@ -777,6 +794,22 @@ export function PaintingWorkspace({
                           handleLayerOpacityChange(layer, event)
                         }
                       />
+                    </label>
+                    <label className="layer-blend-control">
+                      <span>Blend</span>
+                      <select
+                        aria-label={`${layer.name} blend mode`}
+                        value={layer.blendMode}
+                        onChange={(event) =>
+                          handleLayerBlendModeChange(layer, event)
+                        }
+                      >
+                        {LAYER_BLEND_MODES.map((mode: LayerBlendMode) => (
+                          <option key={mode} value={mode}>
+                            {mode}
+                          </option>
+                        ))}
+                      </select>
                     </label>
                     <div className="layer-actions">
                       <button

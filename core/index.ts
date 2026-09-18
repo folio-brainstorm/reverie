@@ -1,6 +1,8 @@
 // Runtime engine API.
 export { Raster } from "./src/core/raster/index.js";
 export { RasterLayer, World } from "./src/core/world/index.js";
+export { isLayerBlendMode } from "./src/core/world/index.js";
+export { LAYER_BLEND_MODES } from "./src/config/world/LayerBlendModes.js";
 export { Camera } from "./src/core/camera/index.js";
 export {
   BrushImage,
@@ -78,6 +80,7 @@ export type {
 } from "./src/interfaces/diagnostic/Diagnostic.js";
 export type { WorldConfig } from "./src/interfaces/world/World.js";
 export type { WorldBounds } from "./src/interfaces/world/WorldBounds.js";
+export type { LayerBlendMode } from "./src/interfaces/world/LayerBlendMode.js";
 export type { LayerRemovalObserver } from "./src/interfaces/world/LayerRemovalObserver.js";
 export type { RasterConfig } from "./src/interfaces/raster/Raster.js";
 export type { RGBAColor } from "./src/interfaces/color/Colors.js";

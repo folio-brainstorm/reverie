@@ -1,4 +1,5 @@
 import type { ErrorDefinition } from "../../interfaces/errors/ErrorDefinition.js";
+import { LAYER_BLEND_MODES } from "../../config/world/LayerBlendModes.js";
 import { deriveDefinitionCodes } from "../definitions/DeriveDefinitionCodes.js";
 
 /**
@@ -217,6 +218,10 @@ export const ErrorDefinitions = {
       code: "EC_WORLD_0008",
       template:
         "Cannot change layer membership or order from a layer removal callback.",
+    },
+    INVALID_LAYER_BLEND_MODE: {
+      code: "EC_WORLD_0009",
+      template: `Layer blend mode must be one of: ${LAYER_BLEND_MODES.join(", ")}.`,
     },
     INVALID_BOUNDS: {
       code: "EC_WORLD_0001",

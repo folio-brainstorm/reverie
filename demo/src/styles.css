@@ -536,6 +536,27 @@ summary {
   accent-color: var(--accent);
 }
 
+.layer-blend-control {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.65rem;
+}
+
+.layer-blend-control select {
+  min-width: 0;
+  width: 100%;
+  padding: 5px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--page);
+  font-size: 0.68rem;
+}
+
 .layer-actions {
   display: flex;
   grid-column: 1 / -1;

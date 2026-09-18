@@ -1,6 +1,8 @@
-import type { Camera, Raster, WorldRect } from "@reverie/core";
+import type { Camera, Raster, RasterLayer, WorldRect } from "@reverie/core";
 import {
+  compositeRgbaSourceOverInPlace,
   getRasterTilePixels,
+  getRasterTileView,
   getRasterTileVersion,
   getWorldCompositionLayers,
   intersectRenderRegion,
@@ -56,6 +58,7 @@ export class CanvasRenderer<
     Raster,
     Map<string, CanvasTileCache>
   >();
+  private readonly worldCompositeTileCache = new Map<string, CanvasTileCache>();
   private currentPixelRatio = 1;
 
   /** Backing pixels used for each CSS pixel in the current viewport. */
@@ -136,9 +139,18 @@ export class CanvasRenderer<
           );
           this.context.clip();
         }
-        for (const layer of getWorldCompositionLayers(this.world)) {
-          this.context.globalAlpha = layer.opacity;
-          this.renderRaster(layer.raster, visibleWorldRect);
+        const layers = [...getWorldCompositionLayers(this.world)];
+        const hasCustomBlendMode = layers.some(
+          (layer) => layer.blendMode !== "normal",
+        );
+        if (hasCustomBlendMode) {
+          this.context.globalAlpha = 1;
+          this.renderComposedWorld(layers, visibleWorldRect);
+        } else {
+          for (const layer of layers) {
+            this.context.globalAlpha = layer.opacity;
+            this.renderRaster(layer.raster, visibleWorldRect);
+          }
         }
       } finally {
         this.context.restore();
@@ -151,18 +163,100 @@ export class CanvasRenderer<
   /** Traverses visible tiles of one source using a Raster-specific upload cache. */
   private renderRaster(raster: Raster, visibleWorldRect: WorldRect): void {
     const tileSize = raster.tileSize;
-    const minTileX = Math.floor(visibleWorldRect.x / tileSize);
-    const minTileY = Math.floor(visibleWorldRect.y / tileSize);
-    const maxTileX =
-      Math.ceil((visibleWorldRect.x + visibleWorldRect.width) / tileSize) - 1;
-    const maxTileY =
-      Math.ceil((visibleWorldRect.y + visibleWorldRect.height) / tileSize) - 1;
+    for (const coord of CanvasRenderer.visibleTileCoords(
+      tileSize,
+      visibleWorldRect,
+    )) {
+      this.renderTile(raster, coord);
+    }
+  }
 
-    for (let tileY = minTileY; tileY <= maxTileY; tileY += 1) {
-      for (let tileX = minTileX; tileX <= maxTileX; tileX += 1) {
-        this.renderTile(raster, { x: tileX, y: tileY });
+  /** Composes non-normal World layers into dense tiles before projection. */
+  private renderComposedWorld(
+    layers: RasterLayer[],
+    visibleWorldRect: WorldRect,
+  ): void {
+    const tileSize = layers[0]?.raster.tileSize;
+    if (tileSize === undefined) {
+      return;
+    }
+    const visibleKeys = new Set<string>();
+    for (const coord of CanvasRenderer.visibleTileCoords(
+      tileSize,
+      visibleWorldRect,
+    )) {
+      const key = CanvasRenderer.tileCoordToKey(coord);
+      visibleKeys.add(key);
+      const signature = this.worldTileSignature(layers, coord);
+      if (signature === null) {
+        this.worldCompositeTileCache.delete(key);
+        continue;
+      }
+
+      const cache = this.getWorldCompositeTileCache(coord, tileSize);
+      if (cache.signature !== signature) {
+        cache.imageData.data.fill(0);
+        for (const layer of layers) {
+          const tileView = getRasterTileView(layer.raster, coord);
+          if (tileView === undefined) {
+            continue;
+          }
+          for (let offset = 0; offset < tileView.pixels.length; offset += 4) {
+            compositeRgbaSourceOverInPlace(
+              tileView.pixels,
+              offset,
+              cache.imageData.data,
+              offset,
+              layer.opacity,
+              layer.blendMode,
+            );
+          }
+        }
+        cache.context.putImageData(cache.imageData, 0, 0);
+        cache.signature = signature;
+      }
+      this.drawTileCanvas(cache.canvas, coord, tileSize);
+    }
+    for (const key of this.worldCompositeTileCache.keys()) {
+      if (!visibleKeys.has(key)) {
+        this.worldCompositeTileCache.delete(key);
       }
     }
+  }
+
+  /** Builds a stable cache key from all contributing layer state for a tile. */
+  private worldTileSignature(
+    layers: RasterLayer[],
+    coord: TileCoord,
+  ): string | null {
+    let hasSource = false;
+    const signatureParts: string[] = [];
+    for (const layer of layers) {
+      const version = getRasterTileVersion(layer.raster, coord);
+      if (version !== undefined) {
+        hasSource = true;
+      }
+      signatureParts.push(
+        `${version?.tileId ?? -1},${version?.revision ?? -1},${layer.opacity},${layer.blendMode}`,
+      );
+    }
+    return hasSource ? signatureParts.join("|") : null;
+  }
+
+  /** Returns the reusable offscreen tile used for World blend-mode output. */
+  private getWorldCompositeTileCache(
+    coord: TileCoord,
+    tileSize: number,
+  ): CanvasTileCache {
+    const key = CanvasRenderer.tileCoordToKey(coord);
+    const cachedTile = this.worldCompositeTileCache.get(key);
+    if (cachedTile !== undefined) {
+      return cachedTile;
+    }
+
+    const cache = this.createTileCache(tileSize);
+    this.worldCompositeTileCache.set(key, cache);
+    return cache;
   }
 
   /**
@@ -212,6 +306,15 @@ export class CanvasRenderer<
       cache.revision = version.revision;
     }
 
+    this.drawTileCanvas(cache.canvas, coord, tileSize);
+  }
+
+  /** Projects one prepared tile canvas using the active camera. */
+  private drawTileCanvas(
+    tileCanvas: HTMLCanvasElement,
+    coord: TileCoord,
+    tileSize: number,
+  ): void {
     const screenPoint = this.camera.worldToScreen({
       x: coord.x * tileSize,
       y: coord.y * tileSize,
@@ -220,7 +323,7 @@ export class CanvasRenderer<
     const screenTileSize = tileSize * renderZoom;
 
     this.context.drawImage(
-      cache.canvas,
+      tileCanvas,
       screenPoint.x * this.currentPixelRatio,
       screenPoint.y * this.currentPixelRatio,
       screenTileSize,
@@ -246,28 +349,50 @@ export class CanvasRenderer<
       return cachedTile;
     }
 
+    const cache = this.createTileCache(tileSize);
+
+    rasterCache.set(key, cache);
+
+    return cache;
+  }
+
+  /** Creates one reusable tile canvas and upload buffer. */
+  private createTileCache(tileSize: number): CanvasTileCache {
     const tileCanvas = this.canvas.ownerDocument.createElement("canvas");
     tileCanvas.width = tileSize;
     tileCanvas.height = tileSize;
     const tileContext = tileCanvas.getContext(CONTEXT_IDENTIFIER);
-
     if (tileContext === null) {
       throw RendererError.from(
         RendererErrorDefinitions.FAILED_TO_ACQUIRE_RENDERING_CONTEXT,
       );
     }
-
-    const cache: CanvasTileCache = {
+    return {
       canvas: tileCanvas,
       context: tileContext,
       imageData: tileContext.createImageData(tileSize, tileSize),
       tileId: -1,
       revision: -1,
     };
+  }
 
-    rasterCache.set(key, cache);
+  /** Enumerates every tile whose area can intersect a visible world rectangle. */
+  private static *visibleTileCoords(
+    tileSize: number,
+    visibleWorldRect: WorldRect,
+  ): Iterable<TileCoord> {
+    const minTileX = Math.floor(visibleWorldRect.x / tileSize);
+    const minTileY = Math.floor(visibleWorldRect.y / tileSize);
+    const maxTileX =
+      Math.ceil((visibleWorldRect.x + visibleWorldRect.width) / tileSize) - 1;
+    const maxTileY =
+      Math.ceil((visibleWorldRect.y + visibleWorldRect.height) / tileSize) - 1;
 
-    return cache;
+    for (let tileY = minTileY; tileY <= maxTileY; tileY += 1) {
+      for (let tileX = minTileX; tileX <= maxTileX; tileX += 1) {
+        yield { x: tileX, y: tileY };
+      }
+    }
   }
 
   /** Converts a validated tile coordinate into a collision-free cache key. */

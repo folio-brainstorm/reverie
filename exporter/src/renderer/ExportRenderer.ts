@@ -1,4 +1,4 @@
-import type { Raster } from "@reverie/core";
+import type { LayerBlendMode, Raster } from "@reverie/core";
 import {
   getRasterTileView,
   getWorldCompositionLayers,
@@ -96,6 +96,7 @@ export class ExportRenderer<
             pixels,
             layer.opacity,
             intersection,
+            layer.blendMode,
           );
         }
       }
@@ -205,6 +206,7 @@ function assertRegionWithinSafeRange(
  * @param output - Row-major RGBA8 destination, potentially containing lower layers.
  * @param opacity - Layer opacity in [0, 1], or omission for byte-exact Raster copying.
  * @param intersection - Nonempty region clipped to document bounds; defaults to region.
+ * @param blendMode - World layer blend mode, or omission for standalone Raster copying.
  */
 function copyIntersectingTiles(
   raster: Raster,
@@ -212,6 +214,7 @@ function copyIntersectingTiles(
   output: Uint8ClampedArray,
   opacity?: number,
   intersection: ExportRegion = region,
+  blendMode?: LayerBlendMode,
 ): void {
   const { tileSize } = raster;
   const minTileX = Math.floor(intersection.x / tileSize);
@@ -240,6 +243,7 @@ function copyIntersectingTiles(
         output,
         opacity,
         intersection,
+        blendMode,
       );
     }
   }
@@ -258,6 +262,7 @@ function copyIntersectingTiles(
  * @param output - Row-major RGBA8 destination, potentially containing lower layers.
  * @param opacity - Layer opacity in [0, 1], or `undefined` for byte-exact copying.
  * @param intersection - Nonempty region clipped to document bounds.
+ * @param blendMode - World layer blend mode, or `undefined` for standalone copying.
  */
 function copyTileIntersection(
   tilePixels: Uint8ClampedArray,
@@ -267,6 +272,7 @@ function copyTileIntersection(
   output: Uint8ClampedArray,
   opacity: number | undefined,
   intersection: ExportRegion,
+  blendMode: LayerBlendMode | undefined,
 ): void {
   const tileWorldX = tile.x * tileSize;
   const tileWorldY = tile.y * tileSize;
@@ -313,6 +319,7 @@ function copyTileIntersection(
           output,
           dstOffset + offset,
           opacity,
+          blendMode,
         );
       }
     }

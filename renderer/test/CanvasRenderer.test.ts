@@ -65,6 +65,30 @@ function createCanvasFixture(width = 4, height = 4) {
 }
 
 describe("CanvasRenderer World composition", () => {
+  it("composes custom blend modes into the projected tile", () => {
+    const { canvas, tileContexts } = createCanvasFixture(2, 2);
+    const world = new World({ tileSize: 2 });
+    world
+      .getLayer(0)
+      .raster.setPixel({ x: 0, y: 0 }, { r: 100, g: 100, b: 100, a: 255 });
+    const top = world.addLayer();
+    top.raster.setPixel({ x: 0, y: 0 }, { r: 200, g: 150, b: 50, a: 255 });
+    top.blendMode = "multiply";
+    const renderer = new CanvasRenderer({ canvas, camera: new Camera(), world });
+    renderer.render();
+    const tileContext = tileContexts[0];
+    if (tileContext === undefined) {
+      throw new Error("Expected composed tile context");
+    }
+    const imageData = vi.mocked(tileContext.putImageData).mock.calls[0]?.[0];
+    if (imageData === undefined) {
+      throw new Error("Expected composed tile upload");
+    }
+    expect(Array.from(imageData.data.slice(0, 4))).toEqual([78, 59, 20, 255]);
+    renderer.render();
+    expect(tileContext.putImageData).toHaveBeenCalledOnce();
+  });
+
   it("captures the source instead of following later config mutations", () => {
     const { canvas, context } = createCanvasFixture(2, 2);
     const world = new World({ tileSize: 2 });

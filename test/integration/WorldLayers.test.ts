@@ -90,8 +90,32 @@ describe("World layer membership and ordering", () => {
       expect(world.getLayer(0).name).toBe("Layer 1");
       expect(world.getLayer(0).visible).toBe(true);
       expect(world.getLayer(0).opacity).toBe(1);
+      expect(world.getLayer(0).blendMode).toBe("normal");
       expect(world.getLayer(0).raster.getPixel({ x: 0, y: 0 }).a).toBe(0);
     }
+  });
+
+  it.each([
+    "normal",
+    "multiply",
+    "screen",
+    "overlay",
+    "darken",
+    "lighten",
+    "add",
+  ] as const)("accepts the %s layer blend mode", (mode) => {
+    const layer = new World().getLayer(0);
+    layer.blendMode = mode;
+    expect(layer.blendMode).toBe(mode);
+  });
+
+  it("rejects unsupported layer blend modes without changing the current mode", () => {
+    const layer = new World().getLayer(0);
+    // @ts-expect-error Untyped callers may provide an unsupported mode.
+    expect(() => (layer.blendMode = "color-dodge")).toThrow(
+      ErrorCodes.WORLD.INVALID_LAYER_BLEND_MODE,
+    );
+    expect(layer.blendMode).toBe("normal");
   });
 
   it("keeps standalone Raster and detached createRasterLayer behavior", () => {

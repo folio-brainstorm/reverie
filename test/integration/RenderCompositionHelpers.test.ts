@@ -155,4 +155,50 @@ describe("consistent byte-level Source Over", () => {
       expect(Array.from(input)).toEqual([9, 8, 7, 6, ...source, 5]);
     },
   );
+
+  it.each([
+    ["multiply", [8, 8, 6]],
+    ["screen", [202, 112, 74]],
+    ["overlay", [16, 16, 12]],
+    ["darken", [10, 20, 30]],
+    ["lighten", [200, 100, 50]],
+    ["add", [210, 120, 80]],
+  ] as const)("composes %s RGB before Source Over", (mode, expected) => {
+    const output = new Uint8ClampedArray([10, 20, 30, 255]);
+    compositeRgbaSourceOverInPlace(
+      new Uint8ClampedArray([200, 100, 50, 255]),
+      0,
+      output,
+      0,
+      1,
+      mode,
+    );
+    expect(Array.from(output)).toEqual([...expected, 255]);
+  });
+
+  it("uses source RGB when a custom-mode destination is fully transparent", () => {
+    const output = new Uint8ClampedArray([250, 240, 230, 0]);
+    compositeRgbaSourceOverInPlace(
+      new Uint8ClampedArray([200, 100, 50, 255]),
+      0,
+      output,
+      0,
+      1,
+      "multiply",
+    );
+    expect(Array.from(output)).toEqual([200, 100, 50, 255]);
+  });
+
+  it("interpolates custom blend RGB by a partially transparent backdrop", () => {
+    const output = new Uint8ClampedArray([100, 80, 60, 128]);
+    compositeRgbaSourceOverInPlace(
+      new Uint8ClampedArray([200, 100, 50, 255]),
+      0,
+      output,
+      0,
+      1,
+      "multiply",
+    );
+    expect(Array.from(output)).toEqual([139, 65, 31, 255]);
+  });
 });

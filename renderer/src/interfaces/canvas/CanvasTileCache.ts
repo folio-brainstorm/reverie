@@ -14,4 +14,7 @@ export interface CanvasTileCache {
 
   /** Pixel-state revision represented by the current upload. */
   revision: number;
+
+  /** Composition signature represented by a World-composite upload, when used. */
+  signature?: string;
 }
