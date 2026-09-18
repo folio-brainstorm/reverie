@@ -7,11 +7,13 @@ import type { RasterConfig } from "../../interfaces/raster/Raster.js";
 
 import { TRANSPARENT_RGBA } from "../../config/color/ColorConstants.js";
 import { isRasterPixelWritable } from "../../internal/paint-target/ActiveRasterPaintBounds.js";
+import { eraseRasterPixelAlpha } from "../../internal/raster-write/EraseRasterPixelAlpha.js";
 import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
 import { ReverieRangeError } from "../../utils/errors/ReverieErrors.js";
 import { isValidRGBAColor } from "../../utils/number/color/IsValidRGBAColor.js";
 import { CoordCoverter } from "../../utils/number/coords/CoordCoverter.js";
 import { isValidCoord } from "../../utils/number/coords/isValidCoord.js";
+import { isUnitInterval } from "../../utils/number/math/IsUnitInterval.js";
 import { isValidTileSize } from "../../utils/number/tile/IsValidTileSize.js";
 import { blendSourceOver } from "../paint/BlendSourceOver.js";
 import { registerRasterTileStore } from "../renderer/RasterRenderBridge.js";
@@ -105,8 +107,7 @@ export class Raster {
       return;
     }
 
-    const { tile: tileCoord, local: localPixel } =
-      this.locateValidPixel(pixel);
+    const { tile: tileCoord, local: localPixel } = this.locateValidPixel(pixel);
 
     const tile = this.tileStore.getOrCreate(tileCoord);
     tile.setPixel(localPixel, color);
@@ -137,8 +138,7 @@ export class Raster {
       return;
     }
 
-    const { tile: tileCoord, local: localPixel } =
-      this.locateValidPixel(pixel);
+    const { tile: tileCoord, local: localPixel } = this.locateValidPixel(pixel);
 
     const tile = this.tileStore.get(tileCoord);
     const destination =
@@ -147,6 +147,23 @@ export class Raster {
     const destinationTile = tile ?? this.tileStore.getOrCreate(tileCoord);
 
     destinationTile.setPixel(localPixel, result);
+  }
+
+  /**
+   * Reduces one stored pixel's alpha while preserving its RGB channels.
+   *
+   * Empty tiles and transparent pixels are skipped without allocating storage.
+   *
+   * @param pixel - Safe-integer coordinate of the destination pixel.
+   * @param amount - Fraction in `[0, 1]` removed from the current alpha.
+   * @throws {ReverieRangeError} A coordinate is unsafe or amount is outside `[0, 1]`.
+   */
+  erasePixel(pixel: PixelCoord, amount: number): void {
+    this.assertValidPixel(pixel);
+    if (!isUnitInterval(amount)) {
+      throw ReverieRangeError.from(ErrorDefinitions.PAINT.INVALID_ERASE_AMOUNT);
+    }
+    eraseRasterPixelAlpha(this, pixel.x, pixel.y, amount);
   }
 
   /** Removes every allocated tile, returning the raster to empty sparse state. */

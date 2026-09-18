@@ -1,4 +1,5 @@
 import type { WorldPoint } from "../camera/WorldPoint.js";
+import type { PaintMode } from "../paint/PaintMode.js";
 
 /**
  * Describes one brush stamp waiting to be executed by an external consumer.
@@ -10,6 +11,9 @@ import type { WorldPoint } from "../camera/WorldPoint.js";
 export interface StampCommand {
   /** Stable world-space snapshot at which the current stroke brush should stamp. */
   readonly position: WorldPoint;
+
+  /** Operation captured for this stamp; absent direct stamps default to paint. */
+  readonly paintMode?: PaintMode;
 
   /** Final serializable uint32 seed shared by every command in this stroke. */
   readonly strokeSeed?: number;

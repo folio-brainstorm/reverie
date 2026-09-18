@@ -1,5 +1,12 @@
-import { Stroke } from "@reverie/core";
-import type { Brush, Camera, Raster, RasterLayer, World } from "@reverie/core";
+import { resolvePaintMode, Stroke } from "@reverie/core";
+import type {
+  Brush,
+  Camera,
+  PaintMode,
+  Raster,
+  RasterLayer,
+  World,
+} from "@reverie/core";
 import type { CanvasRenderer } from "@reverie/renderer";
 
 import { WebErrorDefinitions } from "../errors/WebErrorDefinitions.js";
@@ -43,6 +50,7 @@ export class CanvasDrawingSession {
   readonly renderer: CanvasRenderer;
 
   private currentBrush: Brush;
+  private currentPaintMode: PaintMode;
   private readonly scheduler: DrawingScheduler;
   private readonly ownsScheduler: boolean;
   private readonly maxDevicePixelRatio: number;
@@ -93,6 +101,11 @@ export class CanvasDrawingSession {
     return this.currentBrush;
   }
 
+  /** Returns the operation that will be captured by the next Stroke. */
+  get paintMode(): PaintMode {
+    return this.currentPaintMode;
+  }
+
   /** Returns whether one pointer currently owns an active Stroke. */
   get isPainting(): boolean {
     return this.activeStroke !== null;
@@ -138,6 +151,7 @@ export class CanvasDrawingSession {
     this.currentLayer = config.layer;
     this.renderer = config.renderer;
     this.currentBrush = config.brush;
+    this.currentPaintMode = resolvePaintMode(config.paintMode);
     this.maxDevicePixelRatio = maxDevicePixelRatio;
     this.onError = config.onError;
     this.onStrokeStart = config.onStrokeStart;
@@ -164,6 +178,18 @@ export class CanvasDrawingSession {
    */
   setBrush(brush: Brush): void {
     this.currentBrush = brush;
+  }
+
+  /**
+   * Replaces the operation captured by future Strokes.
+   *
+   * An active Stroke retains its mode, including commands already queued for it.
+   *
+   * @param paintMode - Supported operation to capture for the next Stroke.
+   * @throws {ReverieTypeError} The supplied operation is unsupported.
+   */
+  setPaintMode(paintMode: PaintMode): void {
+    this.currentPaintMode = resolvePaintMode(paintMode);
   }
 
   /**
@@ -360,6 +386,7 @@ export class CanvasDrawingSession {
     this.activePointerId = event.pointerId;
     this.activeStroke = new Stroke({
       brush: this.currentBrush,
+      paintMode: this.currentPaintMode,
       strokeSequence: this.strokeSequence,
     });
     this.strokeSequence = (this.strokeSequence + 1) >>> 0;

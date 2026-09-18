@@ -17,6 +17,7 @@ import type {
   Brush,
   BrushImage,
   LayerBlendMode,
+  PaintMode,
   RasterLayer,
   RGBAColor,
   ScreenPoint,
@@ -82,6 +83,7 @@ export function PaintingWorkspace({
   const [brushOpacity, setBrushOpacity] = useState(INITIAL_BRUSH_OPACITY);
   const [brushSpacing, setBrushSpacing] = useState(INITIAL_BRUSH_SPACING);
   const [brushColor, setBrushColor] = useState(INITIAL_BRUSH_COLOR);
+  const [paintMode, setPaintMode] = useState<PaintMode>("paint");
   const [brushImage, setBrushImage] = useState<BrushImage | null>(null);
   const brushSettingsRef = useRef({
     size: INITIAL_BRUSH_SIZE,
@@ -282,6 +284,12 @@ export function PaintingWorkspace({
     reverieRef.current?.clear();
     setDrawingError(null);
     setExportStatus(null);
+  };
+
+  const togglePaintMode = (): void => {
+    const nextPaintMode: PaintMode = paintMode === "paint" ? "erase" : "paint";
+    reverieRef.current?.setPaintMode(nextPaintMode);
+    setPaintMode(nextPaintMode);
   };
 
   const refreshLayers = (): void => {
@@ -598,6 +606,15 @@ export function PaintingWorkspace({
       </div>
 
       <header className="workspace-toolbar">
+        <button
+          className={`paint-mode-toggle${paintMode === "erase" ? " is-active" : ""}`}
+          type="button"
+          aria-label="Toggle eraser"
+          aria-pressed={paintMode === "erase"}
+          onClick={togglePaintMode}
+        >
+          Eraser
+        </button>
         <label className="toolbar-color-control" title="Brush color">
           <input
             aria-label="Brush color"

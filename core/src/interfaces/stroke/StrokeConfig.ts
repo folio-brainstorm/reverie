@@ -1,9 +1,13 @@
 import type { Brush } from "../brush/Brush.js";
+import type { PaintMode } from "../paint/PaintMode.js";
 
 /** Dependencies captured for the lifetime of one continuous stroke. */
 export interface StrokeConfig {
   /** Brush model whose immutable size and spacing define stamp placement. */
   brush: Brush;
+
+  /** Operation captured by every command emitted from this Stroke. Defaults to paint. */
+  paintMode?: PaintMode;
 
   /** Position EMA factor in `(0, 1]`; defaults to `1` (no smoothing). */
   smoothing?: number;

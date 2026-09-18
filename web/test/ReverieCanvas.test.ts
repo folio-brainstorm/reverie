@@ -145,6 +145,34 @@ describe("ReverieCanvas drawing and lifecycle", () => {
     reverie.dispose();
   });
 
+  it("captures eraser mode for the next stroke only", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+    reverie.activeLayer.raster.setPixel(
+      { x: 0, y: 0 },
+      { r: 50, g: 60, b: 70, a: 255 },
+    );
+    reverie.setPaintMode("erase");
+
+    runtime.canvas.dispatchPointer("pointerdown", {
+      button: 0,
+      pointerId: 1,
+      clientX: 0.5,
+      clientY: 0.5,
+      timeStamp: 1,
+    });
+    runtime.runNextFrame();
+
+    expect(reverie.paintMode).toBe("erase");
+    expect(reverie.activeLayer.raster.getPixel({ x: 0, y: 0 })).toEqual({
+      r: 50,
+      g: 60,
+      b: 70,
+      a: 0,
+    });
+    reverie.dispose();
+  });
+
   it("releases runtime resources and rejects mutations after disposal", () => {
     const runtime = createCanvasRuntime();
     const reverie = new ReverieCanvas({ canvas: runtime.canvas });

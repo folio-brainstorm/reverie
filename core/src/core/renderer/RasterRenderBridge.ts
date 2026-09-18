@@ -147,6 +147,25 @@ export function getOrCreateRasterTileForTrustedWrite(
   return tileStore.getOrCreateTrusted(tileX, tileY);
 }
 
+/**
+ * Returns an existing tile for a trusted write without allocating sparse storage.
+ * @param raster - Raster owning the tile lookup.
+ * @param tileX - Safe-integer horizontal tile coordinate.
+ * @param tileY - Safe-integer vertical tile coordinate.
+ * @returns The allocated tile, or `undefined` when the region is empty.
+ */
+export function getExistingRasterTileForTrustedWrite(
+  raster: Raster,
+  tileX: number,
+  tileY: number,
+): Tile | undefined {
+  const tileStore = RASTER_TILE_STORES.get(raster);
+  if (tileStore === undefined) {
+    throw new Error("Raster internal tile storage is not registered.");
+  }
+  return tileStore.getTrusted(tileX, tileY);
+}
+
 /** Returns the mutable buffer registered for a trusted internal tile write. */
 export function getTilePixelBufferForTrustedWrite(
   tile: Tile,

@@ -1,4 +1,5 @@
 import type { ErrorDefinition } from "../../interfaces/errors/ErrorDefinition.js";
+import { PAINT_MODES } from "../../config/paint/PaintModes.js";
 import { LAYER_BLEND_MODES } from "../../config/world/LayerBlendModes.js";
 import { deriveDefinitionCodes } from "../definitions/DeriveDefinitionCodes.js";
 
@@ -230,6 +231,14 @@ export const ErrorDefinitions = {
     },
   },
   PAINT: {
+    INVALID_MODE: {
+      code: "EC_PAINT_0003",
+      template: `Paint mode must be one of: ${PAINT_MODES.join(", ")}.`,
+    },
+    INVALID_ERASE_AMOUNT: {
+      code: "EC_PAINT_0004",
+      template: "Erase amount must be a finite number between 0 and 1.",
+    },
     INVALID_OPACITY: {
       code: "EC_PAINT_0001",
       template: "Paint opacity must be a finite number between 0 and 1.",

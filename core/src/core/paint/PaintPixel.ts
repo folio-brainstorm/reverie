@@ -6,20 +6,24 @@ import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
 import { ReverieRangeError } from "../../utils/errors/ReverieErrors.js";
 import { isValidRGBAColor } from "../../utils/number/color/IsValidRGBAColor.js";
 import { isUnitInterval } from "../../utils/number/math/IsUnitInterval.js";
+import { resolvePaintMode } from "./ResolvePaintMode.js";
 
 /**
  * Paints one rasterizer hit by applying coverage and operation opacity to the
- * source alpha before compositing it over the raster.
+ * source alpha before either compositing it over the raster or reducing the
+ * destination alpha in erase mode.
  *
- * Coverage and opacity affect only the source contribution; the source RGB
- * channels remain unchanged. Paint whose effective RGBA8 alpha rounds to zero
- * is ignored without allocating a destination tile.
+ * Paint coverage and opacity affect only the source contribution; source RGB
+ * channels remain unchanged. Erase strength is `opacity * coverage` and ignores
+ * source color, including its alpha. Paint whose effective RGBA8 alpha rounds
+ * to zero is ignored without allocating a destination tile.
  *
  * @param raster - Sparse raster that receives the composited pixel.
  * @param hit - World pixel and its coverage in the inclusive `0..1` range.
- * @param style - RGBA8 source color and optional operation opacity.
+ * @param style - RGBA8 source color, operation, and optional opacity.
  * @throws {ReverieRangeError} The color is invalid, or coverage or opacity is
  * not a finite number in the inclusive range from zero to one.
+ * @throws {ReverieTypeError} The paint mode is unsupported.
  * @example
  * paintPixel(
  *   raster,
@@ -37,6 +41,7 @@ export function paintPixel(
   }
 
   const opacity = style.opacity === undefined ? 1 : style.opacity;
+  const mode = resolvePaintMode(style.mode);
 
   if (!isUnitInterval(opacity)) {
     throw ReverieRangeError.from(ErrorDefinitions.PAINT.INVALID_OPACITY);
@@ -44,6 +49,12 @@ export function paintPixel(
 
   if (!isUnitInterval(hit.coverage)) {
     throw ReverieRangeError.from(ErrorDefinitions.PAINT.INVALID_COVERAGE);
+  }
+
+  if (mode === "erase") {
+    // Erase strength deliberately ignores source RGB and alpha.
+    raster.erasePixel(hit.pixel, opacity * hit.coverage);
+    return;
   }
 
   const effectiveAlpha = Math.round(style.color.a * opacity * hit.coverage);

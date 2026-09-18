@@ -44,6 +44,15 @@ describe("TileStore sparse storage", () => {
     expect(store.size).toBe(0);
   });
 
+  it("reads trusted coordinates without allocating or public-coordinate conversion", () => {
+    const store = new TileStore({ tileSize: TILE_SIZE });
+    const tile = store.getOrCreateTrusted(-2, 4);
+
+    expect(store.getTrusted(-2, 4)).toBe(tile);
+    expect(store.getTrusted(99, 99)).toBeUndefined();
+    expect(store.size).toBe(1);
+  });
+
   it("creates and returns a uniformly sized tile", () => {
     const store = new TileStore({ tileSize: TILE_SIZE });
 

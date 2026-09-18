@@ -1,4 +1,10 @@
-import type { Brush, Camera, Raster, RasterLayer } from "@reverie/core";
+import type {
+  Brush,
+  Camera,
+  PaintMode,
+  Raster,
+  RasterLayer,
+} from "@reverie/core";
 import type { CanvasRenderer } from "@reverie/renderer";
 
 import type { DrawingScheduler } from "../../scheduler/DrawingScheduler.js";
@@ -22,6 +28,9 @@ export interface CanvasDrawingSessionConfig {
 
   /** Brush captured when each new Stroke begins. */
   readonly brush: Brush;
+
+  /** Initial operation captured by new strokes. Defaults to paint. */
+  readonly paintMode?: PaintMode;
 
   /** Initial uint32 stroke sequence for restoring session state. Defaults to `0`. */
   readonly strokeSequence?: number;

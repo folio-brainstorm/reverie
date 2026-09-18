@@ -6,10 +6,11 @@ import type { NormalizedBrushJitter } from "../../interfaces/brush/jitter/Normal
 import type { NormalizedBrushScatter } from "../../interfaces/brush/scatter/NormalizedBrushScatter.js";
 import type { WorldPoint } from "../../interfaces/camera/WorldPoint.js";
 import type { RGBAColor } from "../../interfaces/color/Colors.js";
+import type { PaintMode } from "../../interfaces/paint/PaintMode.js";
 import type { StampCommand } from "../../interfaces/stroke/StampCommand.js";
 import type { Raster } from "../raster/Raster.js";
 
-import { blendRasterPixelSourceOver } from "../../internal/raster-write/BlendRasterPixelSourceOver.js";
+import { writeRasterStampPixel } from "../../internal/raster-write/WriteRasterStampPixel.js";
 import { rasterizeCirclePixels } from "../../internal/rasterizer/RasterizeCirclePixels.js";
 import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
 import { ReverieRangeError } from "../../utils/errors/ReverieErrors.js";
@@ -25,6 +26,7 @@ import { resolveBrushDynamics } from "./ResolveBrushDynamics.js";
 import { resolveBrushJitter } from "./ResolveBrushJitter.js";
 import { resolveBrushScatter } from "./ResolveBrushScatter.js";
 import { resolveBrushStampDistance } from "./ResolveBrushStampDistance.js";
+import { resolvePaintMode } from "../paint/ResolvePaintMode.js";
 
 const DEFAULT_BRUSH_SPACING = 0.25;
 
@@ -56,9 +58,6 @@ export class CircleBrush implements Brush {
 
   /** Effective binary-coverage alpha reused by every trusted pixel write. */
   private readonly effectiveAlpha: number;
-
-  /** Normalized effective alpha reused by Source Over arithmetic. */
-  private readonly normalizedEffectiveAlpha: number;
 
   /** Validated dynamics owned by this brush, or `null` for the legacy path. */
   private readonly dynamics: NormalizedBrushDynamics | null;
@@ -125,7 +124,6 @@ export class CircleBrush implements Brush {
     this.seed = seed >>> 0;
     this.internalColor = { ...color };
     this.effectiveAlpha = Math.round(color.a * opacity);
-    this.normalizedEffectiveAlpha = this.effectiveAlpha / 255;
     this.dynamics = normalizeBrushDynamics(config.dynamics);
     this.jitter = normalizeBrushJitter(config.jitter);
     this.scatter = normalizeBrushScatter(config.scatter);
@@ -194,13 +192,16 @@ export class CircleBrush implements Brush {
    * output, random identity, jitter arithmetic, or scatter result is invalid.
    */
   stamp(raster: Raster, position: WorldPoint, input?: StampCommand): void {
+    const paintMode = resolvePaintMode(input?.paintMode);
     if (!this.hasPaintVariation) {
       this.paintCircle(
         raster,
         position,
         this.size,
         this.effectiveAlpha,
-        this.normalizedEffectiveAlpha,
+        this.effectiveAlpha / 255,
+        this.opacity,
+        paintMode,
       );
       return;
     }
@@ -227,6 +228,8 @@ export class CircleBrush implements Brush {
       resolved.size,
       effectiveAlpha,
       effectiveAlpha / 255,
+      resolved.opacity,
+      paintMode,
     );
   }
 
@@ -237,6 +240,8 @@ export class CircleBrush implements Brush {
     size: number,
     effectiveAlpha: number,
     normalizedEffectiveAlpha: number,
+    eraseAmount: number,
+    paintMode: PaintMode,
   ): void {
     rasterizeCirclePixels(
       {
@@ -244,19 +249,20 @@ export class CircleBrush implements Brush {
         radius: size / 2,
       },
       (x, y) => {
-        if (size === 0 || effectiveAlpha === 0) {
+        if (size === 0 || (paintMode === "paint" && effectiveAlpha === 0)) {
           return;
         }
-
-        blendRasterPixelSourceOver(
+        writeRasterStampPixel(
           raster,
           x,
           y,
+          paintMode,
           this.internalColor.r,
           this.internalColor.g,
           this.internalColor.b,
           effectiveAlpha,
           normalizedEffectiveAlpha,
+          eraseAmount,
         );
       },
     );

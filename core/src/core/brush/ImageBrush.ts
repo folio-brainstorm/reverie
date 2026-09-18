@@ -7,10 +7,11 @@ import type { NormalizedBrushJitter } from "../../interfaces/brush/jitter/Normal
 import type { NormalizedBrushScatter } from "../../interfaces/brush/scatter/NormalizedBrushScatter.js";
 import type { WorldPoint } from "../../interfaces/camera/WorldPoint.js";
 import type { RGBAColor } from "../../interfaces/color/Colors.js";
+import type { PaintMode } from "../../interfaces/paint/PaintMode.js";
 import type { StampCommand } from "../../interfaces/stroke/StampCommand.js";
 import type { Raster } from "../raster/Raster.js";
 
-import { blendRasterPixelSourceOver } from "../../internal/raster-write/BlendRasterPixelSourceOver.js";
+import { writeRasterStampPixel } from "../../internal/raster-write/WriteRasterStampPixel.js";
 import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
 import { ReverieRangeError } from "../../utils/errors/ReverieErrors.js";
 import { isValidRGBAColor } from "../../utils/number/color/IsValidRGBAColor.js";
@@ -25,6 +26,7 @@ import { resolveBrushDynamics } from "./ResolveBrushDynamics.js";
 import { resolveBrushJitter } from "./ResolveBrushJitter.js";
 import { resolveBrushScatter } from "./ResolveBrushScatter.js";
 import { resolveBrushStampDistance } from "./ResolveBrushStampDistance.js";
+import { resolvePaintMode } from "../paint/ResolvePaintMode.js";
 
 const DEFAULT_BRUSH_SPACING = 0.25;
 const DEFAULT_ANCHOR: BrushAnchor = Object.freeze({ x: 0.5, y: 0.5 });
@@ -189,9 +191,10 @@ export class ImageBrush implements Brush {
    * destination bounds, random identity, jitter arithmetic, or scatter result is invalid.
    */
   stamp(raster: Raster, position: WorldPoint, input?: StampCommand): void {
+    const paintMode = resolvePaintMode(input?.paintMode);
     if (
       !this.image.hasCoverage ||
-      this.internalColor.a === 0 ||
+      (paintMode === "paint" && this.internalColor.a === 0) ||
       this.opacity === 0
     ) {
       return;
@@ -213,7 +216,7 @@ export class ImageBrush implements Brush {
       this.seed,
       input,
     );
-    this.paintTransformedImage(raster, paintPosition, resolved);
+    this.paintTransformedImage(raster, paintPosition, resolved, paintMode);
   }
 
   /** Visits only the conservative transformed bounds using scalar inverse math. */
@@ -221,6 +224,7 @@ export class ImageBrush implements Brush {
     raster: Raster,
     position: WorldPoint,
     resolved: ResolvedBrushParameters,
+    paintMode: PaintMode,
   ): void {
     const longestSourceSide = Math.max(this.image.width, this.image.height);
     const scale = resolved.size / longestSourceSide;
@@ -280,19 +284,20 @@ export class ImageBrush implements Brush {
           this.internalColor.a * resolved.opacity * coverage,
         );
 
-        if (effectiveAlpha === 0) {
+        if (paintMode === "paint" && effectiveAlpha === 0) {
           continue;
         }
-
-        blendRasterPixelSourceOver(
+        writeRasterStampPixel(
           raster,
           pixelX,
           pixelY,
+          paintMode,
           this.internalColor.r,
           this.internalColor.g,
           this.internalColor.b,
           effectiveAlpha,
           effectiveAlpha / 255,
+          resolved.opacity * coverage,
         );
       }
     }

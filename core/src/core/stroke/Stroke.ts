@@ -1,4 +1,5 @@
 import type { Brush } from "../../interfaces/brush/Brush.js";
+import type { PaintMode } from "../../interfaces/paint/PaintMode.js";
 import type { StampCommand } from "../../interfaces/stroke/StampCommand.js";
 import type { StrokeConfig } from "../../interfaces/stroke/StrokeConfig.js";
 import type { StrokeSample } from "../../interfaces/stroke/StrokeSample.js";
@@ -17,6 +18,7 @@ import {
 import { isUnitInterval } from "../../utils/number/math/IsUnitInterval.js";
 import { assertUint32 } from "../../utils/number/math/AssertUint32.js";
 import { deriveStrokeSeed } from "../../utils/random/DeriveStrokeSeed.js";
+import { resolvePaintMode } from "../paint/ResolvePaintMode.js";
 import { advanceStampPlacement } from "./AdvanceStampPlacement.js";
 import { copyStrokeSample } from "./CopyStrokeSample.js";
 import { deriveStampDirection } from "./DeriveStampDirection.js";
@@ -46,6 +48,9 @@ const DEFAULT_RESAMPLE_DISTANCE = 1;
 export class Stroke {
   /** Brush whose fixed metrics place stamps and whose behavior consumers execute. */
   readonly brush: Brush;
+
+  /** Operation captured by every stamp command emitted from this Stroke. */
+  readonly paintMode: PaintMode;
 
   /** Final serializable uint32 seed, restorable independently of stroke sequence. */
   readonly strokeSeed: number;
@@ -174,6 +179,7 @@ export class Stroke {
       this.strokeSeed = config.strokeSeed >>> 0;
     }
     this.brush = config.brush;
+    this.paintMode = resolvePaintMode(config.paintMode);
     this.smoothing = smoothing;
     this.resampler = new StrokeResampler(resampleDistance);
     this.nextStampDistance = stampDistance;
@@ -282,6 +288,7 @@ export class Stroke {
 
     const command: StampCommand = {
       position: { ...sample.position },
+      ...(this.paintMode === "paint" ? {} : { paintMode: this.paintMode }),
       strokeSeed: this.strokeSeed,
       stampIndex: this.nextStampIndex,
       timestamp: sample.timestamp,

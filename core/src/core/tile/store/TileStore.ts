@@ -131,6 +131,16 @@ export class TileStore {
   }
 
   /**
+   * Reads a tile for trusted, already validated integer coordinates.
+   * @param x - Safe-integer horizontal tile coordinate.
+   * @param y - Safe-integer vertical tile coordinate.
+   * @returns The stored tile, or `undefined` when none exists.
+   */
+  getTrusted(x: number, y: number): Tile | undefined {
+    return this.tiles.get(`${x}:${y}`);
+  }
+
+  /**
    * Tests whether a tile has been allocated at a coordinate without creating it.
    *
    * @param coord - Safe-integer coordinate in the tile grid.

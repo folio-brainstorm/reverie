@@ -1,5 +1,5 @@
 import { Camera, CircleBrush, World } from "@reverie/core";
-import type { Brush, RasterLayer, WorldBounds } from "@reverie/core";
+import type { Brush, PaintMode, RasterLayer, WorldBounds } from "@reverie/core";
 import type { ExportRegion } from "@reverie/exporter";
 import { CanvasRenderer } from "@reverie/renderer";
 
@@ -49,6 +49,11 @@ export class ReverieCanvas {
     return this.session.brush;
   }
 
+  /** Returns the operation that will be captured by the next Stroke. */
+  get paintMode(): PaintMode {
+    return this.session.paintMode;
+  }
+
   /**
    * Creates and attaches a complete fixed or infinite canvas runtime.
    *
@@ -81,6 +86,9 @@ export class ReverieCanvas {
       camera: this.camera,
       renderer: this.renderer,
       brush: config.brush ?? ReverieCanvas.createDefaultBrush(),
+      ...(config.paintMode === undefined
+        ? {}
+        : { paintMode: config.paintMode }),
       ...(config.strokeSequence === undefined
         ? {}
         : { strokeSequence: config.strokeSequence }),
@@ -116,6 +124,16 @@ export class ReverieCanvas {
   setBrush(brush: Brush): void {
     this.assertUsable();
     this.session.setBrush(brush);
+  }
+
+  /**
+   * Replaces the operation captured by future strokes on the active layer.
+   * @param paintMode - Supported operation to capture for the next stroke.
+   * @throws {WebError} This facade has been disposed.
+   */
+  setPaintMode(paintMode: PaintMode): void {
+    this.assertUsable();
+    this.session.setPaintMode(paintMode);
   }
 
   /**

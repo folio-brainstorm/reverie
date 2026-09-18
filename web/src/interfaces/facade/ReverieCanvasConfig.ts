@@ -1,4 +1,4 @@
-import type { Brush } from "@reverie/core";
+import type { Brush, PaintMode } from "@reverie/core";
 
 /** Configuration for a complete browser drawing surface. */
 export interface ReverieCanvasConfig {
@@ -16,6 +16,9 @@ export interface ReverieCanvasConfig {
 
   /** Initial Brush; defaults to an opaque one-pixel black CircleBrush. */
   readonly brush?: Brush;
+
+  /** Initial operation captured by new strokes. Defaults to paint. */
+  readonly paintMode?: PaintMode;
 
   /** Initial uint32 stroke sequence for restoring the drawing session. Defaults to `0`. */
   readonly strokeSequence?: number;

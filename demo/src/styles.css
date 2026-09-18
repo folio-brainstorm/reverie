@@ -296,6 +296,20 @@ summary {
   border-radius: 7px;
 }
 
+.paint-mode-toggle {
+  flex-shrink: 0;
+}
+
+.paint-mode-toggle.is-active {
+  border-color: var(--accent);
+  color: #20100a;
+  background: var(--accent);
+}
+
+.paint-mode-toggle.is-active:hover {
+  background: #f4af7d;
+}
+
 .workspace-wordmark {
   margin: 0;
   font-size: 1.05rem;
