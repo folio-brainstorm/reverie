@@ -8,7 +8,13 @@ import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 import { CircleBrush, ImageBrush } from "@reverie/core";
-import type { Brush, BrushImage, RGBAColor, ScreenPoint } from "@reverie/core";
+import type {
+  Brush,
+  BrushImage,
+  RasterLayer,
+  RGBAColor,
+  ScreenPoint,
+} from "@reverie/core";
 import type { ExportFormat, ExportRegion } from "@reverie/exporter";
 import { ReverieCanvas } from "@reverie/web";
 import type { ReverieDownloadOptions } from "@reverie/web";
@@ -85,6 +91,8 @@ export function PaintingWorkspace({
   );
   const [drawingError, setDrawingError] = useState<string | null>(null);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
+  const [isLayersPanelOpen, setIsLayersPanelOpen] = useState(false);
+  const [, setLayersRevision] = useState(0);
 
   const hideBrushIndicator = (): void => {
     brushIndicatorRef.current?.setAttribute("visibility", "hidden");
@@ -268,6 +276,85 @@ export function PaintingWorkspace({
     reverieRef.current?.clear();
     setDrawingError(null);
     setExportStatus(null);
+  };
+
+  const refreshLayers = (): void => {
+    setLayersRevision((revision) => revision + 1);
+    reverieRef.current?.render();
+  };
+
+  const handleAddLayer = (): void => {
+    const reverie = reverieRef.current;
+    if (reverie === null) return;
+    try {
+      const layer = reverie.world.addLayer();
+      try {
+        reverie.setActiveLayer(layer);
+      } catch (error) {
+        reverie.world.removeLayer(layer);
+        throw error;
+      }
+      setDrawingError(null);
+      refreshLayers();
+    } catch (error) {
+      setDrawingError(formatDrawingError(error));
+    }
+  };
+
+  const handleSelectLayer = (layer: RasterLayer): void => {
+    const reverie = reverieRef.current;
+    if (reverie === null || reverie.activeLayer === layer) return;
+    try {
+      reverie.setActiveLayer(layer);
+      setDrawingError(null);
+      refreshLayers();
+    } catch (error) {
+      setDrawingError(formatDrawingError(error));
+    }
+  };
+
+  const handleMoveLayer = (layer: RasterLayer, direction: -1 | 1): void => {
+    const reverie = reverieRef.current;
+    if (reverie === null) return;
+    const index = reverie.world.layers.indexOf(layer);
+    const nextIndex = index + direction;
+    if (index < 0 || nextIndex < 0 || nextIndex >= reverie.world.layers.length)
+      return;
+    try {
+      reverie.world.moveLayer(layer, nextIndex);
+      setDrawingError(null);
+      refreshLayers();
+    } catch (error) {
+      setDrawingError(formatDrawingError(error));
+    }
+  };
+
+  const handleRemoveLayer = (layer: RasterLayer): void => {
+    const reverie = reverieRef.current;
+    if (reverie === null || reverie.world.layers.length <= 1) return;
+    try {
+      reverie.removeLayer(layer);
+      setDrawingError(null);
+      refreshLayers();
+    } catch (error) {
+      setDrawingError(formatDrawingError(error));
+    }
+  };
+
+  const handleLayerOpacityChange = (
+    layer: RasterLayer,
+    event: ChangeEvent<HTMLInputElement>,
+  ): void => {
+    layer.opacity = Number(event.currentTarget.value);
+    refreshLayers();
+  };
+
+  const handleLayerNameChange = (
+    layer: RasterLayer,
+    event: ChangeEvent<HTMLInputElement>,
+  ): void => {
+    layer.name = event.currentTarget.value;
+    setLayersRevision((revision) => revision + 1);
   };
 
   const exportPainting = (): void => {
@@ -567,6 +654,15 @@ export function PaintingWorkspace({
             </p>
           </div>
         </details>
+        <button
+          className={`layers-toggle${isLayersPanelOpen ? " is-active" : ""}`}
+          type="button"
+          aria-label="Toggle layers panel"
+          aria-pressed={isLayersPanelOpen}
+          onClick={() => setIsLayersPanelOpen((isOpen) => !isOpen)}
+        >
+          Layers
+        </button>
         <div className="canvas-metrics" aria-label="Canvas data">
           <span>
             <small>Canvas</small>
@@ -616,6 +712,117 @@ export function PaintingWorkspace({
           />
         </label>
       </aside>
+
+      {isLayersPanelOpen && (
+        <aside className="layers-panel" aria-label="Layers">
+          <div className="layers-panel-header">
+            <div>
+              <p className="layers-eyebrow">Composition</p>
+              <h2>Layers</h2>
+            </div>
+            <button
+              className="layers-add-button"
+              type="button"
+              onClick={handleAddLayer}
+            >
+              + Add
+            </button>
+          </div>
+          <div className="layers-list">
+            {[
+              ...((reverieRef.current?.world.layers ??
+                []) as readonly RasterLayer[]),
+            ]
+              .reverse()
+              .map((layer) => {
+                const index =
+                  reverieRef.current?.world.layers.indexOf(layer) ?? -1;
+                const isActive = reverieRef.current?.activeLayer === layer;
+                const isTop =
+                  index === (reverieRef.current?.world.layers.length ?? 0) - 1;
+                const isBottom = index === 0;
+                return (
+                  <div
+                    className={`layer-item${isActive ? " is-active" : ""}`}
+                    key={index}
+                  >
+                    <button
+                      className="layer-select-button"
+                      type="button"
+                      aria-label={`Select ${layer.name}`}
+                      onClick={() => handleSelectLayer(layer)}
+                    >
+                      <span className="layer-visibility-mark">
+                        {layer.visible ? "●" : "○"}
+                      </span>
+                      <span className="layer-name">{layer.name}</span>
+                    </button>
+                    <input
+                      className="layer-name-input"
+                      aria-label={`Rename ${layer.name}`}
+                      value={layer.name}
+                      onChange={(event) => handleLayerNameChange(layer, event)}
+                    />
+                    <label className="layer-opacity-control">
+                      <span>Opacity</span>
+                      <output>{Math.round(layer.opacity * 100)}%</output>
+                      <input
+                        aria-label={`${layer.name} opacity`}
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.01"
+                        value={layer.opacity}
+                        onChange={(event) =>
+                          handleLayerOpacityChange(layer, event)
+                        }
+                      />
+                    </label>
+                    <div className="layer-actions">
+                      <button
+                        type="button"
+                        aria-label={`${layer.visible ? "Hide" : "Show"} ${layer.name}`}
+                        aria-pressed={layer.visible}
+                        onClick={() => {
+                          layer.visible = !layer.visible;
+                          refreshLayers();
+                        }}
+                      >
+                        {layer.visible ? "Hide" : "Show"}
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Move ${layer.name} up`}
+                        disabled={isTop}
+                        onClick={() => handleMoveLayer(layer, 1)}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Move ${layer.name} down`}
+                        disabled={isBottom}
+                        onClick={() => handleMoveLayer(layer, -1)}
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Delete ${layer.name}`}
+                        disabled={
+                          (reverieRef.current?.world.layers.length ?? 0) <= 1
+                        }
+                        onClick={() => handleRemoveLayer(layer)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </aside>
+      )}
 
       <div
         className={`workspace-status${drawingError !== null ? " has-error" : ""}`}
