@@ -280,6 +280,77 @@ renderer.resize(800, 600);
 renderer.render();
 ```
 
+## World 图层合成
+
+`World` 自动创建一个空的 `Layer 1`，并始终保留至少一个图层。`layers`
+是不可修改的集合快照，按底层到顶层排列；通过 World API 修改成员和顺序：
+
+```ts
+import { World } from "@reverie/core";
+
+const world = new World({ tileSize: 256 });
+const background = world.getLayer(0);
+const sketch = world.addLayer();
+sketch.name = "Sketch";
+sketch.opacity = 0.5;
+sketch.visible = true;
+world.moveLayer(sketch, 0);
+world.removeLayer(sketch); // 保留 Raster 内容；最后一个图层不可删除
+```
+
+所有图层共享 World 坐标，只支持 Normal / Source Over。图层透明度在
+合成时乘以像素 alpha，不修改原始 Raster。隐藏层和零透明度层不参与合成，
+空层及缺失 Tile 是透明的；有限 World 的合成结果裁剪到 `world.bounds`。
+
+`createRasterLayer()` 保持原行为，仅创建未注册的空层；`addLayer(layer)`
+或 `insertLayer(index, layer)` 才将其加入文档。插入位置支持 `0..layers.length`，
+移动位置是移动后的最终索引 `0..layers.length - 1`。图层与 Raster 不可重复
+注册，跨 World 转移前需移除原归属，且 Tile 大小及绘制边界必须匹配。
+自动编号只应用于 `hasAssignedName === false` 的图层；明确设置为 `"Layer"`
+或空字符串的名称也会保留。索引和最终层删除失败使用 `ReverieRangeError`，
+类型/几何不兼容使用 `ReverieTypeError`，归属、缺失引用及重入使用 `ReverieError`；
+原有 `EC_WORLD_*` 编号保持不变。
+默认控制台诊断仅在 DEBUG 构建启用；Release 不自动输出诊断，但仍遵守显式
+`WorldConfig.reporter` 或运行时默认 reporter。内部解析配置允许 reporter 缺省。
+
+```ts
+const renderer = new CanvasRenderer({ canvas, world, camera });
+renderer.render();
+const image = new ExportRenderer({ world }).render({
+  x: -100,
+  y: -100,
+  width: 200,
+  height: 200,
+});
+```
+
+两个 Renderer 都接受且只接受一个 `raster` 或 `world` 来源，低层 Raster
+入口仍独立工作。World 模式的 `.world` 是文档引用，`.raster` 为 `undefined`；
+Raster 模式相反。屏幕渲染使用 Canvas Source Over 和 `globalAlpha`，导出
+输出 straight-alpha RGBA8；运行时舍入可能产生细微通道差异。Tile 上传缓存
+按 Raster 身份隔离，调整顺序、显隐或透明度不重新上传未变更的像素。
+来源在构造时捕获，之后修改原配置不会重新绑定来源，也不会冻结调用方的配置。
+`@reverie/core/renderer` 提供 `RenderSource` / `RenderSourceSnapshot`、
+`resolveRenderSource(config, createInvalidSourceError)` 和
+`intersectRenderRegion(region, bounds)`：前者校验独占来源并创建固定快照，
+后者对已验证的连续/整数区域执行半开区间相交，无交集时返回 `null`。
+
+`ReverieCanvas.setActiveLayer(layerOrIndex)` 只改变后续绘制目标；渲染及下载
+仍使用完整 World。`clear()` 保持只清空活动层的行为。删除活动层时优先选择
+下方邻层，没有下方层时选择上方层；直接调用 `world.removeLayer()` 也适用。
+活动笔画或尚未完成的调度工作会阻止切换和删除活动层，返回 `EC_WEB_0021`，
+但允许删除非活动层。底层 `CanvasDrawingSession.setLayer(layer)` 使用相同
+忙碌检查。`World.observeLayerRemoval()` 为保留图层引用的外部消费者提供
+移除前校验和移除后通知，不把编辑选择存入文档；回调不能更改集合成员或排序，
+移除后回调不得抛错，返回的函数用于取消订阅。`afterRemovalAttempt()` 无论
+移除成功或校验失败都会执行，必须不抛错，用于释放临时预留。
+`CanvasDrawingSession.observeLayerRemoval(world, onLayerChange)` 为单个文档
+绑定相同的校验/目标修复流程，返回取消订阅函数；`onLayerChange` 必须不抛错。
+移除回调期间拒绝目标切换（`EC_WEB_0023`）并忽略新笔画输入；移除后的赋值
+不会重新校验生命周期。已销毁 Session 的目标切换返回 `EC_WEB_0022`。
+Facade 与 Session 在清理前即关闭；即使笔画结束回调抛错，也会尝试释放全部
+自有资源并传播异常，多处清理失败通过 `AggregateError` 保留各个原因。
+
 ## Drawing Scheduler
 
 `@reverie/web` 的 `DrawingScheduler` 将 `StampCommand` 包装为可执行的
@@ -401,7 +472,7 @@ await reverie.download({
 });
 ```
 
-`download()` 只导出当前 `activeLayer`，不做多图层合成；导出过程只读取 Raster，不会修改像素、Camera、Brush 或 Scheduler。PNG 支持 `compressionLevel`（`0..9`，默认 `6`）。JPEG 需要全局 `Buffer`，`download()` 会自动安装对应的 shim，因此浏览器环境无需手动调用；只有直接使用 `JPEGEncoder` 时才需要先调用一次 `JPEGEncoder.installJpegJsBufferShim()`。
+`download()` 导出完整 World 合成，遵守图层顺序、显隐和透明度，与 `activeLayer` 选择无关；导出过程只读取 Raster，不会修改像素、Camera、Brush 或 Scheduler。PNG 支持 `compressionLevel`（`0..9`，默认 `6`）。JPEG 需要全局 `Buffer`，`download()` 会自动安装对应的 shim，因此浏览器环境无需手动调用；只有直接使用 `JPEGEncoder` 时才需要先调用一次 `JPEGEncoder.installJpegJsBufferShim()`。
 
 `demo` 中的 “Export PNG / JPEG / WebP” 按钮通过 `ReverieCanvas.download()` 直接下载导出结果。
 

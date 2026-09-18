@@ -78,6 +78,7 @@ export type {
 } from "./src/interfaces/diagnostic/Diagnostic.js";
 export type { WorldConfig } from "./src/interfaces/world/World.js";
 export type { WorldBounds } from "./src/interfaces/world/WorldBounds.js";
+export type { LayerRemovalObserver } from "./src/interfaces/world/LayerRemovalObserver.js";
 export type { RasterConfig } from "./src/interfaces/raster/Raster.js";
 export type { RGBAColor } from "./src/interfaces/color/Colors.js";
 export type { LocalPixelCoord } from "./src/interfaces/pixel/LocalPixelCoord.js";

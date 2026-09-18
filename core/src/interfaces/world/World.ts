@@ -21,6 +21,6 @@ export interface WorldConfig {
    */
   bounds?: WorldBounds | null;
 
-  /** Receives non-fatal diagnostics. Defaults to the console reporter. */
+  /** Receives non-fatal diagnostics. Defaults to console reporting only in DEBUG builds. */
   reporter?: DiagnosticReporter;
 }

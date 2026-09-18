@@ -49,7 +49,7 @@ export function reportDiagnostic<const Template extends string>(
   reporter(createDiagnostic(definition, ...values));
 }
 
-//#if DEBUG
+// #if DEBUG
 /**
  * Default reporter for debug
  */
@@ -62,4 +62,4 @@ export const consoleDiagnosticReporter: DiagnosticReporter = (diagnostic) => {
     console.info(output);
   }
 };
-//#endif
+// #endif

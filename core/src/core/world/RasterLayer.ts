@@ -4,10 +4,50 @@ import type { StampCommand } from "../../interfaces/stroke/StampCommand.js";
 import type { WorldBounds } from "../../interfaces/world/WorldBounds.js";
 
 import { RasterPaintTarget } from "../../internal/paint-target/RasterPaintTarget.js";
+import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
+import { ReverieRangeError } from "../../utils/errors/ReverieErrors.js";
 import { Raster } from "../raster/Raster.js";
 
 /** Owns an unbounded Raster and applies its World's bounds while painting. */
 export class RasterLayer {
+  /** Descriptive metadata, independent of rendering. */
+  private assignedName: string | undefined;
+
+  /** Returns descriptive metadata, or the detached unnamed default. */
+  get name(): string {
+    return this.assignedName ?? "Layer";
+  }
+
+  /** Assigns a name explicitly, including the literal default or an empty name. */
+  set name(value: string) {
+    this.assignedName = value;
+  }
+
+  /** Whether a caller or World has assigned a name, independent of its text. */
+  get hasAssignedName(): boolean {
+    return this.assignedName !== undefined;
+  }
+  /** Whether this layer participates in composition. */
+  visible: boolean = true;
+  private currentOpacity = 1;
+
+  /** Non-destructive composition opacity in the inclusive range [0, 1]. */
+  get opacity(): number {
+    return this.currentOpacity;
+  }
+
+  /**
+   * Changes composition opacity without rewriting Raster pixels.
+   * @throws {ReverieRangeError} The value is not finite or lies outside [0, 1].
+   */
+  set opacity(value: number) {
+    if (!Number.isFinite(value) || value < 0 || value > 1) {
+      throw ReverieRangeError.from(
+        ErrorDefinitions.WORLD.INVALID_LAYER_OPACITY,
+      );
+    }
+    this.currentOpacity = value;
+  }
   /** Sparse pixel storage owned by this layer. */
   readonly raster: Raster;
 

@@ -2,6 +2,10 @@ import type { ErrorDefinition } from "@reverie/core";
 
 /** Exporter-owned message templates paired with stable Exporter error codes. */
 export const ExporterErrorDefinitions = {
+  INVALID_RENDER_SOURCE: {
+    code: "EC_EXPORTER_0018",
+    template: "Supply exactly one export source: Raster or World.",
+  },
   INVALID_REGION_FIELD_TYPE: {
     code: "EC_EXPORTER_0001",
     template:

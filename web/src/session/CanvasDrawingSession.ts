@@ -1,5 +1,5 @@
 import { Stroke } from "@reverie/core";
-import type { Brush, Camera, Raster, RasterLayer } from "@reverie/core";
+import type { Brush, Camera, Raster, RasterLayer, World } from "@reverie/core";
 import type { CanvasRenderer } from "@reverie/renderer";
 
 import { WebErrorDefinitions } from "../errors/WebErrorDefinitions.js";
@@ -21,13 +21,23 @@ export class CanvasDrawingSession {
   readonly canvas: HTMLCanvasElement;
 
   /** Raster receiving every command produced by this Session. */
-  readonly raster: Raster;
+  private currentRaster: Raster;
+
+  /** Storage receiving newly scheduled commands. */
+  get raster(): Raster {
+    return this.currentRaster;
+  }
 
   /** Camera converting CSS-pixel input into continuous world positions. */
   readonly camera: Camera;
 
   /** Optional bounded layer used to execute stamps into {@link raster}. */
-  readonly layer: RasterLayer | undefined;
+  private currentLayer: RasterLayer | undefined;
+
+  /** Bounded layer receiving newly scheduled commands, if configured. */
+  get layer(): RasterLayer | undefined {
+    return this.currentLayer;
+  }
 
   /** Externally owned renderer used for sizing and presentation. */
   readonly renderer: CanvasRenderer;
@@ -47,6 +57,7 @@ export class CanvasDrawingSession {
   private runtimeWindow: Window | null = null;
   private isAttached = false;
   private isDisposed = false;
+  private isLayerRemovalPending = false;
 
   /** Processes pointer-down failures through the Session error boundary. */
   private readonly handlePointerDown = (event: PointerEvent): void => {
@@ -122,9 +133,9 @@ export class CanvasDrawingSession {
     }
 
     this.canvas = config.canvas;
-    this.raster = config.raster;
+    this.currentRaster = config.raster;
     this.camera = config.camera;
-    this.layer = config.layer;
+    this.currentLayer = config.layer;
     this.renderer = config.renderer;
     this.currentBrush = config.brush;
     this.maxDevicePixelRatio = maxDevicePixelRatio;
@@ -156,6 +167,73 @@ export class CanvasDrawingSession {
   }
 
   /**
+   * Rejects editing-target changes until pointer input and queued work finish.
+   * @throws {WebError} The session is disposed, painting, executing work, or in a removal callback.
+   */
+  assertCanChangeLayer(): void {
+    if (this.isDisposed) {
+      throw WebError.from(WebErrorDefinitions.LAYER_CHANGE_WHILE_DISPOSED);
+    }
+    if (this.isLayerRemovalPending) {
+      throw WebError.from(WebErrorDefinitions.LAYER_CHANGE_DURING_REMOVAL);
+    }
+    if (this.isPainting || !this.scheduler.idle) {
+      throw WebError.from(WebErrorDefinitions.LAYER_CHANGE_WHILE_BUSY);
+    }
+  }
+
+  /**
+   * Selects the bounded Raster target for subsequent strokes.
+   * @param layer - Layer captured by commands accepted after the change.
+   * @throws {WebError} Drawing or queued work has not finished, the session is
+   * disposed, or a removal callback is in progress.
+   */
+  setLayer(layer: RasterLayer): void {
+    this.assertCanChangeLayer();
+    this.assignLayer(layer);
+  }
+
+  /**
+   * Reserves this Session's selection while a World removes a layer and repairs
+   * the target through an infallible assignment after successful removal.
+   * Bind this Session to only one document at a time.
+   * @param world - Document whose removals should preserve this Session's target.
+   * @param onLayerChange - Non-throwing callback synchronizing the owner's selection.
+   * @returns An idempotent unsubscribe function owned by the caller.
+   */
+  observeLayerRemoval(
+    world: World,
+    onLayerChange: (layer: RasterLayer) => void,
+  ): () => void {
+    return world.observeLayerRemoval({
+      beforeRemove: (layer) => {
+        if (layer === this.currentLayer) {
+          this.assertCanChangeLayer();
+        }
+        this.isLayerRemovalPending = true;
+      },
+      afterRemove: (layer, index) => {
+        if (layer === this.currentLayer) {
+          const replacement = world.getLayer(Math.max(0, index - 1));
+          // Validation happened before mutation. Disposal in another observer
+          // must not make this committed document change fail afterward.
+          this.assignLayer(replacement);
+          onLayerChange(replacement);
+        }
+      },
+      afterRemovalAttempt: () => {
+        this.isLayerRemovalPending = false;
+      },
+    });
+  }
+
+  /** Updates both target references without calling fallible lifecycle guards. */
+  private assignLayer(layer: RasterLayer): void {
+    this.currentLayer = layer;
+    this.currentRaster = layer.raster;
+  }
+
+  /**
    * Registers browser input and resize resources and renders the initial frame.
    *
    * Repeated calls while attached are no-ops.
@@ -164,12 +242,12 @@ export class CanvasDrawingSession {
    * and no `onError` callback handles the failure.
    */
   attach(): void {
-    if (this.isAttached) {
-      return;
-    }
-
     if (this.isDisposed) {
       throw WebError.from(WebErrorDefinitions.SESSION_DISPOSED);
+    }
+
+    if (this.isAttached) {
+      return;
     }
 
     try {
@@ -196,21 +274,44 @@ export class CanvasDrawingSession {
    * Removes browser resources, ends active input, and closes owned scheduling.
    *
    * Repeated calls are safe. Injected schedulers and all model dependencies
-   * remain externally owned and are not disposed.
+   * remain externally owned and are not disposed. The Session is closed before
+   * fallible teardown, and every teardown stage is attempted.
+   * @throws A single teardown failure unchanged, or `AggregateError` preserving
+   * multiple failures from user callbacks and runtime resource cleanup.
    */
   dispose(): void {
     if (this.isDisposed) {
       return;
     }
 
-    this.finishActiveStroke(true);
-    this.removeRuntimeResources();
-
-    if (this.ownsScheduler) {
-      this.scheduler.dispose();
-    }
-
     this.isDisposed = true;
+    // Attempt every teardown even when user callbacks or an injected runtime
+    // throw. Preserve a single original failure; aggregate simultaneous failures.
+    const failures: unknown[] = [];
+    for (const teardown of [
+      () => this.finishActiveStroke(true),
+      () => this.removeRuntimeResources(),
+      () => {
+        if (this.ownsScheduler) {
+          this.scheduler.dispose();
+        }
+      },
+    ]) {
+      try {
+        teardown();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length === 1) {
+      throw failures[0];
+    }
+    if (failures.length > 1) {
+      throw new AggregateError(
+        failures,
+        "CanvasDrawingSession teardown failed.",
+      );
+    }
   }
 
   /** Registers all listener identities owned by this Session. */
@@ -245,7 +346,12 @@ export class CanvasDrawingSession {
 
   /** Starts one primary-button Stroke and captures its initiating pointer. */
   private beginStroke(event: PointerEvent): void {
-    if (event.button !== 0 || this.activePointerId !== null) {
+    if (
+      this.isDisposed ||
+      this.isLayerRemovalPending ||
+      event.button !== 0 ||
+      this.activePointerId !== null
+    ) {
       return;
     }
 
@@ -375,6 +481,9 @@ export class CanvasDrawingSession {
 
   /** Runs one DOM callback without coupling failures to a UI framework. */
   private runSafely(operation: () => void): void {
+    if (this.isDisposed) {
+      return;
+    }
     try {
       operation();
     } catch (error) {

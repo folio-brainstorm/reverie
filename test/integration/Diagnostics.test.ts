@@ -25,10 +25,12 @@ import { World } from "../../core/src/core/world/World";
 import { ReverieRangeError } from "../../core/src/utils/errors/ReverieErrors";
 import { DiagnosticDefinitions } from "../../core/src/utils/diagnostic/DiagnosticDefinitions";
 import {
-  consoleDiagnosticReporter,
   createDiagnostic,
   reportDiagnostic,
 } from "../../core/src/utils/diagnostic/Diagnostics";
+// #if DEBUG
+import { consoleDiagnosticReporter } from "../../core/src/utils/diagnostic/Diagnostics";
+// #endif
 
 const originalDefaultTileSize = defaultWorldConfig.tileSize;
 const originalDefaultReporter = defaultWorldConfig.reporter;
@@ -75,6 +77,7 @@ describe("diagnostic definitions", () => {
     });
   });
 
+  // #if DEBUG
   it("routes warning and info diagnostics to the matching console methods", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
@@ -86,6 +89,7 @@ describe("diagnostic definitions", () => {
     expect(warn).toHaveBeenCalledWith("[DC_WORLD_0001] warning");
     expect(info).toHaveBeenCalledWith("[DC_WORLD_0001] info");
   });
+  // #endif
 
   if (false) {
     const severity: DiagnosticSeverity = "warning";
@@ -123,15 +127,19 @@ describe("World diagnostics", () => {
     });
   });
 
-  it("uses the default console reporter", () => {
+  it("uses default console reporting only in DEBUG builds", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     defaultWorldConfig.tileSize = 0;
 
     new World();
 
+    // #if DEBUG
     expect(warn).toHaveBeenCalledWith(
       "[DC_WORLD_0001] Default world tile size `0` is invalid. Falling back to `256`.",
     );
+    // #else
+    expect(warn).not.toHaveBeenCalled();
+    // #endif
   });
 
   it("throws for an explicitly invalid tile size without reporting", () => {

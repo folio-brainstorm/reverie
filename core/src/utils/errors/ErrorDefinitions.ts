@@ -187,6 +187,37 @@ export const ErrorDefinitions = {
     },
   },
   WORLD: {
+    INVALID_LAYER_OPACITY: {
+      code: "EC_WORLD_0002",
+      template: "Layer opacity must be a finite number between 0 and 1.",
+    },
+    INVALID_LAYER_INDEX: {
+      code: "EC_WORLD_0003",
+      template:
+        "Layer index must be a safe integer within the document layer range.",
+    },
+    LAYER_NOT_FOUND: {
+      code: "EC_WORLD_0004",
+      template: "The supplied layer does not belong to this World.",
+    },
+    LAST_LAYER_REMOVAL: {
+      code: "EC_WORLD_0005",
+      template: "The last remaining layer cannot be removed.",
+    },
+    DUPLICATE_LAYER_OWNERSHIP: {
+      code: "EC_WORLD_0006",
+      template: "This layer or its Raster is already registered in a World.",
+    },
+    INCOMPATIBLE_LAYER: {
+      code: "EC_WORLD_0007",
+      template:
+        "Layer tile size and paint bounds must match the destination World.",
+    },
+    REENTRANT_LAYER_CHANGE: {
+      code: "EC_WORLD_0008",
+      template:
+        "Cannot change layer membership or order from a layer removal callback.",
+    },
     INVALID_BOUNDS: {
       code: "EC_WORLD_0001",
       template:

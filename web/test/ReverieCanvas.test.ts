@@ -47,7 +47,8 @@ describe("ReverieCanvas construction", () => {
     });
     expect(reverie.activeLayer.bounds).toEqual(reverie.world.bounds);
     expect(reverie.activeLayer.raster.tileSize).toBe(128);
-    expect(reverie.renderer.raster).toBe(reverie.activeLayer.raster);
+    expect(reverie.renderer.world).toBe(reverie.world);
+    expect(reverie.world.layers).toEqual([reverie.activeLayer]);
     expect(reverie.session.raster).toBe(reverie.activeLayer.raster);
     expect(runtime.canvas.listenerCount).toBeGreaterThan(0);
     expect(runtime.observer?.observedTarget).toBe(runtime.canvas);
@@ -824,6 +825,339 @@ describe("ReverieCanvas export and download", () => {
   });
 });
 
+describe("ReverieCanvas active-layer editing", () => {
+  it("commits removal selection even when another before observer disposes the session", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+    const removed = reverie.activeLayer;
+    const replacement = reverie.world.addLayer();
+    reverie.world.observeLayerRemoval({
+      beforeRemove: () => reverie.session.dispose(),
+    });
+    expect(() => reverie.world.removeLayer(removed)).not.toThrow();
+    expect(reverie.activeLayer).toBe(replacement);
+    expect(reverie.session.layer).toBe(replacement);
+    expect(reverie.session.raster).toBe(replacement.raster);
+    expect(() => reverie.session.setLayer(replacement)).toThrow("EC_WEB_0022");
+    reverie.dispose();
+  });
+
+  it("blocks target changes and new strokes inside removal callbacks", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+    const removed = reverie.activeLayer;
+    const replacement = reverie.world.addLayer();
+    reverie.world.observeLayerRemoval({
+      beforeRemove: () => {
+        expect(() => reverie.setActiveLayer(replacement)).toThrow(
+          "EC_WEB_0023",
+        );
+        runtime.canvas.dispatchPointer("pointerdown", {
+          button: 0,
+          pointerId: 1,
+          clientX: 0,
+          clientY: 0,
+          timeStamp: 0,
+        });
+        expect(reverie.session.isPainting).toBe(false);
+      },
+    });
+    reverie.world.removeLayer(removed);
+    expect(reverie.activeLayer).toBe(replacement);
+    expect(reverie.session.nextStrokeSequence).toBe(0);
+    reverie.dispose();
+  });
+
+  it("releases target reservations when a later observer rejects removal", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+    const active = reverie.activeLayer;
+    const other = reverie.world.addLayer();
+    const stop = reverie.world.observeLayerRemoval({
+      beforeRemove: () => {
+        throw new Error("rejected");
+      },
+    });
+    expect(() => reverie.world.removeLayer(active)).toThrow("rejected");
+    expect(reverie.session.layer).toBe(active);
+    expect(() => reverie.setActiveLayer(other)).not.toThrow();
+    stop();
+    reverie.dispose();
+  });
+
+  it("permanently closes and releases resources when the stroke-end callback throws", () => {
+    const runtime = createCanvasRuntime();
+    const failure = new Error("stroke-end failure");
+    const reverie = new ReverieCanvas({
+      canvas: runtime.canvas,
+      onStrokeEnd: () => {
+        throw failure;
+      },
+    });
+    const active = reverie.activeLayer;
+    const replacement = reverie.world.addLayer();
+    runtime.canvas.dispatchPointer("pointerdown", {
+      button: 0,
+      pointerId: 1,
+      clientX: 0,
+      clientY: 0,
+      timeStamp: 0,
+    });
+    expect(() => reverie.dispose()).toThrow(failure);
+    expect(runtime.canvas.listenerCount).toBe(0);
+    expect(runtime.observer?.hasDisconnected).toBe(true);
+    expect(() => reverie.dispose()).not.toThrow();
+    expect(() => reverie.setActiveLayer(replacement)).toThrow("EC_WEB_0012");
+    expect(() => reverie.session.setLayer(replacement)).toThrow("EC_WEB_0022");
+    expect(() => reverie.world.removeLayer(active)).not.toThrow();
+    expect(reverie.activeLayer).toBe(active);
+    expect(() => runtime.runNextFrame()).toThrow(
+      "No animation frame is pending.",
+    );
+    expect(active.raster.getPixel({ x: 0, y: 0 }).a).toBe(0);
+  });
+
+  it("preserves simultaneous stroke-end and scheduler teardown failures", () => {
+    const runtime = createCanvasRuntime();
+    const strokeFailure = new Error("stroke-end failure");
+    const schedulerFailure = new Error("cancel failure");
+    const reverie = new ReverieCanvas({
+      canvas: runtime.canvas,
+      onStrokeEnd: () => {
+        throw strokeFailure;
+      },
+    });
+    const active = reverie.activeLayer;
+    reverie.world.addLayer();
+    runtime.canvas.dispatchPointer("pointerdown", {
+      button: 0,
+      pointerId: 1,
+      clientX: 0,
+      clientY: 0,
+      timeStamp: 0,
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => {
+      throw schedulerFailure;
+    });
+    let failure: unknown;
+    try {
+      reverie.dispose();
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(AggregateError);
+    if (!(failure instanceof AggregateError)) {
+      throw new Error("Expected all teardown failures to be preserved.");
+    }
+    expect(failure.errors).toEqual([strokeFailure, schedulerFailure]);
+    expect(runtime.canvas.listenerCount).toBe(0);
+    expect(runtime.observer?.hasDisconnected).toBe(true);
+    expect(() => reverie.world.removeLayer(active)).not.toThrow();
+    expect(() => reverie.dispose()).not.toThrow();
+    runtime.runNextFrame();
+    expect(active.raster.getPixel({ x: 0, y: 0 }).a).toBe(0);
+  });
+
+  it("switches the editing target without altering document order or composition", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({
+      canvas: runtime.canvas,
+      width: 8,
+      height: 8,
+      tileSize: 2,
+    });
+    const bottom = reverie.activeLayer;
+    bottom.raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    const top = reverie.world.addLayer();
+    const before = new ExportRenderer({ world: reverie.world }).render({
+      x: 0,
+      y: 0,
+      width: 1,
+      height: 1,
+    });
+    const layers = reverie.world.layers;
+    reverie.setActiveLayer(top);
+    expect(reverie.activeLayer).toBe(top);
+    expect(reverie.session.layer).toBe(top);
+    expect(reverie.session.raster).toBe(top.raster);
+    expect(reverie.world.layers).toBe(layers);
+    expect(
+      new ExportRenderer({ world: reverie.world }).render({
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+      }),
+    ).toEqual(before);
+    runtime.canvas.dispatchPointer("pointerdown", {
+      button: 0,
+      pointerId: 1,
+      clientX: 0.5,
+      clientY: 0.5,
+      timeStamp: 0,
+    });
+    runtime.runNextFrame();
+    expect(top.raster.getPixel({ x: 0, y: 0 })).toEqual({
+      r: 0,
+      g: 0,
+      b: 0,
+      a: 255,
+    });
+    expect(bottom.raster.getPixel({ x: 0, y: 0 })).toEqual({
+      r: 255,
+      g: 0,
+      b: 0,
+      a: 255,
+    });
+    reverie.dispose();
+  });
+
+  it("rejects changes throughout a stroke and until queued stamps finish, including direct World removal", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+    const target = reverie.activeLayer;
+    const other = reverie.world.addLayer();
+    const pointer = {
+      button: 0,
+      pointerId: 1,
+      clientX: 0.5,
+      clientY: 0.5,
+      timeStamp: 0,
+    };
+    runtime.canvas.dispatchPointer("pointerdown", pointer);
+    const busyCode = WebErrorDefinitions.LAYER_CHANGE_WHILE_BUSY.code;
+    expect(() => reverie.setActiveLayer(other)).toThrow(busyCode);
+    expect(() => reverie.world.removeLayer(target)).toThrow(busyCode);
+    expect(() => reverie.removeLayer()).toThrow(busyCode);
+    runtime.canvas.dispatchPointer("pointerup", { ...pointer, timeStamp: 1 });
+    expect(reverie.session.isPainting).toBe(false);
+    expect(() => reverie.setActiveLayer(other)).toThrow(busyCode);
+    expect(() => reverie.world.removeLayer(target)).toThrow(busyCode);
+    expect(reverie.world.layers).toEqual([target, other]);
+    runtime.runNextFrame();
+    expect(target.raster.getPixel({ x: 0, y: 0 }).a).toBe(255);
+    expect(other.raster.getPixel({ x: 0, y: 0 }).a).toBe(0);
+    reverie.setActiveLayer(other);
+    expect(reverie.activeLayer).toBe(other);
+    reverie.dispose();
+  });
+
+  it("rejects switching even after queued work drains if the pointer is still down", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+    const other = reverie.world.addLayer();
+    runtime.canvas.dispatchPointer("pointerdown", {
+      button: 0,
+      pointerId: 1,
+      clientX: 0.5,
+      clientY: 0.5,
+      timeStamp: 0,
+    });
+    runtime.runNextFrame();
+    expect(() => reverie.setActiveLayer(other)).toThrow(
+      WebErrorDefinitions.LAYER_CHANGE_WHILE_BUSY.code,
+    );
+    reverie.dispose();
+  });
+
+  it("allows deleting a nonactive layer while painting without retargeting pending commands", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+    const active = reverie.activeLayer;
+    const other = reverie.world.addLayer();
+    runtime.canvas.dispatchPointer("pointerdown", {
+      button: 0,
+      pointerId: 1,
+      clientX: 0.5,
+      clientY: 0.5,
+      timeStamp: 0,
+    });
+    expect(reverie.world.removeLayer(other)).toBe(other);
+    expect(reverie.activeLayer).toBe(active);
+    runtime.runNextFrame();
+    expect(active.raster.getPixel({ x: 0, y: 0 }).a).toBe(255);
+    reverie.dispose();
+  });
+
+  it("selects the lower neighbor after direct removal, then the upper neighbor when at the bottom", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+    const bottom = reverie.activeLayer;
+    const middle = reverie.world.addLayer();
+    const top = reverie.world.addLayer();
+    reverie.setActiveLayer(middle);
+    reverie.world.removeLayer(middle);
+    expect(reverie.activeLayer).toBe(bottom);
+    expect(reverie.session.layer).toBe(bottom);
+    reverie.removeLayer(bottom);
+    expect(reverie.activeLayer).toBe(top);
+    expect(reverie.session.raster).toBe(top.raster);
+    expect(() => reverie.removeLayer(top)).toThrow("EC_WORLD_0005");
+    expect(reverie.activeLayer).toBe(top);
+    reverie.dispose();
+  });
+
+  it("keeps selection stable when reordered and clear affects only the active layer", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+    const bottom = reverie.activeLayer;
+    const top = reverie.world.addLayer();
+    for (const layer of reverie.world.layers) {
+      layer.raster.setPixel({ x: 0, y: 0 }, { r: 10, g: 20, b: 30, a: 255 });
+    }
+    reverie.world.moveLayer(bottom, 1);
+    expect(reverie.activeLayer).toBe(bottom);
+    reverie.clear();
+    expect(bottom.raster.getPixel({ x: 0, y: 0 }).a).toBe(0);
+    expect(top.raster.getPixel({ x: 0, y: 0 }).a).toBe(255);
+    reverie.dispose();
+  });
+
+  it("rejects invalid selection and detaches removal observers on disposal", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+    const active = reverie.activeLayer;
+    const other = reverie.world.addLayer();
+    expect(() => reverie.setActiveLayer(-1)).toThrow("EC_WORLD_0003");
+    expect(() => reverie.setActiveLayer(new World().getLayer(0))).toThrow(
+      "EC_WORLD_0004",
+    );
+    expect(reverie.activeLayer).toBe(active);
+    reverie.dispose();
+    expect(() => reverie.setActiveLayer(other)).toThrow(
+      WebErrorDefinitions.REVERIE_CANVAS_DISPOSED.code,
+    );
+    expect(() => reverie.removeLayer(other)).toThrow(
+      WebErrorDefinitions.REVERIE_CANVAS_DISPOSED.code,
+    );
+    expect(reverie.world.removeLayer(active)).toBe(active);
+  });
+
+  it("downloads the entire composition even when a different layer is active", async () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({
+      canvas: runtime.canvas,
+      width: 1,
+      height: 1,
+      tileSize: 2,
+    });
+    const bottom = reverie.activeLayer;
+    bottom.raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    const top = reverie.world.addLayer();
+    top.raster.setPixel({ x: 0, y: 0 }, { r: 0, g: 0, b: 255, a: 255 });
+    top.opacity = 0.5;
+    const encode = vi.spyOn(PNGEncoder.prototype, "encode");
+    await reverie.download({ format: "png" });
+    await flushScheduledTimers();
+    expect(encode.mock.calls[0]?.[0].pixels).toEqual(
+      new Uint8ClampedArray([128, 0, 128, 255]),
+    );
+    expect(reverie.activeLayer).toBe(bottom);
+    expect(top.raster.getPixel({ x: 0, y: 0 }).a).toBe(255);
+    reverie.dispose();
+  });
+});
+
 /** Minimal pointer data accepted by the Session's DOM handlers. */
 interface TestPointerEvent {
   readonly button: number;
@@ -1066,6 +1400,11 @@ function createCanvasRuntime(): TestCanvasRuntime {
 /** Creates only the 2D APIs exercised by CanvasRenderer in facade tests. */
 function createRenderingContext(): CanvasRenderingContext2D {
   return {
+    save(): void {},
+    restore(): void {},
+    beginPath(): void {},
+    rect(): void {},
+    clip(): void {},
     imageSmoothingEnabled: false,
     clearRect(): void {},
     drawImage(): void {},

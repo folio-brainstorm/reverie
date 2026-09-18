@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { Camera, Raster } from "@reverie/core";
+import { Camera, Raster, World } from "@reverie/core";
 import type { Renderer } from "@reverie/core/renderer";
 
 import {
@@ -8,12 +8,17 @@ import {
   RendererErrorDefinitions,
   RendererError,
   RendererTypeError,
-  RendererRangeError
+  RendererRangeError,
 } from "../index.js";
 import type { CanvasRendererConfig } from "../index.js";
 
 function createRenderingContext(): CanvasRenderingContext2D {
   return {
+    save: vi.fn(),
+    restore: vi.fn(),
+    beginPath: vi.fn(),
+    rect: vi.fn(),
+    clip: vi.fn(),
     clearRect: vi.fn(),
     createImageData: vi.fn((width: number, height: number) => ({
       colorSpace: "srgb",
@@ -59,6 +64,169 @@ function createCanvasFixture(width = 4, height = 4) {
   return { canvas, context, ownerDocument, tileCanvases, tileContexts };
 }
 
+describe("CanvasRenderer World composition", () => {
+  it("captures the source instead of following later config mutations", () => {
+    const { canvas, context } = createCanvasFixture(2, 2);
+    const world = new World({ tileSize: 2 });
+    world
+      .getLayer(0)
+      .raster.setPixel({ x: 0, y: 0 }, { r: 1, g: 2, b: 3, a: 255 });
+    const config = { canvas, camera: new Camera(), world };
+    const renderer = new CanvasRenderer(config);
+    config.world = new World();
+    renderer.render();
+    expect(renderer.world).toBe(world);
+    expect(context.drawImage).toHaveBeenCalledOnce();
+    expect(Object.isFrozen(config)).toBe(false);
+  });
+
+  it("resolves the viewport once regardless of contributing layer count", () => {
+    const { canvas } = createCanvasFixture(2, 2);
+    const world = new World({ tileSize: 2 });
+    world.addLayer();
+    world.addLayer();
+    const camera = new Camera();
+    const visible = vi.spyOn(camera, "visibleWorldRect");
+    new CanvasRenderer({ canvas, camera, world }).render();
+    expect(visible).toHaveBeenCalledOnce();
+  });
+
+  it("rejects missing or conflicting sources instead of silently falling back", () => {
+    const { canvas } = createCanvasFixture();
+    const camera = new Camera();
+    // @ts-expect-error JavaScript callers must also choose exactly one source.
+    expect(() => new CanvasRenderer({ canvas, camera })).toThrow(
+      "EC_RENDERER_0004",
+    );
+    expect(() => {
+      // @ts-expect-error Supplying both sources is intentionally invalid.
+      return new CanvasRenderer({
+        canvas,
+        camera,
+        raster: new Raster(),
+        world: new World(),
+      });
+    }).toThrow("EC_RENDERER_0004");
+  });
+  it("draws bottom-to-top with layer opacity and isolates same-coordinate tile caches", () => {
+    const { canvas, context, tileContexts } = createCanvasFixture(2, 2);
+    const world = new World({ tileSize: 2 });
+    const bottom = world.getLayer(0);
+    const top = world.addLayer();
+    bottom.raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    top.raster.setPixel({ x: 0, y: 0 }, { r: 0, g: 0, b: 255, a: 255 });
+    top.opacity = 0.5;
+    const alphas: number[] = [];
+    vi.mocked(context.drawImage).mockImplementation(() => {
+      alphas.push(context.globalAlpha);
+    });
+    const renderer = new CanvasRenderer({
+      canvas,
+      world,
+      camera: new Camera(),
+    });
+    renderer.render();
+    expect(alphas).toEqual([1, 0.5]);
+    expect(context.globalCompositeOperation).toBe("source-over");
+    expect(tileContexts).toHaveLength(2);
+    expect(
+      vi
+        .mocked(tileContexts[0]?.putImageData ?? context.putImageData)
+        .mock.calls[0]?.[0].data.slice(0, 4),
+    ).toEqual(new Uint8ClampedArray([255, 0, 0, 255]));
+    expect(
+      vi
+        .mocked(tileContexts[1]?.putImageData ?? context.putImageData)
+        .mock.calls[0]?.[0].data.slice(0, 4),
+    ).toEqual(new Uint8ClampedArray([0, 0, 255, 255]));
+    const firstCanvas = vi.mocked(context.drawImage).mock.calls[0]?.[0];
+    const secondCanvas = vi.mocked(context.drawImage).mock.calls[1]?.[0];
+    world.moveLayer(top, 0);
+    alphas.length = 0;
+    vi.mocked(context.drawImage).mockClear();
+    renderer.render();
+    expect(alphas).toEqual([0.5, 1]);
+    expect(
+      vi.mocked(context.drawImage).mock.calls.map((call) => call[0]),
+    ).toEqual([secondCanvas, firstCanvas]);
+    for (const tileContext of tileContexts) {
+      expect(tileContext.putImageData).toHaveBeenCalledTimes(1);
+    }
+    expect(context.save).toHaveBeenCalledTimes(2);
+    expect(context.restore).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not upload hidden, zero-opacity, or empty layers and reuses uploads on metadata changes", () => {
+    const { canvas, context, tileContexts } = createCanvasFixture(2, 2);
+    const world = new World({ tileSize: 2 });
+    const layer = world.getLayer(0);
+    world.addLayer();
+    layer.raster.setPixel({ x: 0, y: 0 }, { r: 1, g: 2, b: 3, a: 255 });
+    const renderer = new CanvasRenderer({
+      canvas,
+      world,
+      camera: new Camera(),
+    });
+    layer.visible = false;
+    renderer.render();
+    layer.visible = true;
+    layer.opacity = 0;
+    renderer.render();
+    expect(tileContexts).toHaveLength(0);
+    expect(context.drawImage).not.toHaveBeenCalled();
+    layer.opacity = 1;
+    renderer.render();
+    layer.name = "New name";
+    layer.opacity = 0.2;
+    renderer.render();
+    expect(tileContexts).toHaveLength(1);
+    expect(tileContexts[0]?.putImageData).toHaveBeenCalledTimes(1);
+  });
+
+  it("clips negative World bounds through the Camera and DPR and culls outside tiles", () => {
+    const { canvas, context, tileContexts } = createCanvasFixture(16, 16);
+    const world = new World({
+      tileSize: 2,
+      bounds: { x: -1, y: -1, width: 2, height: 2 },
+    });
+    world
+      .getLayer(0)
+      .raster.setPixel({ x: -1, y: -1 }, { r: 1, g: 2, b: 3, a: 255 });
+    world
+      .getLayer(0)
+      .raster.setPixel({ x: 2, y: 2 }, { r: 1, g: 2, b: 3, a: 255 });
+    const camera = new Camera({ panX: -2, panY: -2, zoom: 2 });
+    const renderer = new CanvasRenderer({ canvas, world, camera });
+    renderer.resize(16, 16, 2);
+    renderer.render();
+    expect(context.rect).toHaveBeenCalledWith(4, 4, 8, 8);
+    expect(context.clip).toHaveBeenCalledOnce();
+    expect(tileContexts).toHaveLength(1);
+    camera.setPan(100, camera.panY);
+    vi.mocked(context.drawImage).mockClear();
+    renderer.render();
+    expect(context.drawImage).not.toHaveBeenCalled();
+  });
+
+  it("restores context state even if an upload fails", () => {
+    const { canvas, context, ownerDocument } = createCanvasFixture(2, 2);
+    const world = new World({ tileSize: 2 });
+    world
+      .getLayer(0)
+      .raster.setPixel({ x: 0, y: 0 }, { r: 0, g: 0, b: 0, a: 255 });
+    vi.mocked(ownerDocument.createElement).mockImplementation(() => {
+      throw new Error("upload failure");
+    });
+    const renderer = new CanvasRenderer({
+      canvas,
+      world,
+      camera: new Camera(),
+    });
+    expect(() => renderer.render()).toThrow("upload failure");
+    expect(context.restore).toHaveBeenCalledOnce();
+  });
+});
+
 describe("CanvasRenderer construction", () => {
   it("is available through the renderer entry point and implements Renderer", () => {
     const { canvas } = createCanvasFixture();
@@ -78,6 +246,7 @@ describe("CanvasRenderer construction", () => {
 
     expect(renderer.canvas).toBe(canvas);
     expect(renderer.raster).toBe(raster);
+    expect(renderer.raster.tileSize).toBe(2);
     expect(renderer.camera).toBe(camera);
 
     if (false) {
@@ -213,13 +382,12 @@ describe("CanvasRenderer rendering", () => {
   });
 
   it("uploads and draws positive world pixels at projected coordinates", () => {
-    const { canvas, context, tileCanvases, tileContexts } =
-      createCanvasFixture(4, 4);
-    const raster = new Raster({ tileSize: 2 });
-    raster.setPixel(
-      { x: 0, y: 0 },
-      { r: 255, g: 64, b: 32, a: 255 },
+    const { canvas, context, tileCanvases, tileContexts } = createCanvasFixture(
+      4,
+      4,
     );
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 64, b: 32, a: 255 });
     const renderer = new CanvasRenderer({
       canvas,
       raster,
@@ -241,20 +409,14 @@ describe("CanvasRenderer rendering", () => {
     const imageData = vi.mocked(tileContext.putImageData).mock.calls[0]?.[0];
 
     expect(Array.from(imageData?.data ?? [])).toEqual([
-      255, 64, 32, 255,
-      0, 0, 0, 0,
-      0, 0, 0, 0,
-      0, 0, 0, 0,
+      255, 64, 32, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     ]);
   });
 
   it("renders negative world coordinates in the correct tile", () => {
     const { canvas, context } = createCanvasFixture(4, 4);
     const raster = new Raster({ tileSize: 2 });
-    raster.setPixel(
-      { x: -1, y: -1 },
-      { r: 255, g: 0, b: 0, a: 255 },
-    );
+    raster.setPixel({ x: -1, y: -1 }, { r: 255, g: 0, b: 0, a: 255 });
     const renderer = new CanvasRenderer({
       canvas,
       raster,
@@ -293,10 +455,7 @@ describe("CanvasRenderer rendering", () => {
     const raster = new Raster({ tileSize: 2 });
     raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
     raster.setPixel({ x: 200, y: 200 }, { r: 0, g: 255, b: 0, a: 255 });
-    raster.setPixel(
-      { x: -200, y: -200 },
-      { r: 0, g: 0, b: 255, a: 255 },
-    );
+    raster.setPixel({ x: -200, y: -200 }, { r: 0, g: 0, b: 255, a: 255 });
     const renderer = new CanvasRenderer({
       canvas,
       raster,
@@ -353,11 +512,13 @@ describe("CanvasRenderer rendering", () => {
 
     renderer.render();
 
-    expect({ panX: camera.panX, panY: camera.panY, zoom: camera.zoom }).toEqual({
-      panX: -1,
-      panY: -2,
-      zoom: 2,
-    });
+    expect({ panX: camera.panX, panY: camera.panY, zoom: camera.zoom }).toEqual(
+      {
+        panX: -1,
+        panY: -2,
+        zoom: 2,
+      },
+    );
     expect(raster.getPixel(pixel)).toEqual(color);
   });
 });

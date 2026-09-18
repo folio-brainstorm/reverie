@@ -1,13 +1,14 @@
 import type { Raster } from "../../core/raster/Raster.js";
 
+import { MAX_CHANNEL_VALUE } from "../../config/color/RgbaChannelConstants.js";
 import {
   getOrCreateRasterTileForTrustedWrite,
   getTilePixelBufferForTrustedWrite,
   markTrustedTilePixelWritten,
 } from "../../core/renderer/RasterRenderBridge.js";
 import { isRasterPixelWritable } from "../paint-target/ActiveRasterPaintBounds.js";
-
-const MAX_CHANNEL_VALUE = 255;
+import { blendSourceOverChannel } from "../color/BlendSourceOverChannel.js";
+import { roundAndClampChannel } from "../color/RoundAndClampChannel.js";
 
 /**
  * Blends a validated, non-transparent RGBA8 source into one safe world pixel.
@@ -59,32 +60,30 @@ export function blendRasterPixelSourceOver(
 
   const destinationAlpha = destinationAlphaByte / MAX_CHANNEL_VALUE;
   const inverseSourceAlpha = 1 - sourceAlpha;
-  const outputAlpha =
-    sourceAlpha + destinationAlpha * inverseSourceAlpha;
+  const outputAlpha = sourceAlpha + destinationAlpha * inverseSourceAlpha;
   const destinationWeight = destinationAlpha * inverseSourceAlpha;
 
-  pixels[offset] = roundAndClampChannel(
-    (sourceRed * sourceAlpha +
-      (pixels[offset] ?? 0) * destinationWeight) /
-      outputAlpha,
+  pixels[offset] = blendSourceOverChannel(
+    sourceRed,
+    pixels[offset] ?? 0,
+    sourceAlpha,
+    destinationWeight,
+    outputAlpha,
   );
-  pixels[offset + 1] = roundAndClampChannel(
-    (sourceGreen * sourceAlpha +
-      (pixels[offset + 1] ?? 0) * destinationWeight) /
-      outputAlpha,
+  pixels[offset + 1] = blendSourceOverChannel(
+    sourceGreen,
+    pixels[offset + 1] ?? 0,
+    sourceAlpha,
+    destinationWeight,
+    outputAlpha,
   );
-  pixels[offset + 2] = roundAndClampChannel(
-    (sourceBlue * sourceAlpha +
-      (pixels[offset + 2] ?? 0) * destinationWeight) /
-      outputAlpha,
+  pixels[offset + 2] = blendSourceOverChannel(
+    sourceBlue,
+    pixels[offset + 2] ?? 0,
+    sourceAlpha,
+    destinationWeight,
+    outputAlpha,
   );
-  pixels[offset + 3] = roundAndClampChannel(
-    outputAlpha * MAX_CHANNEL_VALUE,
-  );
+  pixels[offset + 3] = roundAndClampChannel(outputAlpha * MAX_CHANNEL_VALUE);
   markTrustedTilePixelWritten(tile, localX, localY);
-}
-
-/** Converts a computed channel to the same RGBA8 result as the public path. */
-function roundAndClampChannel(channel: number): number {
-  return Math.min(MAX_CHANNEL_VALUE, Math.max(0, Math.round(channel)));
 }

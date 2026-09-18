@@ -1,13 +1,14 @@
-import type { Camera, Raster } from "@reverie/core";
+import type { Camera } from "@reverie/core";
+import type { RenderSource } from "@reverie/core/renderer";
 
 /** Dependencies used by a canvas renderer for every explicit render pass. */
-export interface CanvasRendererConfig {
+interface CanvasRendererDependencies {
   /** Canvas whose backing buffer receives the rendered raster. */
   canvas: HTMLCanvasElement;
-
-  /** Sparse raster read by the renderer without mutation. */
-  raster: Raster;
 
   /** Camera that projects world coordinates into screen coordinates. */
   camera: Camera;
 }
+
+/** Exactly one rendering source: an independent Raster or a composed World. */
+export type CanvasRendererConfig = CanvasRendererDependencies & RenderSource;

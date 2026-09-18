@@ -6,7 +6,7 @@ import { CanvasRenderer } from "@reverie/renderer";
 import { WebErrorDefinitions } from "../errors/WebErrorDefinitions.js";
 import { WebError, WebRangeError } from "../errors/WebErrors.js";
 import { downloadEncodedImage } from "../export/DownloadEncodedImage.js";
-import { encodeRasterRegion } from "../export/EncodeRasterRegion.js";
+import { encodeWorldRegion } from "../export/EncodeWorldRegion.js";
 import type { ReverieDownloadOptions } from "../interfaces/export/ReverieDownloadOptions.js";
 import type { ReverieCanvasConfig } from "../interfaces/facade/ReverieCanvasConfig.js";
 import { CanvasDrawingSession } from "../session/CanvasDrawingSession.js";
@@ -27,16 +27,22 @@ export class ReverieCanvas {
   /** Camera used by both pointer conversion and rendering. */
   readonly camera: Camera;
 
-  /** Default bounded layer receiving all facade drawing. */
-  readonly activeLayer: RasterLayer;
+  /** Session selection, intentionally separate from the World document model. */
+  private currentActiveLayer: RasterLayer;
 
-  /** Canvas renderer observing the active layer and camera. */
+  /** Selected editing target; composition remains independent of selection. */
+  get activeLayer(): RasterLayer {
+    return this.currentActiveLayer;
+  }
+
+  /** Canvas renderer composing the whole World through the camera. */
   readonly renderer: CanvasRenderer;
 
   /** Attached browser drawing Session owned by this facade. */
   readonly session: CanvasDrawingSession;
 
   private isDisposed = false;
+  private readonly stopObservingLayerRemoval: () => void;
 
   /** Returns the Brush that will be captured by the next Stroke. */
   get brush(): Brush {
@@ -61,11 +67,11 @@ export class ReverieCanvas {
       bounds,
       ...(config.tileSize === undefined ? {} : { tileSize: config.tileSize }),
     });
-    this.activeLayer = this.world.createRasterLayer();
+    this.currentActiveLayer = this.world.getLayer(0);
     this.camera = new Camera();
     this.renderer = new CanvasRenderer({
       canvas: config.canvas,
-      raster: this.activeLayer.raster,
+      world: this.world,
       camera: this.camera,
     });
     this.session = new CanvasDrawingSession({
@@ -92,6 +98,12 @@ export class ReverieCanvas {
         ? {}
         : { onStrokeEnd: config.onStrokeEnd }),
     });
+    this.stopObservingLayerRemoval = this.session.observeLayerRemoval(
+      this.world,
+      (layer) => {
+        this.currentActiveLayer = layer;
+      },
+    );
     this.session.attach();
   }
 
@@ -107,6 +119,38 @@ export class ReverieCanvas {
   }
 
   /**
+   * Selects a member layer for subsequent drawing without changing composition.
+   * @param layer - World member reference or bottom-to-top index.
+   * @throws {WebError} This facade is disposed or drawing work has not finished.
+   * @throws {ReverieRangeError} The index does not belong to this World.
+   * @throws {ReverieError} The reference does not belong to this World.
+   */
+  setActiveLayer(layer: RasterLayer | number): void {
+    this.assertUsable();
+    const member = this.world.getLayer(layer);
+    if (member === this.activeLayer) {
+      return;
+    }
+    this.session.setLayer(member);
+    this.currentActiveLayer = member;
+  }
+
+  /**
+   * Removes a document layer, selecting a valid neighbor when necessary.
+   * @param layer - Member reference or index; defaults to the active layer.
+   * @returns The detached layer with its pixels preserved.
+   * @throws {WebError} This facade is disposed or its active target is busy.
+   * @throws {ReverieRangeError} The index is invalid or this is the last layer.
+   * @throws {ReverieError} The layer is not a member, or removal is in progress.
+   */
+  removeLayer(layer: RasterLayer | number = this.activeLayer): RasterLayer {
+    this.assertUsable();
+    const removed = this.world.removeLayer(layer);
+    this.renderer.render();
+    return removed;
+  }
+
+  /**
    * Removes every pixel from the active layer and renders the empty canvas.
    *
    * @throws {WebError} This facade has been disposed.
@@ -118,7 +162,7 @@ export class ReverieCanvas {
   }
 
   /**
-   * Renders the current Raster and Camera state immediately.
+   * Renders every contributing World layer through the current Camera immediately.
    *
    * @throws {WebError} This facade has been disposed.
    */
@@ -128,12 +172,12 @@ export class ReverieCanvas {
   }
 
   /**
-   * Encodes a region of the active layer and downloads it as an image file.
+   * Encodes a composed World region and downloads it as an image file.
    *
    * The region defaults to the World's bounds, so a fixed canvas exports its
    * whole surface without extra configuration. An unbounded World has no natural
-   * full-image size, so it requires an explicit `region`. Only the active layer is
-   * exported; multi-layer compositing is not part of this step.
+   * full-image size, so it requires an explicit `region`. Layer order, visibility,
+   * and non-destructive opacity are respected independently of the active layer.
    *
    * The operation is read-only with respect to drawing state: neither the Raster,
    * the Camera, the Brush, nor the Scheduler is modified. JPEG downloads install
@@ -158,11 +202,7 @@ export class ReverieCanvas {
       this.world.bounds,
       options.region,
     );
-    const image = await encodeRasterRegion(
-      this.activeLayer.raster,
-      region,
-      options,
-    );
+    const image = await encodeWorldRegion(this.world, region, options);
 
     downloadEncodedImage(
       image,
@@ -176,8 +216,9 @@ export class ReverieCanvas {
       return;
     }
 
-    this.session.dispose();
     this.isDisposed = true;
+    this.stopObservingLayerRemoval();
+    this.session.dispose();
   }
 
   /** Creates the centralized default Brush used by zero-configuration canvases. */

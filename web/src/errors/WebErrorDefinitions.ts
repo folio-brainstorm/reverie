@@ -2,6 +2,21 @@ import type { ErrorDefinition } from "@reverie/core";
 
 /** Web-owned message templates paired with stable Web error codes. */
 export const WebErrorDefinitions = {
+  LAYER_CHANGE_WHILE_DISPOSED: {
+    code: "EC_WEB_0022",
+    template:
+      "Cannot change the drawing layer of a disposed CanvasDrawingSession.",
+  },
+  LAYER_CHANGE_DURING_REMOVAL: {
+    code: "EC_WEB_0023",
+    template:
+      "Cannot change the drawing layer during a World layer-removal callback.",
+  },
+  LAYER_CHANGE_WHILE_BUSY: {
+    code: "EC_WEB_0021",
+    template:
+      "Finish the active stroke and wait for queued drawing work before changing or removing its layer.",
+  },
   INVALID_FRAME_BUDGET_TYPE: {
     code: "EC_WEB_0001",
     template:

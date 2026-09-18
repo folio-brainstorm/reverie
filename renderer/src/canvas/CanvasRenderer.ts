@@ -1,9 +1,16 @@
-import type { Camera, Raster } from "@reverie/core";
+import type { Camera, Raster, WorldRect } from "@reverie/core";
 import {
   getRasterTilePixels,
   getRasterTileVersion,
+  getWorldCompositionLayers,
+  intersectRenderRegion,
+  resolveRenderSource,
 } from "@reverie/core/renderer";
-import type { Renderer, TileCoord } from "@reverie/core/renderer";
+import type {
+  Renderer,
+  RenderSourceSnapshot,
+  TileCoord,
+} from "@reverie/core/renderer";
 
 import { RendererErrorDefinitions } from "../errors/RendererErrorDefinitions.js";
 import {
@@ -17,24 +24,38 @@ import type { CanvasTileCache } from "../interfaces/canvas/CanvasTileCache.js";
 const CONTEXT_IDENTIFIER = "2d";
 
 /**
- * Projects the allocated pixels of a sparse Raster through a Camera into an
- * HTML canvas backing buffer.
+ * Projects an independent sparse Raster or a composed World through a Camera
+ * into an HTML canvas backing buffer.
  *
  * Rendering is explicit: camera and raster changes become visible only after
  * the caller invokes {@link render}.
  */
-export class CanvasRenderer implements Renderer {
+export class CanvasRenderer<
+  Config extends CanvasRendererConfig = CanvasRendererConfig,
+> implements Renderer {
   /** Canvas whose backing buffer receives each rendered frame. */
   readonly canvas: HTMLCanvasElement;
 
   /** Sparse raster observed without allocation or mutation. */
-  readonly raster: Raster;
+  get raster(): Config["raster"] {
+    return this.source["raster"];
+  }
+
+  /** Document composed when the renderer was configured with a World. */
+  get world(): Config["world"] {
+    return this.source["world"];
+  }
+
+  private readonly source: RenderSourceSnapshot<Config>;
 
   /** Camera used as the world-to-screen projection for every frame. */
   readonly camera: Camera;
 
   private readonly context: CanvasRenderingContext2D;
-  private readonly tileCanvasCache = new Map<string, CanvasTileCache>();
+  private readonly tileCanvasCache = new WeakMap<
+    Raster,
+    Map<string, CanvasTileCache>
+  >();
   private currentPixelRatio = 1;
 
   /** Backing pixels used for each CSS pixel in the current viewport. */
@@ -43,14 +64,19 @@ export class CanvasRenderer implements Renderer {
   }
 
   /**
-   * Creates a renderer bound to one canvas, raster, and camera.
+   * Creates a renderer bound to one canvas, one Raster or World, and a camera.
    *
    * The renderer does not own the lifecycle of any supplied dependency.
    *
-   * @param config - Canvas output and the Raster and Camera to observe.
+   * @param config - Canvas output, exactly one source, and Camera to observe.
    * @throws {RendererError} The canvas cannot provide a 2D rendering context.
+   * @throws {RendererTypeError} Both rendering sources or neither are supplied.
    */
-  constructor({ canvas, camera, raster }: CanvasRendererConfig) {
+  constructor(config: Config) {
+    const source = resolveRenderSource(config, () =>
+      RendererTypeError.from(RendererErrorDefinitions.INVALID_RENDER_SOURCE),
+    );
+    const { canvas, camera } = config;
     const context = canvas.getContext(CONTEXT_IDENTIFIER);
 
     if (context === null) {
@@ -59,7 +85,7 @@ export class CanvasRenderer implements Renderer {
       );
     }
 
-    this.raster = raster;
+    this.source = source;
     this.camera = camera;
     this.canvas = canvas;
     this.context = context;
@@ -82,11 +108,49 @@ export class CanvasRenderer implements Renderer {
       return;
     }
 
-    const visibleWorldRect = this.camera.visibleWorldRect({
-      width: width / this.currentPixelRatio,
-      height: height / this.currentPixelRatio,
-    });
-    const tileSize = this.raster.tileSize;
+    const bounds = this.world?.bounds ?? null;
+    const visibleWorldRect = intersectRenderRegion(
+      this.camera.visibleWorldRect({
+        width: width / this.currentPixelRatio,
+        height: height / this.currentPixelRatio,
+      }),
+      bounds,
+    );
+    if (visibleWorldRect === null) {
+      return;
+    }
+
+    if (this.world !== undefined) {
+      this.context.save();
+      try {
+        this.context.globalCompositeOperation = "source-over";
+        if (bounds !== null) {
+          const point = this.camera.worldToScreen(bounds);
+          const scale = this.camera.zoom * this.currentPixelRatio;
+          this.context.beginPath();
+          this.context.rect(
+            point.x * this.currentPixelRatio,
+            point.y * this.currentPixelRatio,
+            bounds.width * scale,
+            bounds.height * scale,
+          );
+          this.context.clip();
+        }
+        for (const layer of getWorldCompositionLayers(this.world)) {
+          this.context.globalAlpha = layer.opacity;
+          this.renderRaster(layer.raster, visibleWorldRect);
+        }
+      } finally {
+        this.context.restore();
+      }
+    } else if (this.raster !== undefined) {
+      this.renderRaster(this.raster, visibleWorldRect);
+    }
+  }
+
+  /** Traverses visible tiles of one source using a Raster-specific upload cache. */
+  private renderRaster(raster: Raster, visibleWorldRect: WorldRect): void {
+    const tileSize = raster.tileSize;
     const minTileX = Math.floor(visibleWorldRect.x / tileSize);
     const minTileY = Math.floor(visibleWorldRect.y / tileSize);
     const maxTileX =
@@ -96,7 +160,7 @@ export class CanvasRenderer implements Renderer {
 
     for (let tileY = minTileY; tileY <= maxTileY; tileY += 1) {
       for (let tileX = minTileX; tileX <= maxTileX; tileX += 1) {
-        this.renderTile({ x: tileX, y: tileY });
+        this.renderTile(raster, { x: tileX, y: tileY });
       }
     }
   }
@@ -123,20 +187,20 @@ export class CanvasRenderer implements Renderer {
   }
 
   /** Draws one allocated tile, uploading only when its version changed. */
-  private renderTile(coord: TileCoord): void {
-    const version = getRasterTileVersion(this.raster, coord);
+  private renderTile(raster: Raster, coord: TileCoord): void {
+    const version = getRasterTileVersion(raster, coord);
 
     if (version === undefined) {
       return;
     }
 
-    const tileSize = this.raster.tileSize;
-    const cache = this.getTileCache(coord, tileSize);
+    const tileSize = raster.tileSize;
+    const cache = this.getTileCache(raster, coord, tileSize);
     const hasCurrentUpload =
       cache.tileId === version.tileId && cache.revision === version.revision;
 
     if (!hasCurrentUpload) {
-      const pixels = getRasterTilePixels(this.raster, coord);
+      const pixels = getRasterTilePixels(raster, coord);
 
       if (pixels === undefined) {
         return;
@@ -165,9 +229,18 @@ export class CanvasRenderer implements Renderer {
   }
 
   /** Returns a complete tile upload cache, creating it on first use. */
-  private getTileCache(coord: TileCoord, tileSize: number): CanvasTileCache {
+  private getTileCache(
+    raster: Raster,
+    coord: TileCoord,
+    tileSize: number,
+  ): CanvasTileCache {
+    let rasterCache = this.tileCanvasCache.get(raster);
+    if (rasterCache === undefined) {
+      rasterCache = new Map<string, CanvasTileCache>();
+      this.tileCanvasCache.set(raster, rasterCache);
+    }
     const key = CanvasRenderer.tileCoordToKey(coord);
-    const cachedTile = this.tileCanvasCache.get(key);
+    const cachedTile = rasterCache.get(key);
 
     if (cachedTile !== undefined) {
       return cachedTile;
@@ -192,7 +265,7 @@ export class CanvasRenderer implements Renderer {
       revision: -1,
     };
 
-    this.tileCanvasCache.set(key, cache);
+    rasterCache.set(key, cache);
 
     return cache;
   }

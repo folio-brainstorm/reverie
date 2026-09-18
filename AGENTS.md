@@ -19,6 +19,17 @@ This file applies to the entire repository. All new and modified code must follo
 - Do not use `any`, unnecessary type assertions, `@ts-ignore`, or disabled compiler checks to bypass type errors. If an exception is unavoidable, document the reason and limit its scope as much as possible.
 - Remove unused code, unused imports, debug logging, and commented-out legacy implementations. Do not retain code merely because it might be useful later.
 
+## Before Implementing
+
+- Before writing code for a non-trivial task (a new module, a PRD-driven feature, a cross-package change), first produce a short pre-implementation summary instead of going straight to code. It should cover:
+  - Any requirement that is ambiguous, underspecified, or open to more than one reasonable interpretation. Do not silently pick an interpretation and proceed — surface it.
+  - Key architecture or design decisions this task forces (state management approach, data structures, module boundaries, new abstractions) and which option you intend to take.
+  - Any point where the task appears to conflict with an existing convention in this file or with existing code.
+  - A brief outline of the intended approach, in prose — not code.
+- Wait for confirmation on that summary before implementing, unless the task is small enough that a wrong guess would be cheap to fix (a one-line bug fix, a well-specified isolated change).
+- Do not resolve an ambiguity by guessing the most convenient interpretation and mentioning it only after the code is written. Flag it before, not after.
+- For large tasks, prefer delivering in reviewable stages (e.g. interfaces/skeleton first, then implementation) over a single large, hard-to-review diff — unless told otherwise.
+
 ## Files and Exports
 
 - Each implementation file may contain at most one `export default`, and it must represent the file's single primary entity.
@@ -90,32 +101,16 @@ This file applies to the entire repository. All new and modified code must follo
 - Prefer parameterized tests with `it.each` when multiple inputs exercise the same rule.
 - Tests must be deterministic, isolated, and independent of execution order, real networks, the current time, or local machine state. Use controllable mocks or fakes when such dependencies are necessary.
 - Do not use snapshots in place of precise business assertions.
-- After changing code, run at least the type checks and tests for the affected package. Run the complete root-level checks for cross-package or public API changes.
+- After changing code, run the validation tier matching the change's scope (see Validation Commands below).
 
 ## Validation Commands
 
-When a change adds or updates workspace packages or dependencies, run only the
-following commands in order instead of expanding them into package-level install,
-build, typecheck, or test command sequences:
+Choose the narrowest tier below that matches the change. Do not run a broader
+tier "just in case" — escalate only when the narrower tier fails or the change
+genuinely crosses package boundaries.
 
-```bash
-pnpm install
-pnpm test
-```
-
-Treat `pnpm test` as the primary validation entry point for this workflow. Only
-run additional diagnostic commands when one of these commands fails and the
-extra command is needed to identify the cause.
-
-Run these commands from the repository root:
-
-```bash
-pnpm typecheck
-pnpm test
-pnpm build
-```
-
-During development, smaller checks may be run first:
+**Tier 1 — Local iteration, single-package change.** Run while developing, before
+requesting a full check:
 
 ```bash
 pnpm --filter @reverie/core typecheck
@@ -123,10 +118,45 @@ pnpm --filter @reverie/demo typecheck
 pnpm --filter @reverie/test test
 ```
 
-If an environmental limitation prevents a validation step from running, list the skipped command and the reason in the final delivery notes. Do not claim that validation passed when it was not run.
+**Tier 2 — Standard change, ready for delivery.** Any change confined to one
+package's implementation (no public API, dependency, or cross-package impact):
+
+```bash
+pnpm --filter <affected-package> typecheck
+pnpm --filter <affected-package> test
+```
+
+**Tier 3 — Dependency or workspace-package change.** When a change adds, removes,
+or updates a workspace package or an external dependency, run only:
+
+```bash
+pnpm install
+pnpm test
+```
+
+Treat `pnpm test` as the primary validation entry point for this tier. Only run
+additional diagnostic commands (e.g. a targeted typecheck) if one of these two
+fails and the extra command is needed to identify the cause. Do not expand this
+into a full package-by-package install/build/typecheck/test sequence.
+
+**Tier 4 — Cross-package or public API change.** Any change that touches a
+package's public entry point, a shared type consumed by another package, or
+otherwise affects more than one package — run the full root-level check:
+
+```bash
+pnpm typecheck
+pnpm test
+pnpm build
+```
+
+In all tiers: if an environmental limitation prevents a validation step from
+running, state the skipped command and the reason in the final delivery notes.
+Do not claim that validation passed when it was not run, and do not silently
+substitute a different command for the one required by the tier.
 
 ## Pre-Submission Checklist
 
+- For non-trivial tasks, was a pre-implementation summary shared and confirmed before writing code?
 - Does each file have one clear responsibility and at most one `export default`?
 - Are all new types located in an appropriately categorized `interfaces/` directory?
 - Do all exported functions and public methods have complete, non-placeholder JSDoc?
@@ -134,3 +164,4 @@ If an environmental limitation prevents a validation step from running, list the
 - Does the change avoid `any`, unjustified assertions, swallowed exceptions, and cross-package internal imports?
 - Are public APIs, types, entry-point exports, documentation, and tests synchronized?
 - Are the happy path, boundary conditions, and error cases covered, and have the appropriate type checks, tests, and builds been run?
+- Was the correct validation tier used, and are any skipped commands and reasons noted in the delivery notes?

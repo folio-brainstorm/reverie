@@ -1,5 +1,7 @@
 import type { WorldConfig } from "../interfaces/world/World.js";
+// #if DEBUG
 import { consoleDiagnosticReporter } from "../utils/diagnostic/Diagnostics.js";
+// #endif
 
 /** Tile edge length used when neither instance nor runtime defaults are valid. */
 export const DEFAULT_WORLD_TILE_SIZE = 256;
@@ -13,7 +15,7 @@ export const DEFAULT_WORLD_TILE_SIZE = 256;
  */
 export const defaultWorldConfig: WorldConfig = {
   tileSize: DEFAULT_WORLD_TILE_SIZE,
-  //#if DEBUG
+  // #if DEBUG
   reporter: consoleDiagnosticReporter,
-  //#endif
+  // #endif
 };
