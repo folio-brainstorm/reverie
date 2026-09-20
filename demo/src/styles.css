@@ -238,6 +238,54 @@ summary {
   pointer-events: none;
 }
 
+.selection-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.selection-outline-shadow,
+.selection-outline-march {
+  shape-rendering: crispEdges;
+}
+
+.selection-outline-shadow {
+  stroke: rgb(16 23 25 / 92%);
+  stroke-width: 3px;
+}
+
+.selection-outline-march {
+  stroke: #fff;
+  stroke-width: 1px;
+  stroke-dasharray: 4 4;
+  animation: selection-march 640ms linear infinite;
+}
+
+.selection-overlay.is-preview .selection-outline-march {
+  stroke: var(--accent);
+}
+
+.selection-input-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+
+.canvas-frame.is-panning .selection-input-layer {
+  cursor: grabbing;
+}
+
+@keyframes selection-march {
+  to {
+    stroke-dashoffset: -8;
+  }
+}
+
 .brush-outline-shadow {
   stroke: rgb(16 23 25 / 90%);
   stroke-width: 3px;
@@ -298,6 +346,16 @@ summary {
 
 .paint-mode-toggle {
   flex-shrink: 0;
+}
+
+.selection-mode-toggle {
+  flex-shrink: 0;
+}
+
+.selection-mode-toggle.is-active {
+  border-color: rgb(239 157 101 / 62%);
+  color: #20100a;
+  background: var(--accent);
 }
 
 .paint-mode-toggle.is-active {
@@ -391,6 +449,28 @@ summary {
   grid-column: 1 / -1;
   accent-color: var(--accent);
 }
+
+.selection-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.selection-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.selection-status {
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .export-actions {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -851,6 +931,9 @@ summary:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .selection-outline-march {
+    animation: none;
+  }
   .loading-screen {
     transition-duration: 0.01ms;
     transition-delay: 0s;

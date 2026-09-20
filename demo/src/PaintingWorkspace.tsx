@@ -13,6 +13,7 @@ import {
   isLayerBlendMode,
   LAYER_BLEND_MODES,
   PixelBrush,
+  SelectionMask,
 } from "@reverie/core";
 import type {
   Brush,
@@ -20,20 +21,24 @@ import type {
   LayerBlendMode,
   PaintMode,
   RasterLayer,
+  Rect,
   RGBAColor,
   ScreenPoint,
+  WorldPoint,
 } from "@reverie/core";
 import type { ExportFormat, ExportRegion } from "@reverie/exporter";
 import { ReverieCanvas } from "@reverie/web";
 import type { ReverieDownloadOptions } from "@reverie/web";
 
 import { createBrushOutlinePath } from "./CreateBrushOutlinePath";
+import { createSelectionRect } from "./CreateSelectionRect";
 import { decodeBrushImageFile } from "./DecodeBrushImageFile";
 import { exportRasterToConsole } from "./ExportRasterToConsole";
 import type { BrushMode } from "./interfaces/brush/BrushMode";
 import type { CanvasSize } from "./interfaces/canvas/CanvasSize";
 import type { PaintingWorkspaceProps } from "./interfaces/canvas/PaintingWorkspaceProps";
 import type { ViewportSize } from "./interfaces/canvas/ViewportSize";
+import type { SelectionDrag } from "./interfaces/selection/SelectionDrag";
 
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 64;
@@ -70,6 +75,9 @@ export function PaintingWorkspace({
   const reverieRef = useRef<ReverieCanvas | null>(null);
   const brushIndicatorRef = useRef<SVGGElement | null>(null);
   const brushOutlineRef = useRef<SVGPathElement | null>(null);
+  const selectionInputRef = useRef<HTMLDivElement | null>(null);
+  const selectionDragRef = useRef<SelectionDrag | null>(null);
+  const isSelectionToolActiveRef = useRef(false);
   const panPointerIdRef = useRef<number | null>(null);
   const lastPanPositionRef = useRef<ScreenPoint | null>(null);
   const lastPointerPositionRef = useRef<ScreenPoint | null>(null);
@@ -87,6 +95,11 @@ export function PaintingWorkspace({
   const [brushColor, setBrushColor] = useState(INITIAL_BRUSH_COLOR);
   const [brushMode, setBrushMode] = useState<BrushMode>("smooth");
   const [paintMode, setPaintMode] = useState<PaintMode>("paint");
+  const [isSelectionToolActive, setIsSelectionToolActive] = useState(false);
+  const [selectionRect, setSelectionRect] = useState<Rect | null>(null);
+  const [selectionPreviewRect, setSelectionPreviewRect] = useState<Rect | null>(
+    null,
+  );
   const [brushImage, setBrushImage] = useState<BrushImage | null>(null);
   const brushSettingsRef = useRef({
     size: INITIAL_BRUSH_SIZE,
@@ -122,6 +135,7 @@ export function PaintingWorkspace({
       outline === null ||
       camera === undefined ||
       panPointerIdRef.current !== null ||
+      isSelectionToolActiveRef.current ||
       brushSettingsRef.current.image !== null
     ) {
       hideBrushIndicator();
@@ -201,6 +215,23 @@ export function PaintingWorkspace({
     let resizeObserver: ResizeObserver | null = null;
     let hasInitializationError = false;
 
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape" || !isSelectionToolActiveRef.current) return;
+      const selectionInput = selectionInputRef.current;
+      const pointerId = selectionDragRef.current?.pointerId;
+      selectionDragRef.current = null;
+      setSelectionPreviewRect(null);
+      isSelectionToolActiveRef.current = false;
+      setIsSelectionToolActive(false);
+      if (
+        selectionInput !== null &&
+        pointerId !== undefined &&
+        selectionInput.hasPointerCapture(pointerId)
+      ) {
+        selectionInput.releasePointerCapture(pointerId);
+      }
+    };
+
     try {
       reverie = new ReverieCanvas({
         canvas,
@@ -255,6 +286,7 @@ export function PaintingWorkspace({
       resizeObserver = new ResizeObserver(updateViewport);
       resizeObserver.observe(frame);
       frame.addEventListener("wheel", handleWheel, { passive: false });
+      window.addEventListener("keydown", handleKeyDown);
 
       // The initial bitmap and DOM overlays get a paint before the cover fades.
       readyFrame = window.requestAnimationFrame(() => {
@@ -269,6 +301,7 @@ export function PaintingWorkspace({
       imageLoadRequestIdRef.current += 1;
       resizeObserver?.disconnect();
       frame.removeEventListener("wheel", handleWheel);
+      window.removeEventListener("keydown", handleKeyDown);
       reverie?.dispose();
       reverieRef.current = null;
     };
@@ -311,6 +344,146 @@ export function PaintingWorkspace({
     const nextPaintMode: PaintMode = paintMode === "paint" ? "erase" : "paint";
     reverieRef.current?.setPaintMode(nextPaintMode);
     setPaintMode(nextPaintMode);
+    deactivateSelectionTool();
+  };
+
+  /** Cancels only the in-progress rectangle gesture, preserving committed state. */
+  const cancelSelectionDrag = (): void => {
+    const pointerId = selectionDragRef.current?.pointerId;
+    const selectionInput = selectionInputRef.current;
+    selectionDragRef.current = null;
+    setSelectionPreviewRect(null);
+    if (
+      pointerId !== undefined &&
+      selectionInput !== null &&
+      selectionInput.hasPointerCapture(pointerId)
+    ) {
+      selectionInput.releasePointerCapture(pointerId);
+    }
+  };
+
+  const deactivateSelectionTool = (): void => {
+    cancelSelectionDrag();
+    isSelectionToolActiveRef.current = false;
+    setIsSelectionToolActive(false);
+  };
+
+  const toggleSelectionTool = (): void => {
+    const nextActive = !isSelectionToolActiveRef.current;
+    if (!nextActive) {
+      deactivateSelectionTool();
+      return;
+    }
+    isSelectionToolActiveRef.current = nextActive;
+    setIsSelectionToolActive(nextActive);
+    hideBrushIndicator();
+  };
+
+  /** Applies one Demo-owned rectangular Selection through the public Web API. */
+  const applySelectionRect = (rect: Rect): void => {
+    const reverie = reverieRef.current;
+    if (reverie === null) return;
+    try {
+      reverie.setSelection(
+        SelectionMask.fromRect(rect, {
+          tileSize: reverie.activeLayer.raster.tileSize,
+        }),
+      );
+      setSelectionRect(rect);
+      setDrawingError(null);
+    } catch (error) {
+      setDrawingError(formatDrawingError(error));
+    }
+  };
+
+  const selectAll = (): void => {
+    applySelectionRect({
+      x: 0,
+      y: 0,
+      width: drawingWidth,
+      height: drawingHeight,
+    });
+  };
+
+  const deselect = (): void => {
+    const reverie = reverieRef.current;
+    if (reverie === null) return;
+    try {
+      reverie.setSelection(null);
+      setSelectionRect(null);
+      setSelectionPreviewRect(null);
+      setDrawingError(null);
+    } catch (error) {
+      setDrawingError(formatDrawingError(error));
+    }
+  };
+
+  /** Converts a rectangle-input pointer to the current Camera's World space. */
+  const getSelectionWorldPoint = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ): WorldPoint | null => {
+    const camera = reverieRef.current?.camera;
+    if (camera === undefined) return null;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    return camera.screenToWorld({
+      x: event.clientX - bounds.left,
+      y: event.clientY - bounds.top,
+    });
+  };
+
+  const handleSelectionStart = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ): void => {
+    if (event.button !== 0 || selectionDragRef.current !== null) return;
+    const anchor = getSelectionWorldPoint(event);
+    if (anchor === null) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    selectionDragRef.current = { pointerId: event.pointerId, anchor };
+    setSelectionPreviewRect(createSelectionRect(anchor, anchor, canvasSize));
+    hideBrushIndicator();
+  };
+
+  const handleSelectionMove = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ): void => {
+    const drag = selectionDragRef.current;
+    if (drag === null || event.pointerId !== drag.pointerId) return;
+    const current = getSelectionWorldPoint(event);
+    if (current === null) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectionPreviewRect(
+      createSelectionRect(drag.anchor, current, canvasSize),
+    );
+  };
+
+  const finishSelection = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    const drag = selectionDragRef.current;
+    if (drag === null || event.pointerId !== drag.pointerId) return;
+    const current = getSelectionWorldPoint(event);
+    event.preventDefault();
+    event.stopPropagation();
+    selectionDragRef.current = null;
+    setSelectionPreviewRect(null);
+    if (current !== null) {
+      applySelectionRect(createSelectionRect(drag.anchor, current, canvasSize));
+    }
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const cancelSelection = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    if (event.pointerId !== selectionDragRef.current?.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    selectionDragRef.current = null;
+    setSelectionPreviewRect(null);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
   };
 
   const refreshLayers = (): void => {
@@ -462,6 +635,7 @@ export function PaintingWorkspace({
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = "";
     if (file === undefined) return;
+    deactivateSelectionTool();
     const requestId = ++imageLoadRequestIdRef.current;
     setIsImageBrushLoading(true);
     setDrawingError(null);
@@ -482,6 +656,7 @@ export function PaintingWorkspace({
   };
 
   const useGeometricBrush = (mode: BrushMode): void => {
+    deactivateSelectionTool();
     imageLoadRequestIdRef.current += 1;
     setBrushImage(null);
     setBrushMode(mode);
@@ -565,6 +740,8 @@ export function PaintingWorkspace({
       getFitCameraZoom(viewportSize.width, viewportSize.height, canvasSize)) *
       100,
   );
+  const displayedSelectionRect = selectionPreviewRect ?? selectionRect;
+  const worldOverlayTransform = `matrix(${cameraZoom} 0 0 ${cameraZoom} ${-panX * cameraZoom} ${-panY * cameraZoom})`;
 
   return (
     <main className="workspace-shell" aria-busy={!isCanvasReady}>
@@ -598,6 +775,36 @@ export function PaintingWorkspace({
         />
         <svg
           aria-hidden="true"
+          className={`selection-overlay${selectionPreviewRect !== null ? " is-preview" : ""}`}
+          style={canvasStyle}
+          width="100%"
+          height="100%"
+        >
+          {displayedSelectionRect !== null && (
+            <g transform={worldOverlayTransform}>
+              <rect
+                className="selection-outline-shadow"
+                x={displayedSelectionRect.x}
+                y={displayedSelectionRect.y}
+                width={displayedSelectionRect.width}
+                height={displayedSelectionRect.height}
+                fill="none"
+                vectorEffect="non-scaling-stroke"
+              />
+              <rect
+                className="selection-outline-march"
+                x={displayedSelectionRect.x}
+                y={displayedSelectionRect.y}
+                width={displayedSelectionRect.width}
+                height={displayedSelectionRect.height}
+                fill="none"
+                vectorEffect="non-scaling-stroke"
+              />
+            </g>
+          )}
+        </svg>
+        <svg
+          aria-hidden="true"
           className="brush-indicator"
           style={canvasStyle}
           width="100%"
@@ -625,6 +832,19 @@ export function PaintingWorkspace({
             />
           </g>
         </svg>
+        {isSelectionToolActive && (
+          <div
+            aria-label="Rectangle selection input"
+            className="selection-input-layer"
+            ref={selectionInputRef}
+            style={canvasStyle}
+            onLostPointerCapture={cancelSelection}
+            onPointerCancel={cancelSelection}
+            onPointerDown={handleSelectionStart}
+            onPointerMove={handleSelectionMove}
+            onPointerUp={finishSelection}
+          />
+        )}
       </div>
 
       <header className="workspace-toolbar">
@@ -636,6 +856,15 @@ export function PaintingWorkspace({
           onClick={togglePaintMode}
         >
           Eraser
+        </button>
+        <button
+          className={`selection-mode-toggle${isSelectionToolActive ? " is-active" : ""}`}
+          type="button"
+          aria-label="Toggle rectangle selection tool"
+          aria-pressed={isSelectionToolActive}
+          onClick={toggleSelectionTool}
+        >
+          Select
         </button>
         <label className="toolbar-color-control" title="Brush color">
           <input
@@ -695,6 +924,24 @@ export function PaintingWorkspace({
                 }
               />
             </label>
+            <p className="tool-group-label">Selection</p>
+            <div className="selection-actions">
+              <button type="button" onClick={selectAll}>
+                Select all
+              </button>
+              <button
+                type="button"
+                disabled={selectionRect === null}
+                onClick={deselect}
+              >
+                Deselect
+              </button>
+            </div>
+            <p className="selection-status">
+              {selectionRect === null
+                ? "No active selection"
+                : `${selectionRect.width} × ${selectionRect.height} at ${selectionRect.x}, ${selectionRect.y}`}
+            </p>
             <p className="tool-group-label">Canvas</p>
             <button type="button" onClick={resetView}>
               Reset view
@@ -718,7 +965,7 @@ export function PaintingWorkspace({
               Export to console
             </button>
             <p className="tool-hint">
-              Middle-drag to pan. Scroll to zoom at the cursor.
+              Middle-drag to pan. Scroll to zoom. Escape leaves Select mode.
             </p>
           </div>
         </details>
@@ -916,13 +1163,17 @@ export function PaintingWorkspace({
           exportStatus ??
           (isPanning
             ? "Panning"
-            : isPainting
-              ? "Painting"
-              : brushImage === null
-                ? brushMode === "smooth"
-                  ? "Smooth brush"
-                  : "Pixel brush"
-                : "Image brush")}
+            : isSelectionToolActive
+              ? selectionPreviewRect === null
+                ? "Drag on the canvas to create a rectangular selection"
+                : `Selecting ${selectionPreviewRect.width} × ${selectionPreviewRect.height}`
+              : isPainting
+                ? "Painting"
+                : brushImage === null
+                  ? brushMode === "smooth"
+                    ? `Smooth brush${selectionRect === null ? "" : " · Selection active"}`
+                    : `Pixel brush${selectionRect === null ? "" : " · Selection active"}`
+                  : `Image brush${selectionRect === null ? "" : " · Selection active"}`)}
       </div>
       <div
         className={`loading-screen${isCanvasReady ? " is-hidden" : ""}`}

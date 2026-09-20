@@ -4,6 +4,7 @@ import type {
   PaintMode,
   Raster,
   RasterLayer,
+  SelectionMask,
 } from "@reverie/core";
 import type { CanvasRenderer } from "@reverie/renderer";
 
@@ -31,6 +32,9 @@ export interface CanvasDrawingSessionConfig {
 
   /** Initial operation captured by new strokes. Defaults to paint. */
   readonly paintMode?: PaintMode;
+
+  /** Initial transient Selection, or null for unrestricted writes. */
+  readonly selection?: SelectionMask | null;
 
   /** Initial uint32 stroke sequence for restoring session state. Defaults to `0`. */
   readonly strokeSequence?: number;

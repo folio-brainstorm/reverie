@@ -1,4 +1,4 @@
-import { resolvePaintMode, Stroke } from "@reverie/core";
+import { resolvePaintMode, SelectionMask, Stroke } from "@reverie/core";
 import type {
   Brush,
   Camera,
@@ -51,6 +51,7 @@ export class CanvasDrawingSession {
 
   private currentBrush: Brush;
   private currentPaintMode: PaintMode;
+  private currentSelection: SelectionMask | null;
   private readonly scheduler: DrawingScheduler;
   private readonly ownsScheduler: boolean;
   private readonly maxDevicePixelRatio: number;
@@ -58,6 +59,7 @@ export class CanvasDrawingSession {
   private readonly onStrokeStart: (() => void) | undefined;
   private readonly onStrokeEnd: (() => void) | undefined;
   private activeStroke: Stroke | null = null;
+  private activeStrokeSelection: SelectionMask | null = null;
   private activePointerId: number | null = null;
   /** Caller-visible uint32 identity for the next stroke; independent of frames. */
   private strokeSequence = 0;
@@ -106,6 +108,11 @@ export class CanvasDrawingSession {
     return this.currentPaintMode;
   }
 
+  /** Returns the transient Selection captured by the next Stroke. */
+  get selection(): SelectionMask | null {
+    return this.currentSelection;
+  }
+
   /** Returns whether one pointer currently owns an active Stroke. */
   get isPainting(): boolean {
     return this.activeStroke !== null;
@@ -145,6 +152,9 @@ export class CanvasDrawingSession {
       throw WebError.from(WebErrorDefinitions.SESSION_LAYER_RASTER_MISMATCH);
     }
 
+    const selection = config.selection ?? null;
+    CanvasDrawingSession.assertValidSelection(selection);
+
     this.canvas = config.canvas;
     this.currentRaster = config.raster;
     this.camera = config.camera;
@@ -152,6 +162,7 @@ export class CanvasDrawingSession {
     this.renderer = config.renderer;
     this.currentBrush = config.brush;
     this.currentPaintMode = resolvePaintMode(config.paintMode);
+    this.currentSelection = selection;
     this.maxDevicePixelRatio = maxDevicePixelRatio;
     this.onError = config.onError;
     this.onStrokeStart = config.onStrokeStart;
@@ -190,6 +201,27 @@ export class CanvasDrawingSession {
    */
   setPaintMode(paintMode: PaintMode): void {
     this.currentPaintMode = resolvePaintMode(paintMode);
+  }
+
+  /**
+   * Replaces the transient coverage mask captured by future Strokes.
+   *
+   * The mask reference is captured rather than cloned. Callers must not mutate
+   * an installed mask until the active Stroke and queued drawing work finish.
+   *
+   * @param selection - SelectionMask to apply, or null for unrestricted writes.
+   * @throws {WebTypeError} The value is neither a SelectionMask nor null.
+   * @throws {WebError} The Session is disposed or drawing work is still active.
+   */
+  setSelection(selection: SelectionMask | null): void {
+    CanvasDrawingSession.assertValidSelection(selection);
+    if (this.isDisposed) {
+      throw WebError.from(WebErrorDefinitions.SELECTION_CHANGE_WHILE_DISPOSED);
+    }
+    if (this.isPainting || !this.scheduler.idle) {
+      throw WebError.from(WebErrorDefinitions.SELECTION_CHANGE_WHILE_BUSY);
+    }
+    this.currentSelection = selection;
   }
 
   /**
@@ -389,6 +421,7 @@ export class CanvasDrawingSession {
       paintMode: this.currentPaintMode,
       strokeSequence: this.strokeSequence,
     });
+    this.activeStrokeSelection = this.currentSelection;
     this.strokeSequence = (this.strokeSequence + 1) >>> 0;
     this.onStrokeStart?.();
     this.addPointerSamples(event);
@@ -460,6 +493,9 @@ export class CanvasDrawingSession {
         brush: stroke.brush,
         raster: this.raster,
         ...(this.layer === undefined ? {} : { layer: this.layer }),
+        ...(this.activeStrokeSelection === null
+          ? {}
+          : { selection: this.activeStrokeSelection }),
       });
     }
   }
@@ -475,6 +511,7 @@ export class CanvasDrawingSession {
 
     stroke.end();
     this.activeStroke = null;
+    this.activeStrokeSelection = null;
     this.activePointerId = null;
 
     if (shouldReleaseCapture && this.canvas.hasPointerCapture(pointerId)) {
@@ -516,6 +553,7 @@ export class CanvasDrawingSession {
     } catch (error) {
       this.activeStroke?.end();
       this.activeStroke = null;
+      this.activeStrokeSelection = null;
       this.activePointerId = null;
       this.reportError(error);
     }
@@ -545,6 +583,15 @@ export class CanvasDrawingSession {
       throw WebRangeError.from(
         WebErrorDefinitions.INVALID_MAX_DEVICE_PIXEL_RATIO,
       );
+    }
+  }
+
+  /** Rejects malformed Selection references at Web public boundaries. */
+  private static assertValidSelection(
+    selection: unknown,
+  ): asserts selection is SelectionMask | null {
+    if (selection !== null && !(selection instanceof SelectionMask)) {
+      throw WebTypeError.from(WebErrorDefinitions.INVALID_SELECTION);
     }
   }
 }

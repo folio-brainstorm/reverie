@@ -10,6 +10,7 @@ import type { RGBAColor } from "../../interfaces/color/Colors.js";
 import type { PaintMode } from "../../interfaces/paint/PaintMode.js";
 import type { StampCommand } from "../../interfaces/stroke/StampCommand.js";
 import type { Raster } from "../raster/Raster.js";
+import type { SelectionMask } from "../selection/SelectionMask.js";
 
 import { writeRasterStampPixel } from "../../internal/raster-write/WriteRasterStampPixel.js";
 import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
@@ -187,10 +188,16 @@ export class ImageBrush implements Brush {
    * @param position - World-space position occupied by the configured anchor.
    * @param input - Optional dynamics and random context; absent random identity
    * uses the brush seed and stamp index `0` without invocation state.
+   * @param selection - Optional transient coverage mask applied per final pixel.
    * @throws {ReverieRangeError} Used dynamics input, transformed position, or
    * destination bounds, random identity, jitter arithmetic, or scatter result is invalid.
    */
-  stamp(raster: Raster, position: WorldPoint, input?: StampCommand): void {
+  stamp(
+    raster: Raster,
+    position: WorldPoint,
+    input?: StampCommand,
+    selection: SelectionMask | null = null,
+  ): void {
     const paintMode = resolvePaintMode(input?.paintMode);
     if (
       !this.image.hasCoverage ||
@@ -216,7 +223,13 @@ export class ImageBrush implements Brush {
       this.seed,
       input,
     );
-    this.paintTransformedImage(raster, paintPosition, resolved, paintMode);
+    this.paintTransformedImage(
+      raster,
+      paintPosition,
+      resolved,
+      paintMode,
+      selection,
+    );
   }
 
   /** Visits only the conservative transformed bounds using scalar inverse math. */
@@ -225,6 +238,7 @@ export class ImageBrush implements Brush {
     position: WorldPoint,
     resolved: ResolvedBrushParameters,
     paintMode: PaintMode,
+    selection: SelectionMask | null,
   ): void {
     const longestSourceSide = Math.max(this.image.width, this.image.height);
     const scale = resolved.size / longestSourceSide;
@@ -280,8 +294,14 @@ export class ImageBrush implements Brush {
           continue;
         }
 
+        const selectionCoverage = selection?.getCoverage(pixelX, pixelY) ?? 1;
+        if (selectionCoverage === 0) {
+          continue;
+        }
+        const effectiveCoverage = coverage * selectionCoverage;
+
         const effectiveAlpha = Math.round(
-          this.internalColor.a * resolved.opacity * coverage,
+          this.internalColor.a * resolved.opacity * effectiveCoverage,
         );
 
         if (paintMode === "paint" && effectiveAlpha === 0) {
@@ -297,7 +317,7 @@ export class ImageBrush implements Brush {
           this.internalColor.b,
           effectiveAlpha,
           effectiveAlpha / 255,
-          resolved.opacity * coverage,
+          resolved.opacity * effectiveCoverage,
         );
       }
     }

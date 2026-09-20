@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { CircleBrush, deriveStrokeSeed, Stroke, World } from "@reverie/core";
+import {
+  CircleBrush,
+  deriveStrokeSeed,
+  PixelBrush,
+  SelectionMask,
+  Stroke,
+  World,
+} from "@reverie/core";
 import type { StampCommand } from "@reverie/core";
 import {
   ExportRenderer,
@@ -171,6 +178,74 @@ describe("ReverieCanvas drawing and lifecycle", () => {
       a: 0,
     });
     reverie.dispose();
+  });
+
+  it("captures Selection for queued work and rejects replacement while busy", () => {
+    const runtime = createCanvasRuntime();
+    const selection = SelectionMask.fromRect({
+      x: 0,
+      y: 0,
+      width: 1,
+      height: 1,
+    });
+    const reverie = new ReverieCanvas({
+      canvas: runtime.canvas,
+      brush: new PixelBrush({
+        size: 3,
+        color: { r: 10, g: 20, b: 30, a: 255 },
+      }),
+      selection,
+    });
+
+    expect(reverie.selection).toBe(selection);
+    expect(reverie.session.selection).toBe(selection);
+    runtime.canvas.dispatchPointer("pointerdown", {
+      button: 0,
+      pointerId: 1,
+      clientX: 0.5,
+      clientY: 0.5,
+      timeStamp: 1,
+    });
+    expect(() => reverie.setSelection(null)).toThrow(
+      `[${WebErrorDefinitions.SELECTION_CHANGE_WHILE_BUSY.code}]`,
+    );
+    runtime.canvas.dispatchPointer("pointerup", {
+      button: 0,
+      pointerId: 1,
+      clientX: 0.5,
+      clientY: 0.5,
+      timeStamp: 2,
+    });
+    expect(() => reverie.setSelection(null)).toThrow(
+      `[${WebErrorDefinitions.SELECTION_CHANGE_WHILE_BUSY.code}]`,
+    );
+
+    runtime.runNextFrame();
+    expect(reverie.activeLayer.raster.getPixel({ x: 0, y: 0 }).a).toBe(255);
+    expect(reverie.activeLayer.raster.getPixel({ x: 1, y: 0 }).a).toBe(0);
+
+    reverie.setSelection(null);
+    expect(reverie.selection).toBeNull();
+    reverie.dispose();
+  });
+
+  it("rejects malformed Selection values and replacement after disposal", () => {
+    const runtime = createCanvasRuntime();
+    const invalidConfig: ReverieCanvasConfig = {
+      canvas: runtime.canvas,
+      // @ts-expect-error Runtime validation protects JavaScript callers.
+      selection: {},
+    };
+
+    expect(() => new ReverieCanvas(invalidConfig)).toThrow(
+      `[${WebErrorDefinitions.INVALID_SELECTION.code}]`,
+    );
+
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+    reverie.dispose();
+    expect(() => reverie.session.setSelection(null)).toThrow(
+      `[${WebErrorDefinitions.SELECTION_CHANGE_WHILE_DISPOSED.code}]`,
+    );
   });
 
   it("releases runtime resources and rejects mutations after disposal", () => {

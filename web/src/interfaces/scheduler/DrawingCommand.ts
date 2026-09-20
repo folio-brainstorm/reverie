@@ -2,6 +2,7 @@ import type {
   Brush,
   Raster,
   RasterLayer,
+  SelectionMask,
   StampCommand,
 } from "@reverie/core";
 
@@ -18,4 +19,7 @@ export interface DrawingCommand {
 
   /** Optional bounded layer that mediates final pixel writes. */
   readonly layer?: RasterLayer;
+
+  /** Selection reference captured for this command, or null for unrestricted writes. */
+  readonly selection?: SelectionMask | null;
 }

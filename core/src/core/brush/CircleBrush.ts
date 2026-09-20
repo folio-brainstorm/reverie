@@ -9,6 +9,7 @@ import type { RGBAColor } from "../../interfaces/color/Colors.js";
 import type { PaintMode } from "../../interfaces/paint/PaintMode.js";
 import type { StampCommand } from "../../interfaces/stroke/StampCommand.js";
 import type { Raster } from "../raster/Raster.js";
+import type { SelectionMask } from "../selection/SelectionMask.js";
 
 import { writeRasterStampPixel } from "../../internal/raster-write/WriteRasterStampPixel.js";
 import { rasterizeCirclePixels } from "../../internal/rasterizer/RasterizeCirclePixels.js";
@@ -182,18 +183,31 @@ export class CircleBrush implements Brush {
    * @param position - Continuous world-space center of the stamp.
    * @param input - Optional dynamics and random context; absent random identity
    * uses the brush seed and stamp index `0` without invocation state.
+   * @param selection - Optional transient coverage mask applied per final pixel.
    * @throws {ReverieTypeError} A position component is not a number.
    * @throws {ReverieRangeError} A position is not finite or the resulting
    * pixel bounds exceed the safe integer range, or used dynamics input or curve
    * output, random identity, jitter arithmetic, or scatter result is invalid.
    */
-  stamp(raster: Raster, position: WorldPoint, input?: StampCommand): void {
+  stamp(
+    raster: Raster,
+    position: WorldPoint,
+    input?: StampCommand,
+    selection: SelectionMask | null = null,
+  ): void {
     const paintMode = resolvePaintMode(input?.paintMode);
     assertFiniteCircleCenterComponent(position.x, "center.x");
     assertFiniteCircleCenterComponent(position.y, "center.y");
 
     if (!this.hasPaintVariation) {
-      this.paintCircle(raster, position, this.size, this.opacity, paintMode);
+      this.paintCircle(
+        raster,
+        position,
+        this.size,
+        this.opacity,
+        paintMode,
+        selection,
+      );
       return;
     }
 
@@ -216,6 +230,7 @@ export class CircleBrush implements Brush {
       resolved.size,
       resolved.opacity,
       paintMode,
+      selection,
     );
   }
 
@@ -226,6 +241,7 @@ export class CircleBrush implements Brush {
     size: number,
     opacity: number,
     paintMode: PaintMode,
+    selection: SelectionMask | null,
   ): void {
     if (
       size <= 0 ||
@@ -241,8 +257,13 @@ export class CircleBrush implements Brush {
         radius: size / 2,
       },
       (x, y, coverage) => {
+        const selectionCoverage = selection?.getCoverage(x, y) ?? 1;
+        if (selectionCoverage === 0) {
+          return;
+        }
+        const effectiveCoverage = coverage * selectionCoverage;
         const effectiveAlpha = Math.round(
-          this.internalColor.a * opacity * coverage,
+          this.internalColor.a * opacity * effectiveCoverage,
         );
         if (paintMode === "paint" && effectiveAlpha === 0) {
           return;
@@ -258,7 +279,7 @@ export class CircleBrush implements Brush {
           this.internalColor.b,
           effectiveAlpha,
           effectiveAlpha / 255,
-          opacity * coverage,
+          opacity * effectiveCoverage,
         );
       },
     );

@@ -1,6 +1,7 @@
 import type { WorldPoint } from "../camera/WorldPoint.js";
 import type { StampCommand } from "../stroke/StampCommand.js";
 import type { Raster } from "../../core/raster/Raster.js";
+import type { SelectionMask } from "../../core/selection/SelectionMask.js";
 
 /** Defines a brush model that can place one stamp in continuous world space. */
 export interface Brush {
@@ -31,6 +32,12 @@ export interface Brush {
    * @param raster - Sparse raster that receives the stamp.
    * @param position - Brush-defined stamp anchor in continuous world coordinates.
    * @param input - Optional dynamics input and deterministic seed/index context.
+   * @param selection - Optional transient world-space coverage restricting final writes.
    */
-  stamp(raster: Raster, position: WorldPoint, input?: StampCommand): void;
+  stamp(
+    raster: Raster,
+    position: WorldPoint,
+    input?: StampCommand,
+    selection?: SelectionMask | null,
+  ): void;
 }

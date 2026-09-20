@@ -9,6 +9,7 @@ import type { RGBAColor } from "../../interfaces/color/Colors.js";
 import type { PaintMode } from "../../interfaces/paint/PaintMode.js";
 import type { StampCommand } from "../../interfaces/stroke/StampCommand.js";
 import type { Raster } from "../raster/Raster.js";
+import type { SelectionMask } from "../selection/SelectionMask.js";
 
 import { writeRasterStampPixel } from "../../internal/raster-write/WriteRasterStampPixel.js";
 import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
@@ -167,17 +168,30 @@ export class PixelBrush implements Brush {
    * @param raster - Sparse raster that receives the stamp.
    * @param position - Continuous position snapped according to footprint parity.
    * @param input - Optional dynamics, operation, and deterministic random context.
+   * @param selection - Optional transient coverage mask applied per final pixel.
    * @throws {ReverieTypeError} A position component is not a number.
    * @throws {ReverieRangeError} A position is not finite, resolved bounds are
    * unsafe, or used dynamics, jitter, scatter, or identity input is invalid.
    */
-  stamp(raster: Raster, position: WorldPoint, input?: StampCommand): void {
+  stamp(
+    raster: Raster,
+    position: WorldPoint,
+    input?: StampCommand,
+    selection: SelectionMask | null = null,
+  ): void {
     const paintMode = resolvePaintMode(input?.paintMode);
     PixelBrush.assertFinitePosition(position.x, "position.x");
     PixelBrush.assertFinitePosition(position.y, "position.y");
 
     if (!this.hasPaintVariation) {
-      this.paintFootprint(raster, position, this.size, this.opacity, paintMode);
+      this.paintFootprint(
+        raster,
+        position,
+        this.size,
+        this.opacity,
+        paintMode,
+        selection,
+      );
       return;
     }
 
@@ -199,6 +213,7 @@ export class PixelBrush implements Brush {
       resolved.size,
       resolved.opacity,
       paintMode,
+      selection,
     );
   }
 
@@ -209,6 +224,7 @@ export class PixelBrush implements Brush {
     resolvedSize: number,
     opacity: number,
     paintMode: PaintMode,
+    selection: SelectionMask | null,
   ): void {
     if (
       resolvedSize <= 0 ||
@@ -238,10 +254,15 @@ export class PixelBrush implements Brush {
       );
     }
 
-    const effectiveAlpha = Math.round(this.internalColor.a * opacity);
-    const normalizedEffectiveAlpha = effectiveAlpha / 255;
     for (let y = minY; y <= maxY; y += 1) {
       for (let x = minX; x <= maxX; x += 1) {
+        const selectionCoverage = selection?.getCoverage(x, y) ?? 1;
+        if (selectionCoverage === 0) {
+          continue;
+        }
+        const effectiveAlpha = Math.round(
+          this.internalColor.a * opacity * selectionCoverage,
+        );
         writeRasterStampPixel(
           raster,
           x,
@@ -251,8 +272,8 @@ export class PixelBrush implements Brush {
           this.internalColor.g,
           this.internalColor.b,
           effectiveAlpha,
-          normalizedEffectiveAlpha,
-          opacity,
+          effectiveAlpha / 255,
+          opacity * selectionCoverage,
         );
       }
     }

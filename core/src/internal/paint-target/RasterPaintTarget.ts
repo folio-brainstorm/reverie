@@ -3,6 +3,7 @@ import type { WorldPoint } from "../../interfaces/camera/WorldPoint.js";
 import type { StampCommand } from "../../interfaces/stroke/StampCommand.js";
 import type { WorldBounds } from "../../interfaces/world/WorldBounds.js";
 import type { Raster } from "../../core/raster/Raster.js";
+import type { SelectionMask } from "../../core/selection/SelectionMask.js";
 
 import { withRasterPaintBounds } from "./ActiveRasterPaintBounds.js";
 
@@ -29,10 +30,16 @@ export class RasterPaintTarget {
    * @param brush - Brush implementation producing final pixel writes.
    * @param position - Continuous world-space stamp center.
    * @param input - Optional per-stamp input forwarded without interpretation.
+   * @param selection - Optional transient coverage mask forwarded to the Brush.
    */
-  stamp(brush: Brush, position: WorldPoint, input?: StampCommand): void {
+  stamp(
+    brush: Brush,
+    position: WorldPoint,
+    input?: StampCommand,
+    selection: SelectionMask | null = null,
+  ): void {
     withRasterPaintBounds(this.raster, this.bounds, () => {
-      brush.stamp(this.raster, position, input);
+      brush.stamp(this.raster, position, input, selection);
     });
   }
 }

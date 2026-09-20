@@ -107,6 +107,38 @@ Stamp 会围绕 anchor 旋转，通过逆变换与双线性采样读取 Mask，�
 来源。图片文件的浏览器解码不属于 Core；`demo` 提供本地上传入口，将解码后的
 RGBA 转为 `BrushImage`，但不会保存上传文件或画笔设置。
 
+## Selection Mask
+
+`SelectionMask` 以稀疏单通道 Tile 保存 World Pixel coverage。缺失 Tile 的
+coverage 为 `0`；公开 API 使用归一化的 `0..1` 数值，并在内部量化为 8-bit。
+`null` Selection 与空 Mask 不同：前者不限制写入，后者阻止全部写入。
+
+```ts
+import { PixelBrush, Raster, SelectionMask } from "@reverie/core";
+
+const raster = new Raster();
+const selection = SelectionMask.fromRect({
+  x: -32,
+  y: -16,
+  width: 64,
+  height: 32,
+});
+const pixelBrush = new PixelBrush({
+  size: 1,
+  color: { r: 0, g: 0, b: 0, a: 255 },
+});
+
+pixelBrush.stamp(raster, { x: 0.5, y: 0.5 }, undefined, selection);
+```
+
+Selection coverage 会在最终像素位置与 Circle、Image 或 Pixel Brush 的 coverage
+相乘，因此 scatter、抗锯齿边缘、paint 和 erase 使用同一套裁剪语义。它不属于
+`World` 或 `Raster`，不会影响渲染及导出。Web 入口通过
+`ReverieCanvas.setSelection(selectionOrNull)` 或
+`CanvasDrawingSession.setSelection(selectionOrNull)` 管理瞬态 Selection；活动
+笔画或调度队列未完成时不能替换 Selection。Session 捕获 Mask 引用而不复制，
+调用方不得在相关绘制工作完成前直接修改已安装的 Mask。
+
 ## Stroke
 
 `Stroke` 保存连续 World Space 中的原始输入采样，并按照 `brush.size ×

@@ -12,6 +12,19 @@ export const WebErrorDefinitions = {
     template:
       "Cannot change the drawing layer during a World layer-removal callback.",
   },
+  SELECTION_CHANGE_WHILE_DISPOSED: {
+    code: "EC_WEB_0024",
+    template: "Cannot change the Selection of a disposed CanvasDrawingSession.",
+  },
+  SELECTION_CHANGE_WHILE_BUSY: {
+    code: "EC_WEB_0025",
+    template:
+      "Finish the active stroke and wait for queued drawing work before changing the Selection.",
+  },
+  INVALID_SELECTION: {
+    code: "EC_WEB_0026",
+    template: "CanvasDrawingSession Selection must be a SelectionMask or null.",
+  },
   LAYER_CHANGE_WHILE_BUSY: {
     code: "EC_WEB_0021",
     template:

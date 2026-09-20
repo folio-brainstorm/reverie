@@ -4,7 +4,9 @@ import {
   BrushImage,
   CircleBrush,
   ImageBrush,
+  PixelBrush,
   Raster,
+  SelectionMask,
   Stroke,
 } from "@reverie/core";
 import type { Brush, StampCommand } from "@reverie/core";
@@ -136,6 +138,33 @@ describe("DrawingScheduler frame execution", () => {
 
     expect(stampBrush).toHaveBeenCalledOnce();
     expect(stampBrush).toHaveBeenCalledWith(raster, stamp.position, stamp);
+  });
+
+  it("forwards captured Selection coverage to direct Raster commands", () => {
+    const driver = new ManualFrameDriver();
+    const raster = new Raster();
+    const selection = SelectionMask.fromRect({
+      x: 1,
+      y: 0,
+      width: 1,
+      height: 1,
+    });
+    const brush = new PixelBrush({
+      size: 3,
+      color: { r: 10, g: 20, b: 30, a: 255 },
+    });
+    const scheduler = new DrawingScheduler({ frameDriver: driver });
+
+    scheduler.enqueue({
+      stamp: { position: { x: 0.5, y: 0.5 } },
+      brush,
+      raster,
+      selection,
+    });
+    driver.runNextFrame();
+
+    expect(raster.getPixel({ x: 1, y: 0 }).a).toBe(255);
+    expect(raster.getPixel({ x: 0, y: 0 }).a).toBe(0);
   });
 
   it("splits work across frames when the soft budget is exhausted", () => {

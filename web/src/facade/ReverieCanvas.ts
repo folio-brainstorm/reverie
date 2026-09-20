@@ -1,5 +1,11 @@
 import { Camera, CircleBrush, World } from "@reverie/core";
-import type { Brush, PaintMode, RasterLayer, WorldBounds } from "@reverie/core";
+import type {
+  Brush,
+  PaintMode,
+  RasterLayer,
+  SelectionMask,
+  WorldBounds,
+} from "@reverie/core";
 import type { ExportRegion } from "@reverie/exporter";
 import { CanvasRenderer } from "@reverie/renderer";
 
@@ -54,6 +60,11 @@ export class ReverieCanvas {
     return this.session.paintMode;
   }
 
+  /** Returns the transient Selection captured by the next Stroke. */
+  get selection(): SelectionMask | null {
+    return this.session.selection;
+  }
+
   /**
    * Creates and attaches a complete fixed or infinite canvas runtime.
    *
@@ -89,6 +100,9 @@ export class ReverieCanvas {
       ...(config.paintMode === undefined
         ? {}
         : { paintMode: config.paintMode }),
+      ...(config.selection === undefined
+        ? {}
+        : { selection: config.selection }),
       ...(config.strokeSequence === undefined
         ? {}
         : { strokeSequence: config.strokeSequence }),
@@ -134,6 +148,18 @@ export class ReverieCanvas {
   setPaintMode(paintMode: PaintMode): void {
     this.assertUsable();
     this.session.setPaintMode(paintMode);
+  }
+
+  /**
+   * Replaces the transient Selection captured by future strokes.
+   *
+   * @param selection - SelectionMask to apply, or null for unrestricted writes.
+   * @throws {WebError} This facade is disposed or drawing work has not finished.
+   * @throws {WebTypeError} The supplied value is not a SelectionMask or null.
+   */
+  setSelection(selection: SelectionMask | null): void {
+    this.assertUsable();
+    this.session.setSelection(selection);
   }
 
   /**

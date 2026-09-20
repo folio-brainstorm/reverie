@@ -3,6 +3,7 @@ import type { WorldPoint } from "../../interfaces/camera/WorldPoint.js";
 import type { StampCommand } from "../../interfaces/stroke/StampCommand.js";
 import type { WorldBounds } from "../../interfaces/world/WorldBounds.js";
 import type { LayerBlendMode } from "../../interfaces/world/LayerBlendMode.js";
+import type { SelectionMask } from "../selection/SelectionMask.js";
 
 import { RasterPaintTarget } from "../../internal/paint-target/RasterPaintTarget.js";
 import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
@@ -103,8 +104,14 @@ export class RasterLayer {
    * @param brush - Brush used to produce the stamp.
    * @param position - Continuous world-space stamp center.
    * @param input - Optional per-stamp input forwarded without interpretation.
+   * @param selection - Optional transient coverage mask independent of this Layer.
    */
-  stamp(brush: Brush, position: WorldPoint, input?: StampCommand): void {
-    this.paintTarget.stamp(brush, position, input);
+  stamp(
+    brush: Brush,
+    position: WorldPoint,
+    input?: StampCommand,
+    selection: SelectionMask | null = null,
+  ): void {
+    this.paintTarget.stamp(brush, position, input, selection);
   }
 }

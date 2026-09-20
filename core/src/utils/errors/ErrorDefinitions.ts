@@ -267,6 +267,17 @@ export const ErrorDefinitions = {
       template: "Pixel coverage must be a finite number between 0 and 1.",
     },
   },
+  SELECTION: {
+    INVALID_COVERAGE: {
+      code: "EC_SELECTION_0001",
+      template: "Selection coverage must be a finite number between 0 and 1.",
+    },
+    INVALID_RECT: {
+      code: "EC_SELECTION_0002",
+      template:
+        "Selection rectangle requires safe-integer x and y origins, positive safe-integer dimensions, safe half-open bounds, and a safe pixel count.",
+    },
+  },
   STROKE: {
     INVALID_NUMBER_TYPE: {
       code: "EC_STROKE_0001",

@@ -1,4 +1,4 @@
-import type { Brush, PaintMode } from "@reverie/core";
+import type { Brush, PaintMode, SelectionMask } from "@reverie/core";
 
 /** Configuration for a complete browser drawing surface. */
 export interface ReverieCanvasConfig {
@@ -19,6 +19,9 @@ export interface ReverieCanvasConfig {
 
   /** Initial operation captured by new strokes. Defaults to paint. */
   readonly paintMode?: PaintMode;
+
+  /** Initial transient Selection, or null for unrestricted writes. */
+  readonly selection?: SelectionMask | null;
 
   /** Initial uint32 stroke sequence for restoring the drawing session. Defaults to `0`. */
   readonly strokeSequence?: number;
