@@ -58,6 +58,7 @@ export class DrawingScheduler {
 
     this.isRunningFrame = true;
     let processedCommandCount = 0;
+    let executingCommand: DrawingCommand | undefined;
 
     try {
       const startTime = this.frameDriver.now();
@@ -77,40 +78,35 @@ export class DrawingScheduler {
           break;
         }
 
-        if (command.layer === undefined && command.selection == null) {
-          command.brush.stamp(
-            command.raster,
-            command.stamp.position,
-            command.stamp,
-          );
-        } else if (command.layer === undefined) {
-          command.brush.stamp(
-            command.raster,
-            command.stamp.position,
-            command.stamp,
-            command.selection,
-          );
-        } else if (command.selection == null) {
-          command.layer.stamp(
-            command.brush,
-            command.stamp.position,
-            command.stamp,
-          );
+        executingCommand = command;
+        const execute = (): void => this.executeCommand(command);
+        if (command.historyTransaction === undefined) {
+          execute();
         } else {
-          command.layer.stamp(
-            command.brush,
-            command.stamp.position,
-            command.stamp,
-            command.selection,
-          );
+          command.historyTransaction.executeMutation(execute);
         }
         processedCommandCount += 1;
+        executingCommand = undefined;
       }
 
       if (processedCommandCount > 0 && !this.isDisposed) {
         this.onRender?.();
       }
     } catch (error) {
+      const transaction = executingCommand?.historyTransaction;
+      if (transaction?.cancelled === true && !this.isDisposed) {
+        try {
+          this.onRender?.();
+        } catch (renderError) {
+          this.fail(
+            new AggregateError(
+              [error, renderError],
+              "Drawing rollback and its recovery render both failed.",
+            ),
+          );
+          return;
+        }
+      }
       this.fail(error);
       return;
     } finally {
@@ -211,6 +207,33 @@ export class DrawingScheduler {
 
     if (frameHandle !== null) {
       this.frameDriver.cancelFrame(frameHandle);
+    }
+  }
+
+  /** Executes one command without interpreting its optional History boundary. */
+  private executeCommand(command: DrawingCommand): void {
+    if (command.layer === undefined && command.selection == null) {
+      command.brush.stamp(
+        command.raster,
+        command.stamp.position,
+        command.stamp,
+      );
+    } else if (command.layer === undefined) {
+      command.brush.stamp(
+        command.raster,
+        command.stamp.position,
+        command.stamp,
+        command.selection,
+      );
+    } else if (command.selection == null) {
+      command.layer.stamp(command.brush, command.stamp.position, command.stamp);
+    } else {
+      command.layer.stamp(
+        command.brush,
+        command.stamp.position,
+        command.stamp,
+        command.selection,
+      );
     }
   }
 

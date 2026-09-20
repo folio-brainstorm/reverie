@@ -278,6 +278,40 @@ export const ErrorDefinitions = {
         "Selection rectangle requires safe-integer x and y origins, positive safe-integer dimensions, safe half-open bounds, and a safe pixel count.",
     },
   },
+  HISTORY: {
+    GROUP_ALREADY_ACTIVE: {
+      code: "EC_HISTORY_0001",
+      template: "Cannot begin a History group while another group is active.",
+    },
+    GROUP_NOT_ACTIVE: {
+      code: "EC_HISTORY_0002",
+      template: "Cannot finish a History group because no group is active.",
+    },
+    DOCUMENT_MUTATION_DURING_RASTER_EDIT: {
+      code: "EC_HISTORY_0003",
+      template:
+        "Finish the active Raster edit before changing Layer document state.",
+    },
+    INVALID_RASTER_TRANSACTION_STATE: {
+      code: "EC_HISTORY_0004",
+      template:
+        "Raster History transaction cannot perform `$operation` after it has `$state`.",
+    },
+    INVALID_BYTE_BUDGET: {
+      code: "EC_HISTORY_0005",
+      template: "History byte budget must be a positive safe integer.",
+    },
+    OPERATION_DURING_GROUP: {
+      code: "EC_HISTORY_0006",
+      template:
+        "Commit or cancel the active History group before `$operation`.",
+    },
+    NESTED_RASTER_MUTATION: {
+      code: "EC_HISTORY_0007",
+      template:
+        "Nested Raster History mutation scopes on the same Raster are unsupported.",
+    },
+  },
   STROKE: {
     INVALID_NUMBER_TYPE: {
       code: "EC_STROKE_0001",

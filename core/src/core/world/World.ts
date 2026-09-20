@@ -6,6 +6,9 @@ import type { WorldConfig } from "../../interfaces/world/World.js";
 import type { ResolvedWorldConfig } from "../../interfaces/world/ResolvedWorldConfig.js";
 import type { WorldBounds } from "../../interfaces/world/WorldBounds.js";
 import type { LayerRemovalObserver } from "../../interfaces/world/LayerRemovalObserver.js";
+import type { RasterLayerMutation } from "../../interfaces/world/RasterLayerMutation.js";
+import type { WorldMutation } from "../../interfaces/world/WorldMutation.js";
+import type { WorldMutationObserver } from "../../interfaces/world/WorldMutationObserver.js";
 
 import {
   DEFAULT_WORLD_TILE_SIZE,
@@ -39,6 +42,11 @@ export class World {
   private readonly config: ResolvedWorldConfig;
   private orderedLayers: readonly RasterLayer[] = Object.freeze([]);
   private readonly removalObservers = new Set<LayerRemovalObserver>();
+  private readonly mutationObservers = new Set<WorldMutationObserver>();
+  private readonly layerMutationUnsubscribers = new Map<
+    RasterLayer,
+    () => void
+  >();
   private isRemovingLayer = false;
   private nextLayerNumber = 1;
 
@@ -202,6 +210,12 @@ export class World {
     ) {
       throw ReverieTypeError.from(ErrorDefinitions.WORLD.INCOMPATIBLE_LAYER);
     }
+    const mutation: WorldMutation = {
+      kind: "layer-inserted",
+      layer: candidate,
+      index,
+    };
+    this.notifyBeforeMutation(mutation);
     if (!candidate.hasAssignedName) {
       candidate.name = `Layer ${this.nextLayerNumber++}`;
     }
@@ -210,6 +224,8 @@ export class World {
     LAYER_OWNERS.set(candidate, this);
     RASTER_OWNERS.set(candidate.raster, candidate);
     this.orderedLayers = Object.freeze(layers);
+    this.attachLayerMutationObservation(candidate);
+    this.notifyAfterMutation(mutation);
     return candidate;
   }
 
@@ -250,10 +266,22 @@ export class World {
     this.assertCanChangeLayers();
     const member = this.getLayer(layer);
     this.assertLayerIndex(index);
+    const previousIndex = this.layers.indexOf(member);
+    if (previousIndex === index) {
+      return;
+    }
+    const mutation: WorldMutation = {
+      kind: "layer-moved",
+      layer: member,
+      previousIndex,
+      index,
+    };
+    this.notifyBeforeMutation(mutation);
     const layers = [...this.layers];
-    layers.splice(layers.indexOf(member), 1);
+    layers.splice(previousIndex, 1);
     layers.splice(index, 0, member);
     this.orderedLayers = Object.freeze(layers);
+    this.notifyAfterMutation(mutation);
   }
 
   /**
@@ -271,17 +299,25 @@ export class World {
       throw ReverieRangeError.from(ErrorDefinitions.WORLD.LAST_LAYER_REMOVAL);
     }
     const index = this.layers.indexOf(member);
+    const mutation: WorldMutation = {
+      kind: "layer-removed",
+      layer: member,
+      index,
+    };
     const observers = [...this.removalObservers];
     this.isRemovingLayer = true;
     try {
       for (const observer of observers) {
         observer.beforeRemove?.(member);
       }
+      this.notifyBeforeMutation(mutation);
       this.orderedLayers = Object.freeze(
         this.layers.filter((entry) => entry !== member),
       );
+      this.detachLayerMutationObservation(member);
       LAYER_OWNERS.delete(member);
       RASTER_OWNERS.delete(member.raster);
+      this.notifyAfterMutation(mutation);
       for (const observer of observers) {
         observer.afterRemove?.(member, index);
       }
@@ -311,10 +347,115 @@ export class World {
     };
   }
 
+  /**
+   * Observes layer membership, order, and property mutations in this document.
+   * Observation is optional; standalone Worlds retain no history state.
+   *
+   * @param observer - Hooks invoked around each validated document mutation.
+   * @returns An idempotent function that stops this observer.
+   */
+  observeMutations(observer: WorldMutationObserver): () => void {
+    const shouldAttachLayers = this.mutationObservers.size === 0;
+    this.mutationObservers.add(observer);
+    if (shouldAttachLayers) {
+      for (const layer of this.layers) {
+        this.attachLayerMutationObservation(layer);
+      }
+    }
+    return () => {
+      this.mutationObservers.delete(observer);
+      if (this.mutationObservers.size === 0) {
+        for (const layer of [...this.layerMutationUnsubscribers.keys()]) {
+          this.detachLayerMutationObservation(layer);
+        }
+      }
+    };
+  }
+
   /** Rejects mutations from callbacks before any membership change is made. */
   private assertCanChangeLayers(): void {
     if (this.isRemovingLayer) {
       throw ReverieError.from(ErrorDefinitions.WORLD.REENTRANT_LAYER_CHANGE);
+    }
+  }
+
+  /** Subscribes to one member Layer only while World observation is active. */
+  private attachLayerMutationObservation(layer: RasterLayer): void {
+    if (
+      this.mutationObservers.size === 0 ||
+      this.layerMutationUnsubscribers.has(layer)
+    ) {
+      return;
+    }
+    const unsubscribe = layer.observeMutations({
+      beforeMutation: (mutation) => {
+        this.notifyBeforeMutation(
+          World.createLayerPropertyMutation(layer, mutation),
+        );
+      },
+      afterMutation: (mutation) => {
+        this.notifyAfterMutation(
+          World.createLayerPropertyMutation(layer, mutation),
+        );
+      },
+    });
+    this.layerMutationUnsubscribers.set(layer, unsubscribe);
+  }
+
+  /** Stops forwarding mutations from one detached or unobserved Layer. */
+  private detachLayerMutationObservation(layer: RasterLayer): void {
+    this.layerMutationUnsubscribers.get(layer)?.();
+    this.layerMutationUnsubscribers.delete(layer);
+  }
+
+  /** Invokes current validation observers before changing document state. */
+  private notifyBeforeMutation(mutation: WorldMutation): void {
+    for (const observer of [...this.mutationObservers]) {
+      observer.beforeMutation?.(mutation);
+    }
+  }
+
+  /** Invokes current recording observers after changing document state. */
+  private notifyAfterMutation(mutation: WorldMutation): void {
+    for (const observer of [...this.mutationObservers]) {
+      observer.afterMutation?.(mutation);
+    }
+  }
+
+  /** Maps one Layer-local property change into its World document mutation. */
+  private static createLayerPropertyMutation(
+    layer: RasterLayer,
+    mutation: RasterLayerMutation,
+  ): WorldMutation {
+    switch (mutation.kind) {
+      case "name":
+        return {
+          kind: "layer-name-changed",
+          layer,
+          previousValue: mutation.previousValue,
+          value: mutation.value,
+        };
+      case "visibility":
+        return {
+          kind: "layer-visibility-changed",
+          layer,
+          previousValue: mutation.previousValue,
+          value: mutation.value,
+        };
+      case "opacity":
+        return {
+          kind: "layer-opacity-changed",
+          layer,
+          previousValue: mutation.previousValue,
+          value: mutation.value,
+        };
+      case "blend-mode":
+        return {
+          kind: "layer-blend-mode-changed",
+          layer,
+          previousValue: mutation.previousValue,
+          value: mutation.value,
+        };
     }
   }
 

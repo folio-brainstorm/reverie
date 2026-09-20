@@ -1,6 +1,7 @@
 import { Camera, CircleBrush, World } from "@reverie/core";
 import type {
   Brush,
+  LayerBlendMode,
   PaintMode,
   RasterLayer,
   SelectionMask,
@@ -65,6 +66,16 @@ export class ReverieCanvas {
     return this.session.selection;
   }
 
+  /** Returns whether one committed document edit can currently be undone. */
+  get canUndo(): boolean {
+    return this.session.canUndo;
+  }
+
+  /** Returns whether one previously undone document edit can currently be redone. */
+  get canRedo(): boolean {
+    return this.session.canRedo;
+  }
+
   /**
    * Creates and attaches a complete fixed or infinite canvas runtime.
    *
@@ -94,6 +105,7 @@ export class ReverieCanvas {
       canvas: config.canvas,
       raster: this.activeLayer.raster,
       layer: this.activeLayer,
+      world: this.world,
       camera: this.camera,
       renderer: this.renderer,
       brush: config.brush ?? ReverieCanvas.createDefaultBrush(),
@@ -180,6 +192,98 @@ export class ReverieCanvas {
   }
 
   /**
+   * Adds and selects one empty top Layer as a reversible document edit.
+   *
+   * @returns The new active Layer.
+   * @throws {WebError} This facade is disposed or drawing work has not finished.
+   */
+  addLayer(): RasterLayer {
+    this.assertUsable();
+    this.session.assertCanChangeLayer();
+    const layer = this.world.addLayer();
+    this.session.setLayer(layer);
+    this.currentActiveLayer = layer;
+    this.renderer.render();
+    return layer;
+  }
+
+  /**
+   * Moves a Layer to a final bottom-to-top index as one reversible edit.
+   *
+   * @param layer - World member reference or current index.
+   * @param index - Final index in the unchanged Layer collection.
+   * @throws {WebError} This facade is disposed or drawing work has not finished.
+   * @throws {ReverieRangeError} Either index is outside the World collection.
+   * @throws {ReverieError} The referenced Layer is not a World member.
+   */
+  moveLayer(layer: RasterLayer | number, index: number): void {
+    this.assertUsable();
+    this.session.assertCanChangeLayer();
+    this.world.moveLayer(layer, index);
+    this.renderer.render();
+  }
+
+  /**
+   * Changes Layer naming metadata as one reversible edit.
+   *
+   * @param layer - World member reference or bottom-to-top index.
+   * @param name - Replacement name, including an empty string when desired.
+   * @throws {WebError} This facade is disposed or drawing work has not finished.
+   */
+  setLayerName(layer: RasterLayer | number, name: string): void {
+    this.assertUsable();
+    this.session.assertCanChangeLayer();
+    this.world.getLayer(layer).name = name;
+  }
+
+  /**
+   * Changes Layer composition visibility as one reversible edit.
+   *
+   * @param layer - World member reference or bottom-to-top index.
+   * @param visible - Whether the Layer contributes to composition.
+   * @throws {WebError} This facade is disposed or drawing work has not finished.
+   */
+  setLayerVisibility(layer: RasterLayer | number, visible: boolean): void {
+    this.assertUsable();
+    this.session.assertCanChangeLayer();
+    this.world.getLayer(layer).visible = visible;
+    this.renderer.render();
+  }
+
+  /**
+   * Changes Layer composition opacity as one reversible edit.
+   *
+   * @param layer - World member reference or bottom-to-top index.
+   * @param opacity - Finite composition opacity in the inclusive range [0, 1].
+   * @throws {WebError} This facade is disposed or drawing work has not finished.
+   * @throws {ReverieRangeError} Opacity lies outside its supported range.
+   */
+  setLayerOpacity(layer: RasterLayer | number, opacity: number): void {
+    this.assertUsable();
+    this.session.assertCanChangeLayer();
+    this.world.getLayer(layer).opacity = opacity;
+    this.renderer.render();
+  }
+
+  /**
+   * Changes Layer composition blend mode as one reversible edit.
+   *
+   * @param layer - World member reference or bottom-to-top index.
+   * @param blendMode - Supported composition operation for the Layer.
+   * @throws {WebError} This facade is disposed or drawing work has not finished.
+   * @throws {ReverieTypeError} The blend mode is unsupported at runtime.
+   */
+  setLayerBlendMode(
+    layer: RasterLayer | number,
+    blendMode: LayerBlendMode,
+  ): void {
+    this.assertUsable();
+    this.session.assertCanChangeLayer();
+    this.world.getLayer(layer).blendMode = blendMode;
+    this.renderer.render();
+  }
+
+  /**
    * Removes a document layer, selecting a valid neighbor when necessary.
    * @param layer - Member reference or index; defaults to the active layer.
    * @returns The detached layer with its pixels preserved.
@@ -189,6 +293,7 @@ export class ReverieCanvas {
    */
   removeLayer(layer: RasterLayer | number = this.activeLayer): RasterLayer {
     this.assertUsable();
+    this.session.assertCanChangeLayer();
     const removed = this.world.removeLayer(layer);
     this.renderer.render();
     return removed;
@@ -197,12 +302,47 @@ export class ReverieCanvas {
   /**
    * Removes every pixel from the active layer and renders the empty canvas.
    *
-   * @throws {WebError} This facade has been disposed.
+   * @throws {WebError} This facade is disposed or drawing work has not finished.
    */
   clear(): void {
     this.assertUsable();
-    this.activeLayer.raster.clear();
-    this.renderer.render();
+    this.session.clearRaster();
+  }
+
+  /** Restores the most recent committed document edit. */
+  undo(): void {
+    this.assertUsable();
+    this.session.undo();
+  }
+
+  /** Restores the most recently undone document edit. */
+  redo(): void {
+    this.assertUsable();
+    this.session.redo();
+  }
+
+  /** Discards all retained Undo and Redo entries without changing the document. */
+  clearHistory(): void {
+    this.assertUsable();
+    this.session.clearHistory();
+  }
+
+  /** Begins a non-nested group for related synchronous document mutations. */
+  beginHistoryGroup(): void {
+    this.assertUsable();
+    this.session.beginHistoryGroup();
+  }
+
+  /** Commits the active mutation group as one Undo step. */
+  commitHistoryGroup(): void {
+    this.assertUsable();
+    this.session.commitHistoryGroup();
+  }
+
+  /** Cancels the active mutation group and restores its prior state. */
+  cancelHistoryGroup(): void {
+    this.assertUsable();
+    this.session.cancelHistoryGroup();
   }
 
   /**

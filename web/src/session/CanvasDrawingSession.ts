@@ -7,6 +7,8 @@ import type {
   RasterLayer,
   World,
 } from "@reverie/core";
+import { DocumentHistory } from "@reverie/core/history";
+import type { RasterHistoryTransaction } from "@reverie/core/history";
 import type { CanvasRenderer } from "@reverie/renderer";
 
 import { WebErrorDefinitions } from "../errors/WebErrorDefinitions.js";
@@ -52,6 +54,7 @@ export class CanvasDrawingSession {
   private currentBrush: Brush;
   private currentPaintMode: PaintMode;
   private currentSelection: SelectionMask | null;
+  private readonly history: DocumentHistory;
   private readonly scheduler: DrawingScheduler;
   private readonly ownsScheduler: boolean;
   private readonly maxDevicePixelRatio: number;
@@ -60,6 +63,8 @@ export class CanvasDrawingSession {
   private readonly onStrokeEnd: (() => void) | undefined;
   private activeStroke: Stroke | null = null;
   private activeStrokeSelection: SelectionMask | null = null;
+  private activeStrokeHistoryTransaction: RasterHistoryTransaction | null =
+    null;
   private activePointerId: number | null = null;
   /** Caller-visible uint32 identity for the next stroke; independent of frames. */
   private strokeSequence = 0;
@@ -123,6 +128,16 @@ export class CanvasDrawingSession {
     return this.strokeSequence;
   }
 
+  /** Returns whether one committed document edit can currently be undone. */
+  get canUndo(): boolean {
+    return this.history.canUndo;
+  }
+
+  /** Returns whether one previously undone document edit can currently be redone. */
+  get canRedo(): boolean {
+    return this.history.canRedo;
+  }
+
   /**
    * Creates an unattached Web drawing Session.
    *
@@ -151,6 +166,13 @@ export class CanvasDrawingSession {
     if (config.layer !== undefined && config.layer.raster !== config.raster) {
       throw WebError.from(WebErrorDefinitions.SESSION_LAYER_RASTER_MISMATCH);
     }
+    if (
+      config.world !== undefined &&
+      config.layer !== undefined &&
+      !config.world.layers.includes(config.layer)
+    ) {
+      throw WebError.from(WebErrorDefinitions.SESSION_WORLD_LAYER_MISMATCH);
+    }
 
     const selection = config.selection ?? null;
     CanvasDrawingSession.assertValidSelection(selection);
@@ -163,6 +185,9 @@ export class CanvasDrawingSession {
     this.currentBrush = config.brush;
     this.currentPaintMode = resolvePaintMode(config.paintMode);
     this.currentSelection = selection;
+    this.history = new DocumentHistory(
+      config.world === undefined ? {} : { world: config.world },
+    );
     this.maxDevicePixelRatio = maxDevicePixelRatio;
     this.onError = config.onError;
     this.onStrokeStart = config.onStrokeStart;
@@ -249,6 +274,52 @@ export class CanvasDrawingSession {
   setLayer(layer: RasterLayer): void {
     this.assertCanChangeLayer();
     this.assignLayer(layer);
+  }
+
+  /** Restores the most recent committed document edit and renders immediately. */
+  undo(): void {
+    this.assertCanUseHistory();
+    this.history.undo();
+    this.renderer.render();
+  }
+
+  /** Restores the most recently undone document edit and renders immediately. */
+  redo(): void {
+    this.assertCanUseHistory();
+    this.history.redo();
+    this.renderer.render();
+  }
+
+  /** Discards retained Undo and Redo entries without changing the document. */
+  clearHistory(): void {
+    this.assertCanUseHistory();
+    this.history.clear();
+  }
+
+  /** Begins a non-nested group for related synchronous document mutations. */
+  beginHistoryGroup(): void {
+    this.assertCanUseHistory();
+    this.history.beginGroup();
+  }
+
+  /** Commits the active group as one Undo step. */
+  commitHistoryGroup(): void {
+    this.assertCanUseHistory();
+    this.history.commitGroup();
+  }
+
+  /** Cancels the active group, restores its prior state, and renders. */
+  cancelHistoryGroup(): void {
+    this.assertCanUseHistory();
+    this.history.cancelGroup();
+    this.renderer.render();
+  }
+
+  /** Clears the current Raster as one reversible document edit. */
+  clearRaster(): void {
+    this.assertCanUseHistory();
+    this.history.performRasterMutation(this.raster, () => this.raster.clear());
+    this.renderer.render();
   }
 
   /**
@@ -347,13 +418,14 @@ export class CanvasDrawingSession {
     // throw. Preserve a single original failure; aggregate simultaneous failures.
     const failures: unknown[] = [];
     for (const teardown of [
-      () => this.finishActiveStroke(true),
+      () => this.cancelActiveStroke(true),
       () => this.removeRuntimeResources(),
       () => {
         if (this.ownsScheduler) {
           this.scheduler.dispose();
         }
       },
+      () => this.history.dispose(),
     ]) {
       try {
         teardown();
@@ -413,15 +485,18 @@ export class CanvasDrawingSession {
       return;
     }
 
-    event.preventDefault();
-    this.canvas.setPointerCapture(event.pointerId);
-    this.activePointerId = event.pointerId;
-    this.activeStroke = new Stroke({
+    const stroke = new Stroke({
       brush: this.currentBrush,
       paintMode: this.currentPaintMode,
       strokeSequence: this.strokeSequence,
     });
+    const transaction = this.history.beginRasterTransaction(this.raster);
+    event.preventDefault();
+    this.activePointerId = event.pointerId;
+    this.activeStroke = stroke;
     this.activeStrokeSelection = this.currentSelection;
+    this.activeStrokeHistoryTransaction = transaction;
+    this.canvas.setPointerCapture(event.pointerId);
     this.strokeSequence = (this.strokeSequence + 1) >>> 0;
     this.onStrokeStart?.();
     this.addPointerSamples(event);
@@ -488,10 +563,16 @@ export class CanvasDrawingSession {
         break;
       }
 
+      const transaction = this.activeStrokeHistoryTransaction;
+      if (transaction === null) {
+        throw new Error("Active Stroke is missing its History transaction.");
+      }
+      transaction.scheduleMutation();
       this.scheduler.enqueue({
         stamp,
         brush: stroke.brush,
         raster: this.raster,
+        historyTransaction: transaction,
         ...(this.layer === undefined ? {} : { layer: this.layer }),
         ...(this.activeStrokeSelection === null
           ? {}
@@ -504,20 +585,43 @@ export class CanvasDrawingSession {
   private finishActiveStroke(shouldReleaseCapture: boolean): void {
     const pointerId = this.activePointerId;
     const stroke = this.activeStroke;
+    const transaction = this.activeStrokeHistoryTransaction;
 
-    if (stroke === null || pointerId === null) {
+    if (stroke === null || pointerId === null || transaction === null) {
       return;
     }
 
     stroke.end();
+    transaction.close();
     this.activeStroke = null;
     this.activeStrokeSelection = null;
+    this.activeStrokeHistoryTransaction = null;
     this.activePointerId = null;
 
     if (shouldReleaseCapture && this.canvas.hasPointerCapture(pointerId)) {
       this.canvas.releasePointerCapture(pointerId);
     }
 
+    this.onStrokeEnd?.();
+  }
+
+  /** Cancels active input, restores executed writes, and releases capture. */
+  private cancelActiveStroke(shouldReleaseCapture: boolean): void {
+    const pointerId = this.activePointerId;
+    const stroke = this.activeStroke;
+    const transaction = this.activeStrokeHistoryTransaction;
+    if (stroke === null || pointerId === null || transaction === null) {
+      return;
+    }
+    stroke.end();
+    transaction.cancel();
+    this.activeStroke = null;
+    this.activeStrokeSelection = null;
+    this.activeStrokeHistoryTransaction = null;
+    this.activePointerId = null;
+    if (shouldReleaseCapture && this.canvas.hasPointerCapture(pointerId)) {
+      this.canvas.releasePointerCapture(pointerId);
+    }
     this.onStrokeEnd?.();
   }
 
@@ -551,10 +655,7 @@ export class CanvasDrawingSession {
     try {
       operation();
     } catch (error) {
-      this.activeStroke?.end();
-      this.activeStroke = null;
-      this.activeStrokeSelection = null;
-      this.activePointerId = null;
+      this.cancelActiveStroke(true);
       this.reportError(error);
     }
   }
@@ -566,6 +667,19 @@ export class CanvasDrawingSession {
     }
 
     this.onError(error);
+  }
+
+  /** Rejects History changes until the Session is idle and outside removal. */
+  private assertCanUseHistory(): void {
+    if (this.isDisposed) {
+      throw WebError.from(WebErrorDefinitions.HISTORY_CHANGE_WHILE_DISPOSED);
+    }
+    if (this.isLayerRemovalPending) {
+      throw WebError.from(WebErrorDefinitions.HISTORY_CHANGE_DURING_REMOVAL);
+    }
+    if (this.isPainting || !this.scheduler.idle) {
+      throw WebError.from(WebErrorDefinitions.HISTORY_CHANGE_WHILE_BUSY);
+    }
   }
 
   /** Validates the Session-specific DPR cap at its public boundary. */

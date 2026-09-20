@@ -169,6 +169,20 @@ export class TileStore {
     this.tiles.clear();
   }
 
+  /**
+   * Visits every allocated tile without exposing the backing Map.
+   *
+   * @param visitor - Synchronous reader receiving each Tile and owned coordinate.
+   */
+  forEach(visitor: (tile: Tile, coord: TileCoord) => void): void {
+    for (const [key, tile] of this.tiles) {
+      const separatorIndex = key.indexOf(":");
+      const x = Number(key.slice(0, separatorIndex));
+      const y = Number(key.slice(separatorIndex + 1));
+      visitor(tile, { x, y });
+    }
+  }
+
   /** Allocates a tile whose size is guaranteed to match this store. */
   private createTile(): Tile {
     return new Tile({ size: this.tileSize });

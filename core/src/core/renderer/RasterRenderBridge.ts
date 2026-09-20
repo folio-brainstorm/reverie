@@ -1,9 +1,12 @@
-import { RasterTileVersion } from "../../interfaces/renderer/RasterTileVersion.js";
+import type { RasterTileSnapshot } from "../../interfaces/history/RasterTileSnapshot.js";
+import type { RasterTileVersion } from "../../interfaces/renderer/RasterTileVersion.js";
 import type { RasterTileView } from "../../interfaces/renderer/RasterTileView.js";
 import type { TileCoord } from "../../interfaces/tile/TileCoord.js";
 import type { Raster } from "../raster/Raster.js";
 import type { Tile } from "../tile/Tile.js";
 import type { TileStore } from "../tile/store/TileStore.js";
+
+import { captureRasterTileBeforeWrite } from "../../internal/history/ActiveRasterHistoryTransaction.js";
 
 const RASTER_TILE_STORES = new WeakMap<Raster, TileStore>();
 const TILE_PIXEL_BUFFERS = new WeakMap<Tile, Uint8ClampedArray>();
@@ -132,12 +135,79 @@ export function getRasterTileView(
   return { tileId: tile.tileId, revision: tile.revision, pixels };
 }
 
+/**
+ * Copies every allocated tile for transaction capture without exposing storage.
+ *
+ * @param raster - Raster whose current sparse allocation should be captured.
+ * @returns Independent snapshots in the store's deterministic iteration order.
+ */
+export function getAllocatedRasterTileSnapshots(
+  raster: Raster,
+): readonly RasterTileSnapshot[] {
+  const tileStore = RASTER_TILE_STORES.get(raster);
+  if (tileStore === undefined) {
+    return [];
+  }
+  const snapshots: RasterTileSnapshot[] = [];
+  tileStore.forEach((tile, coord) => {
+    const pixels = TILE_PIXEL_BUFFERS.get(tile);
+    if (pixels !== undefined) {
+      snapshots.push({ coord, pixels: pixels.slice() });
+    }
+  });
+  return snapshots;
+}
+
+/**
+ * Estimates the RGBA8 storage currently allocated by one Raster.
+ *
+ * @param raster - Raster whose dense Tile payloads should be counted.
+ * @returns Pixel-buffer bytes excluding small object and Map overhead.
+ */
+export function getRasterAllocatedByteLength(raster: Raster): number {
+  const tileStore = RASTER_TILE_STORES.get(raster);
+  if (tileStore === undefined) {
+    return 0;
+  }
+  return tileStore.size * raster.tileSize * raster.tileSize * 4;
+}
+
+/**
+ * Restores one trusted history snapshot through normal sparse and revision paths.
+ *
+ * @param raster - Raster receiving the restored Tile state.
+ * @param snapshot - Exact existence and pixel contents to restore.
+ * @throws {Error} A retained snapshot has an impossible byte length.
+ */
+export function restoreRasterTileSnapshot(
+  raster: Raster,
+  snapshot: RasterTileSnapshot,
+): void {
+  const tileStore = RASTER_TILE_STORES.get(raster);
+  if (tileStore === undefined) {
+    throw new Error("Raster internal tile storage is not registered.");
+  }
+  if (snapshot.pixels === null) {
+    tileStore.delete(snapshot.coord);
+    return;
+  }
+  const expectedLength = raster.tileSize * raster.tileSize * 4;
+  if (snapshot.pixels.length !== expectedLength) {
+    throw new Error("History Tile snapshot has an invalid byte length.");
+  }
+  const tile = tileStore.getOrCreate(snapshot.coord);
+  const pixels = getTilePixelBufferForTrustedWrite(tile);
+  tile.clear();
+  pixels.set(snapshot.pixels);
+}
+
 /** Returns an allocated tile for trusted, prevalidated world-pixel writes. */
 export function getOrCreateRasterTileForTrustedWrite(
   raster: Raster,
   tileX: number,
   tileY: number,
 ): Tile {
+  captureRasterTileBeforeWrite(raster, tileX, tileY);
   const tileStore = RASTER_TILE_STORES.get(raster);
 
   if (tileStore === undefined) {
@@ -159,6 +229,7 @@ export function getExistingRasterTileForTrustedWrite(
   tileX: number,
   tileY: number,
 ): Tile | undefined {
+  captureRasterTileBeforeWrite(raster, tileX, tileY);
   const tileStore = RASTER_TILE_STORES.get(raster);
   if (tileStore === undefined) {
     throw new Error("Raster internal tile storage is not registered.");

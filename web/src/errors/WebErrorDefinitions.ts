@@ -25,6 +25,24 @@ export const WebErrorDefinitions = {
     code: "EC_WEB_0026",
     template: "CanvasDrawingSession Selection must be a SelectionMask or null.",
   },
+  HISTORY_CHANGE_WHILE_DISPOSED: {
+    code: "EC_WEB_0027",
+    template: "Cannot use History after CanvasDrawingSession is disposed.",
+  },
+  HISTORY_CHANGE_WHILE_BUSY: {
+    code: "EC_WEB_0028",
+    template:
+      "Finish the active stroke and wait for queued drawing work before using History.",
+  },
+  HISTORY_CHANGE_DURING_REMOVAL: {
+    code: "EC_WEB_0029",
+    template: "Cannot use History during a World layer-removal callback.",
+  },
+  SESSION_WORLD_LAYER_MISMATCH: {
+    code: "EC_WEB_0030",
+    template:
+      "CanvasDrawingSession layer must belong to the supplied History World.",
+  },
   LAYER_CHANGE_WHILE_BUSY: {
     code: "EC_WEB_0021",
     template:

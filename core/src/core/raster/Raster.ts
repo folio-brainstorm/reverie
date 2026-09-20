@@ -6,6 +6,10 @@ import type {
 import type { RasterConfig } from "../../interfaces/raster/Raster.js";
 
 import { TRANSPARENT_RGBA } from "../../config/color/ColorConstants.js";
+import {
+  captureAllocatedRasterTilesBeforeClear,
+  captureRasterTileBeforeWrite,
+} from "../../internal/history/ActiveRasterHistoryTransaction.js";
 import { isRasterPixelWritable } from "../../internal/paint-target/ActiveRasterPaintBounds.js";
 import { eraseRasterPixelAlpha } from "../../internal/raster-write/EraseRasterPixelAlpha.js";
 import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
@@ -109,6 +113,7 @@ export class Raster {
 
     const { tile: tileCoord, local: localPixel } = this.locateValidPixel(pixel);
 
+    captureRasterTileBeforeWrite(this, tileCoord.x, tileCoord.y);
     const tile = this.tileStore.getOrCreate(tileCoord);
     tile.setPixel(localPixel, color);
   }
@@ -144,6 +149,7 @@ export class Raster {
     const destination =
       tile === undefined ? TRANSPARENT_RGBA : tile.getPixel(localPixel);
     const result = blendSourceOver(color, destination);
+    captureRasterTileBeforeWrite(this, tileCoord.x, tileCoord.y);
     const destinationTile = tile ?? this.tileStore.getOrCreate(tileCoord);
 
     destinationTile.setPixel(localPixel, result);
@@ -168,6 +174,7 @@ export class Raster {
 
   /** Removes every allocated tile, returning the raster to empty sparse state. */
   clear(): void {
+    captureAllocatedRasterTilesBeforeClear(this);
     this.tileStore.clear();
   }
 

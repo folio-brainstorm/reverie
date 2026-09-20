@@ -139,6 +139,35 @@ Selection coverage 会在最终像素位置与 Circle、Image 或 Pixel Brush �
 笔画或调度队列未完成时不能替换 Selection。Session 捕获 Mask 引用而不复制，
 调用方不得在相关绘制工作完成前直接修改已安装的 Mask。
 
+## Undo and Redo
+
+`ReverieCanvas` 为破坏性文档修改维护每个 Session 独立的、按近似字节预算限制的
+Undo/Redo History；V1 的内部默认预算为 256 MiB，且始终保留最新一项，即使它本身
+超过预算。一个完整 Brush 或 Eraser Stroke 只产生一个历史步骤；Redo
+恢复提交时捕获的 Tile 内容，不重新运行 Brush 随机变化。Layer 新增、删除、排序、
+名称、显隐、透明度、混合模式以及 `clear()` 同样可撤销：
+
+```ts
+if (reverie.canUndo) reverie.undo();
+if (reverie.canRedo) reverie.redo();
+
+reverie.beginHistoryGroup();
+reverie.setLayerName(reverie.activeLayer, "Ink");
+reverie.setLayerOpacity(reverie.activeLayer, 0.7);
+reverie.commitHistoryGroup();
+```
+
+History 只保存受影响 Tile 的 before/after RGBA8 数据，并区分缺失 Tile 与已分配的
+透明 Tile。Undo/Redo 通过正常 revision/invalidation 路径恢复内容，不保存 Renderer、
+LOD、Exporter、Camera、Brush、Selection 或 active Layer 状态。新提交的修改会清空
+Redo；空 Undo/Redo 安全 no-op。活动 Stroke、未执行完的调度命令或 Layer removal
+期间不能调用 History API。
+
+绑定 `ReverieCanvas` 后，通过其 `world` 对 Layer 文档执行的变更也会被观察；独立使用
+Core `World`、`RasterLayer` 或 `Raster` 不会自动创建 History。普通的直接
+`Raster.setPixel()` 调用不属于 Session History，除非调用方显式使用
+`@reverie/core/history` 的 Raster transaction integration。
+
 ## Stroke
 
 `Stroke` 保存连续 World Space 中的原始输入采样，并按照 `brush.size ×
@@ -388,9 +417,10 @@ Raster 模式相反。屏幕渲染使用 Canvas Source Over 和 `globalAlpha`，
 `ReverieCanvas.setActiveLayer(layerOrIndex)` 只改变后续绘制目标；渲染及下载
 仍使用完整 World。`clear()` 保持只清空活动层的行为。删除活动层时优先选择
 下方邻层，没有下方层时选择上方层；直接调用 `world.removeLayer()` 也适用。
-活动笔画或尚未完成的调度工作会阻止切换和删除活动层，返回 `EC_WEB_0021`，
-但允许删除非活动层。底层 `CanvasDrawingSession.setLayer(layer)` 使用相同
-忙碌检查。`World.observeLayerRemoval()` 为保留图层引用的外部消费者提供
+活动笔画或尚未完成的调度工作会阻止切换或修改 Layer 文档，返回
+`EC_WEB_0021`，以保证 Stroke History 的先后顺序。底层
+`CanvasDrawingSession.setLayer(layer)` 使用相同忙碌检查。
+`World.observeLayerRemoval()` 为保留图层引用的外部消费者提供
 移除前校验和移除后通知，不把编辑选择存入文档；回调不能更改集合成员或排序，
 移除后回调不得抛错，返回的函数用于取消订阅。`afterRemovalAttempt()` 无论
 移除成功或校验失败都会执行，必须不抛错，用于释放临时预留。

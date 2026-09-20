@@ -13,6 +13,10 @@
     "./renderer": {
       "types": "./dist/src/core/renderer/index.d.ts",
       "import": "./dist/src/core/renderer/index.js"
+    },
+    "./history": {
+      "types": "./dist/src/core/history/index.d.ts",
+      "import": "./dist/src/core/history/index.js"
     }
   },
   "files": [

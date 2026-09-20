@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CircleBrush,
   deriveStrokeSeed,
+  ErrorCodes,
   PixelBrush,
   SelectionMask,
   Stroke,
@@ -1163,7 +1164,7 @@ describe("ReverieCanvas active-layer editing", () => {
     reverie.dispose();
   });
 
-  it("allows deleting a nonactive layer while painting without retargeting pending commands", () => {
+  it("rejects deleting a nonactive layer while a Stroke transaction is active", () => {
     const runtime = createCanvasRuntime();
     const reverie = new ReverieCanvas({ canvas: runtime.canvas });
     const active = reverie.activeLayer;
@@ -1175,7 +1176,13 @@ describe("ReverieCanvas active-layer editing", () => {
       clientY: 0.5,
       timeStamp: 0,
     });
-    expect(reverie.world.removeLayer(other)).toBe(other);
+    expect(() => reverie.world.removeLayer(other)).toThrow(
+      `[${ErrorCodes.HISTORY.DOCUMENT_MUTATION_DURING_RASTER_EDIT}]`,
+    );
+    expect(() => reverie.removeLayer(other)).toThrow(
+      `[${WebErrorDefinitions.LAYER_CHANGE_WHILE_BUSY.code}]`,
+    );
+    expect(reverie.world.layers).toEqual([active, other]);
     expect(reverie.activeLayer).toBe(active);
     runtime.runNextFrame();
     expect(active.raster.getPixel({ x: 0, y: 0 }).a).toBe(255);
@@ -1257,6 +1264,166 @@ describe("ReverieCanvas active-layer editing", () => {
     );
     expect(reverie.activeLayer).toBe(bottom);
     expect(top.raster.getPixel({ x: 0, y: 0 }).a).toBe(255);
+    reverie.dispose();
+  });
+});
+
+describe("ReverieCanvas History", () => {
+  it("records every asynchronously scheduled stamp in one Stroke entry", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({
+      canvas: runtime.canvas,
+      width: 32,
+      height: 32,
+      brush: new PixelBrush({
+        size: 1,
+        color: { r: 255, g: 0, b: 0, a: 255 },
+        spacing: 1,
+      }),
+    });
+
+    runtime.canvas.dispatchPointer("pointerdown", {
+      button: 0,
+      pointerId: 1,
+      clientX: 0.5,
+      clientY: 0.5,
+      timeStamp: 1,
+    });
+    runtime.canvas.dispatchPointer("pointermove", {
+      button: 0,
+      pointerId: 1,
+      clientX: 4.5,
+      clientY: 0.5,
+      timeStamp: 2,
+    });
+    runtime.canvas.dispatchPointer("pointerup", {
+      button: 0,
+      pointerId: 1,
+      clientX: 4.5,
+      clientY: 0.5,
+      timeStamp: 3,
+    });
+    runtime.runNextFrame();
+
+    expect(reverie.canUndo).toBe(true);
+    expect(reverie.activeLayer.raster.getPixel({ x: 0, y: 0 }).a).toBe(255);
+    expect(reverie.activeLayer.raster.getPixel({ x: 4, y: 0 }).a).toBe(255);
+    reverie.undo();
+    expect(reverie.activeLayer.raster.getPixel({ x: 0, y: 0 }).a).toBe(0);
+    expect(reverie.activeLayer.raster.getPixel({ x: 4, y: 0 }).a).toBe(0);
+    expect(reverie.canUndo).toBe(false);
+
+    reverie.redo();
+    expect(reverie.activeLayer.raster.getPixel({ x: 0, y: 0 }).a).toBe(255);
+    expect(reverie.activeLayer.raster.getPixel({ x: 4, y: 0 }).a).toBe(255);
+    reverie.dispose();
+  });
+
+  it("rejects Undo while a Stroke or queued drawing work is active", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+    runtime.canvas.dispatchPointer("pointerdown", {
+      button: 0,
+      pointerId: 1,
+      clientX: 0.5,
+      clientY: 0.5,
+      timeStamp: 1,
+    });
+
+    expect(() => reverie.undo()).toThrow(WebError);
+    expect(() => reverie.undo()).toThrow(
+      `[${WebErrorDefinitions.HISTORY_CHANGE_WHILE_BUSY.code}]`,
+    );
+
+    runtime.canvas.dispatchPointer("pointerup", {
+      button: 0,
+      pointerId: 1,
+      clientX: 0.5,
+      clientY: 0.5,
+      timeStamp: 2,
+    });
+    runtime.runNextFrame();
+    reverie.dispose();
+  });
+
+  it("restores Layer identity, order, properties, and active-Layer validity", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+    const first = reverie.activeLayer;
+    const second = reverie.addLayer();
+    expect(reverie.activeLayer).toBe(second);
+
+    reverie.undo();
+    expect(reverie.world.layers).toEqual([first]);
+    expect(reverie.activeLayer).toBe(first);
+    reverie.redo();
+    expect(reverie.world.layers[1]).toBe(second);
+    expect(reverie.activeLayer).toBe(first);
+
+    reverie.beginHistoryGroup();
+    reverie.setLayerName(second, "Ink");
+    reverie.setLayerOpacity(second, 0.4);
+    reverie.setLayerVisibility(second, false);
+    reverie.setLayerBlendMode(second, "multiply");
+    reverie.commitHistoryGroup();
+    reverie.undo();
+    expect(second.name).toBe("Layer 2");
+    expect(second.opacity).toBe(1);
+    expect(second.visible).toBe(true);
+    expect(second.blendMode).toBe("normal");
+    reverie.dispose();
+  });
+
+  it("records clear and invalidates Redo after a new Layer edit", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+    reverie.activeLayer.raster.setPixel(
+      { x: 0, y: 0 },
+      { r: 10, g: 20, b: 30, a: 255 },
+    );
+
+    reverie.clear();
+    reverie.undo();
+    expect(reverie.activeLayer.raster.getPixel({ x: 0, y: 0 }).a).toBe(255);
+    expect(reverie.canRedo).toBe(true);
+
+    reverie.setLayerName(reverie.activeLayer, "Paint");
+    expect(reverie.canRedo).toBe(false);
+    reverie.dispose();
+  });
+
+  it("keeps Selection session state unchanged across painting Undo", () => {
+    const runtime = createCanvasRuntime();
+    const selection = SelectionMask.fromRect({
+      x: 0,
+      y: 0,
+      width: 1,
+      height: 1,
+    });
+    const reverie = new ReverieCanvas({
+      canvas: runtime.canvas,
+      selection,
+    });
+    runtime.canvas.dispatchPointer("pointerdown", {
+      button: 0,
+      pointerId: 1,
+      clientX: 0.5,
+      clientY: 0.5,
+      timeStamp: 1,
+    });
+    runtime.canvas.dispatchPointer("pointerup", {
+      button: 0,
+      pointerId: 1,
+      clientX: 0.5,
+      clientY: 0.5,
+      timeStamp: 2,
+    });
+    runtime.runNextFrame();
+
+    reverie.undo();
+
+    expect(reverie.selection).toBe(selection);
+    expect(selection.getCoverage(0, 0)).toBe(1);
     reverie.dispose();
   });
 });

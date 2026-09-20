@@ -5,6 +5,7 @@ import type {
   Raster,
   RasterLayer,
   SelectionMask,
+  World,
 } from "@reverie/core";
 import type { CanvasRenderer } from "@reverie/renderer";
 
@@ -20,6 +21,9 @@ export interface CanvasDrawingSessionConfig {
 
   /** Optional bounded layer owning `raster` and mediating Brush writes. */
   readonly layer?: RasterLayer;
+
+  /** Optional World whose Layer mutations share this Session's History. */
+  readonly world?: World;
 
   /** Camera whose zoom remains CSS pixels per world unit. */
   readonly camera: Camera;

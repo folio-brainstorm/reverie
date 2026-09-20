@@ -5,6 +5,7 @@ import type {
   SelectionMask,
   StampCommand,
 } from "@reverie/core";
+import type { RasterHistoryTransaction } from "@reverie/core/history";
 
 /** Supplies the runtime objects needed to execute one core stamp command. */
 export interface DrawingCommand {
@@ -22,4 +23,7 @@ export interface DrawingCommand {
 
   /** Selection reference captured for this command, or null for unrestricted writes. */
   readonly selection?: SelectionMask | null;
+
+  /** Optional Stroke transaction spanning every command in the same edit. */
+  readonly historyTransaction?: RasterHistoryTransaction;
 }

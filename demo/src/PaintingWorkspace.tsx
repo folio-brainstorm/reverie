@@ -34,10 +34,13 @@ import { createBrushOutlinePath } from "./CreateBrushOutlinePath";
 import { createSelectionRect } from "./CreateSelectionRect";
 import { decodeBrushImageFile } from "./DecodeBrushImageFile";
 import { exportRasterToConsole } from "./ExportRasterToConsole";
+import { resolveHistoryShortcut } from "./ResolveHistoryShortcut";
 import type { BrushMode } from "./interfaces/brush/BrushMode";
 import type { CanvasSize } from "./interfaces/canvas/CanvasSize";
 import type { PaintingWorkspaceProps } from "./interfaces/canvas/PaintingWorkspaceProps";
 import type { ViewportSize } from "./interfaces/canvas/ViewportSize";
+import type { ActiveHistoryGroup } from "./interfaces/history/ActiveHistoryGroup";
+import type { HistoryGroupKind } from "./interfaces/history/HistoryGroupKind";
 import type { SelectionDrag } from "./interfaces/selection/SelectionDrag";
 
 const MIN_ZOOM = 0.25;
@@ -82,6 +85,7 @@ export function PaintingWorkspace({
   const lastPanPositionRef = useRef<ScreenPoint | null>(null);
   const lastPointerPositionRef = useRef<ScreenPoint | null>(null);
   const imageLoadRequestIdRef = useRef(0);
+  const activeHistoryGroupRef = useRef<ActiveHistoryGroup | null>(null);
   const [viewportSize, setViewportSize] = useState<ViewportSize>({
     width: 0,
     height: 0,
@@ -215,20 +219,54 @@ export function PaintingWorkspace({
     let resizeObserver: ResizeObserver | null = null;
     let hasInitializationError = false;
 
+    const handleWindowPointerDown = (): void => {
+      if (activeHistoryGroupRef.current === null) return;
+      const activeReverie = reverieRef.current;
+      if (activeReverie === null) return;
+      try {
+        activeReverie.commitHistoryGroup();
+        activeHistoryGroupRef.current = null;
+        setDrawingError(null);
+      } catch (error) {
+        setDrawingError(formatDrawingError(error));
+      }
+    };
+
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== "Escape" || !isSelectionToolActiveRef.current) return;
-      const selectionInput = selectionInputRef.current;
-      const pointerId = selectionDragRef.current?.pointerId;
-      selectionDragRef.current = null;
-      setSelectionPreviewRect(null);
-      isSelectionToolActiveRef.current = false;
-      setIsSelectionToolActive(false);
-      if (
-        selectionInput !== null &&
-        pointerId !== undefined &&
-        selectionInput.hasPointerCapture(pointerId)
-      ) {
-        selectionInput.releasePointerCapture(pointerId);
+      if (event.key === "Escape" && isSelectionToolActiveRef.current) {
+        const selectionInput = selectionInputRef.current;
+        const pointerId = selectionDragRef.current?.pointerId;
+        selectionDragRef.current = null;
+        setSelectionPreviewRect(null);
+        isSelectionToolActiveRef.current = false;
+        setIsSelectionToolActive(false);
+        if (
+          selectionInput !== null &&
+          pointerId !== undefined &&
+          selectionInput.hasPointerCapture(pointerId)
+        ) {
+          selectionInput.releasePointerCapture(pointerId);
+        }
+        return;
+      }
+
+      if (isEditableKeyboardTarget(event.target)) return;
+      const historyAction = resolveHistoryShortcut(event);
+      if (historyAction === null) return;
+
+      event.preventDefault();
+      const activeReverie = reverieRef.current;
+      if (activeReverie === null) return;
+      try {
+        if (historyAction === "undo") {
+          activeReverie.undo();
+        } else {
+          activeReverie.redo();
+        }
+        setDrawingError(null);
+        setLayersRevision((revision) => revision + 1);
+      } catch (error) {
+        setDrawingError(formatDrawingError(error));
       }
     };
 
@@ -286,6 +324,7 @@ export function PaintingWorkspace({
       resizeObserver = new ResizeObserver(updateViewport);
       resizeObserver.observe(frame);
       frame.addEventListener("wheel", handleWheel, { passive: false });
+      window.addEventListener("pointerdown", handleWindowPointerDown, true);
       window.addEventListener("keydown", handleKeyDown);
 
       // The initial bitmap and DOM overlays get a paint before the cover fades.
@@ -301,9 +340,11 @@ export function PaintingWorkspace({
       imageLoadRequestIdRef.current += 1;
       resizeObserver?.disconnect();
       frame.removeEventListener("wheel", handleWheel);
+      window.removeEventListener("pointerdown", handleWindowPointerDown, true);
       window.removeEventListener("keydown", handleKeyDown);
       reverie?.dispose();
       reverieRef.current = null;
+      activeHistoryGroupRef.current = null;
     };
   }, []);
 
@@ -335,9 +376,13 @@ export function PaintingWorkspace({
   ]);
 
   const clearPainting = (): void => {
-    reverieRef.current?.clear();
-    setDrawingError(null);
-    setExportStatus(null);
+    try {
+      reverieRef.current?.clear();
+      setDrawingError(null);
+      setExportStatus(null);
+    } catch (error) {
+      setDrawingError(formatDrawingError(error));
+    }
   };
 
   const togglePaintMode = (): void => {
@@ -491,17 +536,75 @@ export function PaintingWorkspace({
     reverieRef.current?.render();
   };
 
+  const beginHistoryGroup = (
+    kind: HistoryGroupKind,
+    layer: RasterLayer,
+  ): void => {
+    const reverie = reverieRef.current;
+    if (reverie === null) return;
+    const activeGroup = activeHistoryGroupRef.current;
+    if (activeGroup?.kind === kind && activeGroup.layer === layer) return;
+    try {
+      if (activeGroup !== null) {
+        reverie.commitHistoryGroup();
+        activeHistoryGroupRef.current = null;
+      }
+      reverie.beginHistoryGroup();
+      activeHistoryGroupRef.current = { kind, layer };
+      setDrawingError(null);
+    } catch (error) {
+      setDrawingError(formatDrawingError(error));
+    }
+  };
+
+  const commitHistoryGroup = (
+    kind: HistoryGroupKind,
+    layer: RasterLayer,
+  ): void => {
+    const reverie = reverieRef.current;
+    const activeGroup = activeHistoryGroupRef.current;
+    if (
+      reverie === null ||
+      activeGroup?.kind !== kind ||
+      activeGroup.layer !== layer
+    )
+      return;
+    try {
+      reverie.commitHistoryGroup();
+      activeHistoryGroupRef.current = null;
+      setDrawingError(null);
+    } catch (error) {
+      setDrawingError(formatDrawingError(error));
+    }
+  };
+
+  const cancelHistoryGroup = (
+    kind: HistoryGroupKind,
+    layer: RasterLayer,
+  ): void => {
+    const reverie = reverieRef.current;
+    const activeGroup = activeHistoryGroupRef.current;
+    if (
+      reverie === null ||
+      activeGroup?.kind !== kind ||
+      activeGroup.layer !== layer
+    )
+      return;
+    try {
+      reverie.cancelHistoryGroup();
+      activeHistoryGroupRef.current = null;
+      setDrawingError(null);
+      refreshLayers();
+    } catch (error) {
+      setDrawingError(formatDrawingError(error));
+    }
+  };
+
   const handleAddLayer = (): void => {
     const reverie = reverieRef.current;
     if (reverie === null) return;
     try {
-      const layer = reverie.world.addLayer();
-      try {
-        reverie.setActiveLayer(layer);
-      } catch (error) {
-        reverie.world.removeLayer(layer);
-        throw error;
-      }
+      reverie.addLayer();
       setDrawingError(null);
       refreshLayers();
     } catch (error) {
@@ -529,7 +632,7 @@ export function PaintingWorkspace({
     if (index < 0 || nextIndex < 0 || nextIndex >= reverie.world.layers.length)
       return;
     try {
-      reverie.world.moveLayer(layer, nextIndex);
+      reverie.moveLayer(layer, nextIndex);
       setDrawingError(null);
       refreshLayers();
     } catch (error) {
@@ -553,8 +656,15 @@ export function PaintingWorkspace({
     layer: RasterLayer,
     event: ChangeEvent<HTMLInputElement>,
   ): void => {
-    layer.opacity = Number(event.currentTarget.value);
-    refreshLayers();
+    const reverie = reverieRef.current;
+    if (reverie === null) return;
+    try {
+      reverie.setLayerOpacity(layer, Number(event.currentTarget.value));
+      setDrawingError(null);
+      refreshLayers();
+    } catch (error) {
+      setDrawingError(formatDrawingError(error));
+    }
   };
 
   const handleLayerBlendModeChange = (
@@ -563,8 +673,13 @@ export function PaintingWorkspace({
   ): void => {
     const value = event.currentTarget.value;
     if (isLayerBlendMode(value)) {
-      layer.blendMode = value;
-      refreshLayers();
+      try {
+        reverieRef.current?.setLayerBlendMode(layer, value);
+        setDrawingError(null);
+        refreshLayers();
+      } catch (error) {
+        setDrawingError(formatDrawingError(error));
+      }
     }
   };
 
@@ -572,8 +687,25 @@ export function PaintingWorkspace({
     layer: RasterLayer,
     event: ChangeEvent<HTMLInputElement>,
   ): void => {
-    layer.name = event.currentTarget.value;
-    setLayersRevision((revision) => revision + 1);
+    try {
+      reverieRef.current?.setLayerName(layer, event.currentTarget.value);
+      setDrawingError(null);
+      setLayersRevision((revision) => revision + 1);
+    } catch (error) {
+      setDrawingError(formatDrawingError(error));
+    }
+  };
+
+  const handleLayerVisibilityChange = (layer: RasterLayer): void => {
+    const reverie = reverieRef.current;
+    if (reverie === null) return;
+    try {
+      reverie.setLayerVisibility(layer, !layer.visible);
+      setDrawingError(null);
+      refreshLayers();
+    } catch (error) {
+      setDrawingError(formatDrawingError(error));
+    }
   };
 
   const exportPainting = (): void => {
@@ -1077,6 +1209,20 @@ export function PaintingWorkspace({
                       aria-label={`Rename ${layer.name}`}
                       value={layer.name}
                       onChange={(event) => handleLayerNameChange(layer, event)}
+                      onPointerDown={() =>
+                        beginHistoryGroup("layer-name", layer)
+                      }
+                      onFocus={() => beginHistoryGroup("layer-name", layer)}
+                      onBlur={() => commitHistoryGroup("layer-name", layer)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          commitHistoryGroup("layer-name", layer);
+                          event.currentTarget.blur();
+                        } else if (event.key === "Escape") {
+                          cancelHistoryGroup("layer-name", layer);
+                          event.currentTarget.blur();
+                        }
+                      }}
                     />
                     <label className="layer-opacity-control">
                       <span>Opacity</span>
@@ -1090,6 +1236,24 @@ export function PaintingWorkspace({
                         value={layer.opacity}
                         onChange={(event) =>
                           handleLayerOpacityChange(layer, event)
+                        }
+                        onPointerDown={() =>
+                          beginHistoryGroup("layer-opacity", layer)
+                        }
+                        onPointerUp={() =>
+                          commitHistoryGroup("layer-opacity", layer)
+                        }
+                        onPointerCancel={() =>
+                          cancelHistoryGroup("layer-opacity", layer)
+                        }
+                        onKeyDown={() =>
+                          beginHistoryGroup("layer-opacity", layer)
+                        }
+                        onKeyUp={() =>
+                          commitHistoryGroup("layer-opacity", layer)
+                        }
+                        onBlur={() =>
+                          commitHistoryGroup("layer-opacity", layer)
                         }
                       />
                     </label>
@@ -1114,10 +1278,7 @@ export function PaintingWorkspace({
                         type="button"
                         aria-label={`${layer.visible ? "Hide" : "Show"} ${layer.name}`}
                         aria-pressed={layer.visible}
-                        onClick={() => {
-                          layer.visible = !layer.visible;
-                          refreshLayers();
-                        }}
+                        onClick={() => handleLayerVisibilityChange(layer)}
                       >
                         {layer.visible ? "Hide" : "Show"}
                       </button>
@@ -1259,6 +1420,16 @@ function getCenteredPan(
 /** Converts an unknown drawing failure into concise status text. */
 function formatDrawingError(error: unknown): string {
   return error instanceof Error ? error.message : "Drawing failed.";
+}
+
+/** Preserves native text-control Undo instead of intercepting it for the document. */
+function isEditableKeyboardTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    (target instanceof HTMLElement && target.isContentEditable)
+  );
 }
 
 /** Normalizes line and page wheel units to CSS pixels. */
