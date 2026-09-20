@@ -268,7 +268,7 @@ describe("pixel painting", () => {
     const raster = new Raster();
 
     Rasterizers.rasterizeCircle(
-      { center: { x: 0.5, y: 0.5 }, radius: 0 },
+      { center: { x: 0.5, y: 0.5 }, radius: 0.5 },
       (hit) => paintPixel(raster, hit, { color: OPAQUE_RED, opacity: 0.5 }),
     );
 

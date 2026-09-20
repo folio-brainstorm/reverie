@@ -7,11 +7,13 @@ import { rasterizeCirclePixels } from "../../internal/rasterizer/RasterizeCircle
 
 export namespace Rasterizers {
   /**
-   * Rasterizes a continuous circle using a binary pixel-center coverage test.
+   * Rasterizes a continuous circle into normalized per-pixel coverage.
    *
-   * Candidate pixels are visited in row-major order. A callback occurs exactly
-   * once for each pixel whose center lies on or inside the circle, and every
-   * emitted hit has coverage `1`.
+   * Candidate pixels are visited in row-major order. Ordinary circles use a
+   * one-pixel signed-distance transition around the boundary. Circles smaller
+   * than one pixel use area-aware coverage so they remain visible at subpixel
+   * positions while their total contribution approaches zero with size. The
+   * callback is invoked exactly once for each pixel with positive coverage.
    *
    * @param circle - Circle expressed in continuous world coordinates.
    * @param callback - Visitor invoked once for every hit pixel.
@@ -20,8 +22,8 @@ export namespace Rasterizers {
    * is invalid, or the resulting pixel bounds exceed the safe integer range.
    * @example
    * rasterizeCircle(
-   *   { center: { x: 0.5, y: 0.5 }, radius: 0 },
-   *   ({ pixel }) => consume(pixel),
+   *   { center: { x: 0.5, y: 0.5 }, radius: 1 },
+   *   ({ pixel, coverage }) => consume(pixel, coverage),
    * );
    */
   export function rasterizeCircle(

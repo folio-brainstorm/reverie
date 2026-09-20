@@ -19,6 +19,7 @@
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
     "dev:no-debug": "tsc -p tsconfig.json --watch --preserveWatchOutput",
     "test": "vitest run",
+    "test:browser": "vitest run --config vitest.browser.config.ts",
     "test:watch": "vitest",
     "test:verbose": "vitest run --reporter=verbose --includeTaskLocation",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit"
@@ -27,6 +28,8 @@
     "@reverie/core": "workspace:*"
   },
   "devDependencies": {
+    "@vitest/browser-playwright": "5.0.0",
+    "playwright": "^1.63.0",
     "typescript": "^7.0.2",
     "vitest": "^5.0.0"
   }

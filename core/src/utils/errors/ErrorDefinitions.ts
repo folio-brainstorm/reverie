@@ -181,6 +181,25 @@ export const ErrorDefinitions = {
       template:
         "Brush dynamics and spacing jitter must produce a finite positive stamp interval.",
     },
+    INVALID_PIXEL_SIZE: {
+      code: "EC_BRUSH_0027",
+      template: "PixelBrush size must be a positive safe integer.",
+    },
+    INVALID_PIXEL_STAMP_POSITION_TYPE: {
+      code: "EC_BRUSH_0028",
+      template:
+        "PixelBrush stamp `$param` must be a number, but received `$received`.",
+    },
+    INVALID_PIXEL_STAMP_POSITION: {
+      code: "EC_BRUSH_0029",
+      template:
+        "PixelBrush stamp `$param` must be finite, but received `$received`.",
+    },
+    UNSAFE_PIXEL_STAMP_BOUNDS: {
+      code: "EC_BRUSH_0030",
+      template:
+        "PixelBrush destination pixel bounds exceed the safe integer range.",
+    },
   },
   RANDOM: {
     INVALID_UINT32: {

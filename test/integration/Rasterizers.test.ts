@@ -22,7 +22,7 @@ function collectHits(circle: Circle): PixelCoverage[] {
 
 describe("circle rasterization", () => {
   it("is available with its contracts through the public package entry point", () => {
-    const circle: Circle = { center: { x: 0.5, y: 0.5 }, radius: 0 };
+    const circle: Circle = { center: { x: 0.5, y: 0.5 }, radius: 0.5 };
     const visitor: PixelCoverageVisitor = vi.fn();
 
     Rasterizers.rasterizeCircle(circle, visitor);
@@ -34,10 +34,8 @@ describe("circle rasterization", () => {
     });
   });
 
-  it("emits the pixel containing a zero-radius circle at its exact center", () => {
-    expect(collectHits({ center: { x: 0.5, y: 0.5 }, radius: 0 })).toEqual([
-      { pixel: { x: 0, y: 0 }, coverage: 1 },
-    ]);
+  it("emits no pixels for a zero-radius circle", () => {
+    expect(collectHits({ center: { x: 0.5, y: 0.5 }, radius: 0 })).toEqual([]);
   });
 
   it("emits no pixels for a zero-radius circle away from every pixel center", () => {
@@ -50,22 +48,47 @@ describe("circle rasterization", () => {
     ]);
   });
 
-  it("includes pixel centers exactly on a radius-one boundary", () => {
+  it("emits the fixed fractional coverage matrix for radius one", () => {
     const hits = collectHits({ center: { x: 0.5, y: 0.5 }, radius: 1 });
+    const cornerCoverage = 1.5 - Math.SQRT2;
 
-    expect(hits).toEqual([
-      { pixel: { x: 0, y: -1 }, coverage: 1 },
-      { pixel: { x: -1, y: 0 }, coverage: 1 },
-      { pixel: { x: 0, y: 0 }, coverage: 1 },
-      { pixel: { x: 1, y: 0 }, coverage: 1 },
-      { pixel: { x: 0, y: 1 }, coverage: 1 },
+    expect(hits.map(({ pixel }) => pixel)).toEqual([
+      { x: -1, y: -1 },
+      { x: 0, y: -1 },
+      { x: 1, y: -1 },
+      { x: -1, y: 0 },
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: -1, y: 1 },
+      { x: 0, y: 1 },
+      { x: 1, y: 1 },
+    ]);
+    expect(hits.map(({ coverage }) => coverage)).toEqual([
+      cornerCoverage,
+      0.5,
+      cornerCoverage,
+      0.5,
+      1,
+      0.5,
+      cornerCoverage,
+      0.5,
+      cornerCoverage,
     ]);
   });
 
   it("supports fractional circles spanning negative pixel coordinates", () => {
-    expect(
-      collectHits({ center: { x: -0.25, y: -0.25 }, radius: 0.4 }),
-    ).toEqual([{ pixel: { x: -1, y: -1 }, coverage: 1 }]);
+    const hits = collectHits({ center: { x: -0.25, y: -0.25 }, radius: 0.4 });
+
+    expect(hits.map(({ pixel }) => pixel)).toEqual([
+      { x: -1, y: -1 },
+      { x: 0, y: -1 },
+      { x: -1, y: 0 },
+      { x: 0, y: 0 },
+    ]);
+    expect(hits[0]?.coverage).toBeGreaterThan(hits[1]?.coverage ?? 1);
+    expect(hits.every(({ coverage }) => coverage > 0 && coverage <= 1)).toBe(
+      true,
+    );
   });
 
   it("translates every hit by the same integer displacement as the circle", () => {
@@ -86,16 +109,51 @@ describe("circle rasterization", () => {
     );
   });
 
-  it("visits every hit exactly once with binary coverage", () => {
+  it("visits every positive-coverage hit exactly once", () => {
     const visitor = vi.fn<PixelCoverageVisitor>();
 
-    Rasterizers.rasterizeCircle({ center: { x: 0.5, y: 0.5 }, radius: 2 }, visitor);
+    Rasterizers.rasterizeCircle(
+      { center: { x: 0.5, y: 0.5 }, radius: 2 },
+      visitor,
+    );
 
     const hits = visitor.mock.calls.map(([hit]) => hit);
     const coordinates = hits.map(({ pixel }) => `${pixel.x},${pixel.y}`);
 
     expect(new Set(coordinates).size).toBe(coordinates.length);
-    expect(hits.every(({ coverage }) => coverage === 1)).toBe(true);
+    expect(hits.every(({ coverage }) => coverage > 0 && coverage <= 1)).toBe(
+      true,
+    );
+    expect(hits.some(({ coverage }) => coverage > 0 && coverage < 1)).toBe(
+      true,
+    );
+  });
+
+  it("keeps a tiny circle visible at a four-pixel corner", () => {
+    const hits = collectHits({ center: { x: 0, y: 0 }, radius: 0.05 });
+
+    expect(hits.map(({ pixel }) => pixel)).toEqual([
+      { x: -1, y: -1 },
+      { x: 0, y: -1 },
+      { x: -1, y: 0 },
+      { x: 0, y: 0 },
+    ]);
+    expect(hits.every(({ coverage }) => coverage > 0)).toBe(true);
+    expect(hits[0]?.coverage).toBeCloseTo(0.00243, 5);
+  });
+
+  it("reduces tiny-circle contribution toward zero with its area", () => {
+    const largerTotal = collectHits({
+      center: { x: 0.5, y: 0.5 },
+      radius: 0.1,
+    }).reduce((total, { coverage }) => total + coverage, 0);
+    const smallerTotal = collectHits({
+      center: { x: 0.5, y: 0.5 },
+      radius: 0.01,
+    }).reduce((total, { coverage }) => total + coverage, 0);
+
+    expect(smallerTotal).toBeGreaterThan(0);
+    expect(smallerTotal).toBeLessThan(largerTotal);
   });
 });
 
@@ -104,7 +162,10 @@ describe("circle rasterizer input validation", () => {
     "rejects invalid radius %s",
     (radius) => {
       const rasterize = () =>
-        Rasterizers.rasterizeCircle({ center: { x: 0.5, y: 0.5 }, radius }, vi.fn());
+        Rasterizers.rasterizeCircle(
+          { center: { x: 0.5, y: 0.5 }, radius },
+          vi.fn(),
+        );
 
       expect(rasterize).toThrow(ReverieRangeError);
       expect(rasterize).toThrow(`[${ErrorCodes.COMMON.INVALID_CIRCLE_RADIUS}]`);
@@ -131,7 +192,8 @@ describe("circle rasterizer input validation", () => {
     { x: Number.POSITIVE_INFINITY, y: 0 },
     { x: 0, y: Number.NEGATIVE_INFINITY },
   ])("rejects non-finite center %#", (center) => {
-    const rasterize = () => Rasterizers.rasterizeCircle({ center, radius: 1 }, vi.fn());
+    const rasterize = () =>
+      Rasterizers.rasterizeCircle({ center, radius: 1 }, vi.fn());
 
     expect(rasterize).toThrow(ReverieRangeError);
     expect(rasterize).toThrow(`[${ErrorCodes.COMMON.INVALID_CIRCLE_CENTER}]`);

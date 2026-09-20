@@ -365,6 +365,18 @@ summary {
   margin-top: 0;
 }
 
+.brush-mode-options {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.brush-mode-options button[aria-pressed="true"] {
+  border-color: rgb(239 157 101 / 55%);
+  color: #20100a;
+  background: var(--accent);
+}
+
 .spacing-control {
   display: grid;
   grid-template-columns: 1fr auto;

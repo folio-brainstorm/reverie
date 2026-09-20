@@ -12,6 +12,7 @@ import {
   ImageBrush,
   isLayerBlendMode,
   LAYER_BLEND_MODES,
+  PixelBrush,
 } from "@reverie/core";
 import type {
   Brush,
@@ -29,6 +30,7 @@ import type { ReverieDownloadOptions } from "@reverie/web";
 import { createBrushOutlinePath } from "./CreateBrushOutlinePath";
 import { decodeBrushImageFile } from "./DecodeBrushImageFile";
 import { exportRasterToConsole } from "./ExportRasterToConsole";
+import type { BrushMode } from "./interfaces/brush/BrushMode";
 import type { CanvasSize } from "./interfaces/canvas/CanvasSize";
 import type { PaintingWorkspaceProps } from "./interfaces/canvas/PaintingWorkspaceProps";
 import type { ViewportSize } from "./interfaces/canvas/ViewportSize";
@@ -83,11 +85,13 @@ export function PaintingWorkspace({
   const [brushOpacity, setBrushOpacity] = useState(INITIAL_BRUSH_OPACITY);
   const [brushSpacing, setBrushSpacing] = useState(INITIAL_BRUSH_SPACING);
   const [brushColor, setBrushColor] = useState(INITIAL_BRUSH_COLOR);
+  const [brushMode, setBrushMode] = useState<BrushMode>("smooth");
   const [paintMode, setPaintMode] = useState<PaintMode>("paint");
   const [brushImage, setBrushImage] = useState<BrushImage | null>(null);
   const brushSettingsRef = useRef({
     size: INITIAL_BRUSH_SIZE,
     image: brushImage,
+    mode: brushMode,
   });
   const [imageBrushName, setImageBrushName] = useState<string | null>(null);
   const [isImageBrushLoading, setIsImageBrushLoading] = useState(false);
@@ -137,7 +141,11 @@ export function PaintingWorkspace({
 
     outline.setAttribute(
       "d",
-      createBrushOutlinePath(center, brushSettingsRef.current.size),
+      createBrushOutlinePath(
+        center,
+        brushSettingsRef.current.size,
+        brushSettingsRef.current.mode,
+      ),
     );
     indicator.setAttribute(
       "transform",
@@ -205,6 +213,7 @@ export function PaintingWorkspace({
           brushOpacity,
           brushSpacing,
           brushColor,
+          "smooth",
         ),
         frameBudget: 8,
         onError: (error) => {
@@ -266,7 +275,11 @@ export function PaintingWorkspace({
   }, []);
 
   useEffect(() => {
-    brushSettingsRef.current = { size: brushSize, image: brushImage };
+    brushSettingsRef.current = {
+      size: brushSize,
+      image: brushImage,
+      mode: brushMode,
+    };
     reverieRef.current?.setBrush(
       createDemoBrush(
         brushImage,
@@ -274,11 +287,19 @@ export function PaintingWorkspace({
         brushOpacity,
         brushSpacing,
         brushColor,
+        brushMode,
       ),
     );
     if (lastPointerPositionRef.current !== null)
       updateBrushIndicator(lastPointerPositionRef.current);
-  }, [brushColor, brushImage, brushOpacity, brushSize, brushSpacing]);
+  }, [
+    brushColor,
+    brushImage,
+    brushMode,
+    brushOpacity,
+    brushSize,
+    brushSpacing,
+  ]);
 
   const clearPainting = (): void => {
     reverieRef.current?.clear();
@@ -460,9 +481,10 @@ export function PaintingWorkspace({
     }
   };
 
-  const useCircleBrush = (): void => {
+  const useGeometricBrush = (mode: BrushMode): void => {
     imageLoadRequestIdRef.current += 1;
     setBrushImage(null);
+    setBrushMode(mode);
     setImageBrushName(null);
     setIsImageBrushLoading(false);
     setDrawingError(null);
@@ -629,6 +651,22 @@ export function PaintingWorkspace({
           <summary>Tools</summary>
           <div className="tool-menu-panel">
             <p className="tool-group-label">Brush tip</p>
+            <div className="brush-mode-options" aria-label="Brush mode">
+              <button
+                type="button"
+                aria-pressed={brushImage === null && brushMode === "smooth"}
+                onClick={() => useGeometricBrush("smooth")}
+              >
+                Smooth
+              </button>
+              <button
+                type="button"
+                aria-pressed={brushImage === null && brushMode === "pixel"}
+                onClick={() => useGeometricBrush("pixel")}
+              >
+                Pixel
+              </button>
+            </div>
             <label className="image-upload-button">
               <input
                 accept="image/*"
@@ -639,13 +677,9 @@ export function PaintingWorkspace({
               />
               {isImageBrushLoading ? "Decoding..." : "Upload image"}
             </label>
-            {brushImage !== null && (
-              <button type="button" onClick={useCircleBrush}>
-                Use circle
-              </button>
-            )}
             <p className="brush-tip-status" title={imageBrushName ?? undefined}>
-              {imageBrushName ?? "Circle brush"}
+              {imageBrushName ??
+                (brushMode === "smooth" ? "Smooth brush" : "Pixel brush")}
             </p>
             <label className="spacing-control">
               Spacing <output>{Math.round(brushSpacing * 100)}%</output>
@@ -885,7 +919,9 @@ export function PaintingWorkspace({
             : isPainting
               ? "Painting"
               : brushImage === null
-                ? "Circle brush"
+                ? brushMode === "smooth"
+                  ? "Smooth brush"
+                  : "Pixel brush"
                 : "Image brush")}
       </div>
       <div
@@ -913,18 +949,23 @@ function createDemoBrush(
   opacity: number,
   spacing: number,
   hexColor: string,
+  mode: BrushMode,
 ): Brush {
   const color = colorFromHex(hexColor);
-  return image === null
+  if (image !== null) {
+    return new ImageBrush({
+      image,
+      size,
+      color,
+      opacity,
+      spacing,
+      dynamics: { rotation: { direction: {} } },
+    });
+  }
+
+  return mode === "smooth"
     ? new CircleBrush({ size, color, opacity, spacing })
-    : new ImageBrush({
-        image,
-        size,
-        color,
-        opacity,
-        spacing,
-        dynamics: { rotation: { direction: {} } },
-      });
+    : new PixelBrush({ size, color, opacity, spacing });
 }
 
 /** Converts a browser color-input value into an opaque RGBA8 color. */

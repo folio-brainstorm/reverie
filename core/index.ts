@@ -9,6 +9,7 @@ export {
   CircleBrush,
   ImageBrush,
   LinearDynamicsCurve,
+  PixelBrush,
 } from "./src/core/brush/index.js";
 export { Rasterizers } from "./src/core/rasterizer/index.js";
 export { Stroke } from "./src/core/stroke/index.js";
@@ -61,12 +62,15 @@ export type { BrushAnchor } from "./src/interfaces/brush/BrushAnchor.js";
 export type { BrushImageConfig } from "./src/interfaces/brush/BrushImageConfig.js";
 export type { CircleBrushConfig } from "./src/interfaces/brush/CircleBrushConfig.js";
 export type { ImageBrushConfig } from "./src/interfaces/brush/ImageBrushConfig.js";
+export type { PixelBrushConfig } from "./src/interfaces/brush/PixelBrushConfig.js";
 export type { RGBABrushImageSource } from "./src/interfaces/brush/RGBABrushImageSource.js";
 export type { ResolvedBrushParameters } from "./src/interfaces/brush/ResolvedBrushParameters.js";
 export type { BrushDynamics } from "./src/interfaces/brush/dynamics/BrushDynamics.js";
 export type { BrushJitter } from "./src/interfaces/brush/jitter/BrushJitter.js";
+export type { PixelBrushJitter } from "./src/interfaces/brush/jitter/PixelBrushJitter.js";
 export type { BrushScatter } from "./src/interfaces/brush/scatter/BrushScatter.js";
 export type { BrushParameterDynamics } from "./src/interfaces/brush/dynamics/BrushParameterDynamics.js";
+export type { PixelBrushDynamics } from "./src/interfaces/brush/dynamics/PixelBrushDynamics.js";
 export type { DirectionDynamics } from "./src/interfaces/brush/dynamics/DirectionDynamics.js";
 export type { DynamicsCurve } from "./src/interfaces/brush/dynamics/DynamicsCurve.js";
 export type { PressureDynamics } from "./src/interfaces/brush/dynamics/PressureDynamics.js";

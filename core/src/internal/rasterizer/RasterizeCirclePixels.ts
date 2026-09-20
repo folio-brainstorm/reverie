@@ -5,6 +5,9 @@ import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
 import { ReverieRangeError } from "../../utils/errors/ReverieErrors.js";
 import { assertFiniteCircleCenterComponent } from "../../utils/number/math/AssertFiniteCircleCenterComponent.js";
 import { isValidCircleRadius } from "../../utils/number/math/IsValidCircleRadius.js";
+import { resolveSmallCirclePixelCoverage } from "./ResolveSmallCirclePixelCoverage.js";
+
+const SMALL_CIRCLE_RADIUS_THRESHOLD = 0.5;
 
 /**
  * Validates and rasterizes a continuous circle with allocation-light hits.
@@ -33,22 +36,43 @@ export function rasterizeCirclePixels(
     );
   }
 
-  const minX = normalizeZero(Math.ceil(center.x - radius - 0.5));
-  const maxX = normalizeZero(Math.floor(center.x + radius - 0.5));
-  const minY = normalizeZero(Math.ceil(center.y - radius - 0.5));
-  const maxY = normalizeZero(Math.floor(center.y + radius - 0.5));
+  const minX = normalizeZero(Math.ceil(center.x - radius - 1));
+  const maxX = normalizeZero(Math.floor(center.x + radius));
+  const minY = normalizeZero(Math.ceil(center.y - radius - 1));
+  const maxY = normalizeZero(Math.floor(center.y + radius));
 
   assertSafePixelBounds(minX, maxX, minY, maxY);
 
-  const radiusSquared = radius * radius;
+  if (radius < SMALL_CIRCLE_RADIUS_THRESHOLD) {
+    for (let y = minY; y <= maxY; y += 1) {
+      for (let x = minX; x <= maxX; x += 1) {
+        const coverage = resolveSmallCirclePixelCoverage(
+          center.x,
+          center.y,
+          radius,
+          x,
+          y,
+        );
+
+        if (coverage > 0) {
+          callback(x, y, coverage);
+        }
+      }
+    }
+    return;
+  }
+
+  const antiAliasedRadius = radius + 0.5;
 
   for (let y = minY; y <= maxY; y += 1) {
     for (let x = minX; x <= maxX; x += 1) {
-      const dx = x + 0.5 - center.x;
-      const dy = y + 0.5 - center.y;
+      const deltaX = x + 0.5 - center.x;
+      const deltaY = y + 0.5 - center.y;
+      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+      const coverage = antiAliasedRadius - distance;
 
-      if (dx * dx + dy * dy <= radiusSquared) {
-        callback(x, y, 1);
+      if (coverage > 0) {
+        callback(x, y, coverage >= 1 ? 1 : coverage);
       }
     }
   }

@@ -53,7 +53,9 @@ Rasterizers.rasterizeCircle(
 ## Circle Brush
 
 `CircleBrush` 封装了圆形 Rasterizer 与 Paint Pipeline。`size` 表示 World
-Space 中的直径，`stamp` 接受连续 World Position：
+Space 中的直径，`stamp` 接受连续 World Position。圆形边缘默认生成归一化的
+fractional coverage；coverage、resolved opacity 与颜色 Alpha 在最终写入 RGBA8
+前组合，因此亚像素中心、小于一个 World Pixel 的笔刷与 erase 边缘都会平滑过渡：
 
 ```ts
 import { CircleBrush, Raster } from "@reverie/core";
@@ -279,6 +281,22 @@ const renderer = new CanvasRenderer({ canvas, raster, camera });
 renderer.resize(800, 600);
 renderer.render();
 ```
+
+显示采样使用 `camera.zoom × pixelRatio` 作为 World 到设备像素的实际比例。比例
+大于或等于 `1` 时保持清晰的 Raster 像素结构；比例小于 `1` 时，Renderer 会先按
+Tile revision 和八邻接状态复用或生成 alpha-correct LOD，再把可见 Tile 组装为一个
+连续离屏表面并执行高质量缩小。这样不会把过滤结果写回 Raster，也不会让 Camera
+zoom 影响导出。派生 LOD 使用每个 Renderer `128 MiB` 的内部 LRU 预算。
+
+真实浏览器像素测试可通过以下命令运行；`imageSmoothingQuality = "high"` 仅作为
+best-effort 提示，测试不会假定所有浏览器都采用相同过滤实现：
+
+```bash
+pnpm --filter @reverie/renderer exec playwright install chromium firefox
+pnpm --filter @reverie/renderer test:browser
+```
+
+macOS Safari 17+ 使用真实设备人工验收，不以 Playwright WebKit 代替。
 
 ## World 图层合成
 

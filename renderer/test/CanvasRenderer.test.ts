@@ -28,6 +28,7 @@ function createRenderingContext(): CanvasRenderingContext2D {
     })),
     drawImage: vi.fn(),
     imageSmoothingEnabled: true,
+    imageSmoothingQuality: "low",
     putImageData: vi.fn(),
   } as unknown as CanvasRenderingContext2D;
 }
@@ -74,7 +75,11 @@ describe("CanvasRenderer World composition", () => {
     const top = world.addLayer();
     top.raster.setPixel({ x: 0, y: 0 }, { r: 200, g: 150, b: 50, a: 255 });
     top.blendMode = "multiply";
-    const renderer = new CanvasRenderer({ canvas, camera: new Camera(), world });
+    const renderer = new CanvasRenderer({
+      canvas,
+      camera: new Camera(),
+      world,
+    });
     renderer.render();
     const tileContext = tileContexts[0];
     if (tileContext === undefined) {
@@ -544,5 +549,120 @@ describe("CanvasRenderer rendering", () => {
       },
     );
     expect(raster.getPixel(pixel)).toEqual(color);
+  });
+
+  it("uses high-quality smoothing only when the effective device scale is below one", () => {
+    const minified = createCanvasFixture(4, 4);
+    const minifiedRaster = new Raster({ tileSize: 2 });
+    minifiedRaster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    new CanvasRenderer({
+      canvas: minified.canvas,
+      raster: minifiedRaster,
+      camera: new Camera({ zoom: 0.5 }),
+    }).render();
+
+    expect(minified.context.imageSmoothingEnabled).toBe(true);
+    expect(minified.context.imageSmoothingQuality).toBe("high");
+
+    const deviceMagnified = createCanvasFixture(8, 8);
+    const deviceMagnifiedRaster = new Raster({ tileSize: 2 });
+    deviceMagnifiedRaster.setPixel(
+      { x: 0, y: 0 },
+      { r: 255, g: 0, b: 0, a: 255 },
+    );
+    const renderer = new CanvasRenderer({
+      canvas: deviceMagnified.canvas,
+      raster: deviceMagnifiedRaster,
+      camera: new Camera({ zoom: 0.75 }),
+    });
+    renderer.resize(8, 8, 2);
+    renderer.render();
+
+    expect(deviceMagnified.context.imageSmoothingEnabled).toBe(false);
+    expect(deviceMagnified.context.imageSmoothingQuality).toBe("low");
+  });
+
+  it("downsamples in premultiplied form so transparent RGB cannot create halos", () => {
+    const { canvas, tileContexts } = createCanvasFixture(1, 1);
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    raster.setPixel({ x: 1, y: 0 }, { r: 0, g: 255, b: 0, a: 0 });
+    new CanvasRenderer({
+      canvas,
+      raster,
+      camera: new Camera({ zoom: 0.25 }),
+    }).render();
+
+    const lodUpload = tileContexts
+      .flatMap((context) => vi.mocked(context.putImageData).mock.calls)
+      .at(0)?.[0];
+    expect(Array.from(lodUpload?.data ?? [])).toEqual([255, 0, 0, 64]);
+  });
+
+  it("invalidates a Tile LOD when any neighbor identity or revision changes", () => {
+    const { canvas, tileContexts } = createCanvasFixture(2, 1);
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    raster.setPixel({ x: 2, y: 0 }, { r: 0, g: 255, b: 0, a: 255 });
+    const renderer = new CanvasRenderer({
+      canvas,
+      raster,
+      camera: new Camera({ zoom: 0.25 }),
+    });
+
+    renderer.render();
+    renderer.render();
+    const uploadCountBeforeChange = tileContexts.reduce(
+      (count, context) =>
+        count + vi.mocked(context.putImageData).mock.calls.length,
+      0,
+    );
+    expect(uploadCountBeforeChange).toBe(2);
+
+    raster.setPixel({ x: 3, y: 0 }, { r: 0, g: 0, b: 255, a: 255 });
+    renderer.render();
+    const uploadCountAfterChange = tileContexts.reduce(
+      (count, context) =>
+        count + vi.mocked(context.putImageData).mock.calls.length,
+      0,
+    );
+    expect(uploadCountAfterChange).toBe(4);
+  });
+
+  it("composes World pixels at full resolution before generating a minified Tile", () => {
+    const { canvas, tileContexts } = createCanvasFixture(1, 1);
+    const world = new World({ tileSize: 2 });
+    world
+      .getLayer(0)
+      .raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    const top = world.addLayer();
+    top.raster.setPixel({ x: 0, y: 0 }, { r: 0, g: 0, b: 255, a: 128 });
+    new CanvasRenderer({
+      canvas,
+      world,
+      camera: new Camera({ zoom: 0.25 }),
+    }).render();
+
+    const lodUpload = tileContexts
+      .flatMap((context) => vi.mocked(context.putImageData).mock.calls)
+      .at(0)?.[0];
+    expect(Array.from(lodUpload?.data ?? [])).toEqual([127, 0, 128, 64]);
+  });
+
+  it("returns safely when an extremely small zoom produces an infinite viewport", () => {
+    const { canvas, context, ownerDocument } = createCanvasFixture(4, 4);
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    const renderer = new CanvasRenderer({
+      canvas,
+      raster,
+      camera: new Camera({ zoom: Number.MIN_VALUE }),
+    });
+
+    renderer.render();
+
+    expect(context.clearRect).toHaveBeenCalledWith(0, 0, 4, 4);
+    expect(context.drawImage).not.toHaveBeenCalled();
+    expect(ownerDocument.createElement).not.toHaveBeenCalled();
   });
 });

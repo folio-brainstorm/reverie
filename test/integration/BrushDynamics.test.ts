@@ -221,7 +221,7 @@ describe("CircleBrush dynamic painting", () => {
     brush.stamp(baseRaster, STAMP_POSITION, createStamp({ pressure: 1 }));
 
     expect(smallRaster.getPixel({ x: 2, y: 0 }).a).toBe(0);
-    expect(baseRaster.getPixel({ x: 2, y: 0 }).a).toBe(255);
+    expect(baseRaster.getPixel({ x: 2, y: 0 }).a).toBe(128);
   });
 
   it("treats zero resolved size as a paint no-op", () => {
@@ -235,6 +235,7 @@ describe("CircleBrush dynamic painting", () => {
     brush.stamp(raster, STAMP_POSITION, createStamp({ pressure: 0 }));
 
     expect(raster.getPixel({ x: 0, y: 0 }).a).toBe(0);
+    expect(raster.allocatedTileCount).toBe(0);
   });
 
   it("feeds resolved opacity through the existing blend path", () => {

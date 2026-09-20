@@ -1,5 +1,5 @@
 import type { Brush } from "../../interfaces/brush/Brush.js";
-import type { CircleBrushConfig } from "../../interfaces/brush/CircleBrushConfig.js";
+import type { PixelBrushConfig } from "../../interfaces/brush/PixelBrushConfig.js";
 import type { ResolvedBrushParameters } from "../../interfaces/brush/ResolvedBrushParameters.js";
 import type { NormalizedBrushDynamics } from "../../interfaces/brush/dynamics/NormalizedBrushDynamics.js";
 import type { NormalizedBrushJitter } from "../../interfaces/brush/jitter/NormalizedBrushJitter.js";
@@ -11,14 +11,16 @@ import type { StampCommand } from "../../interfaces/stroke/StampCommand.js";
 import type { Raster } from "../raster/Raster.js";
 
 import { writeRasterStampPixel } from "../../internal/raster-write/WriteRasterStampPixel.js";
-import { rasterizeCirclePixels } from "../../internal/rasterizer/RasterizeCirclePixels.js";
 import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
-import { ReverieRangeError } from "../../utils/errors/ReverieErrors.js";
+import {
+  ReverieRangeError,
+  ReverieTypeError,
+} from "../../utils/errors/ReverieErrors.js";
 import { isValidRGBAColor } from "../../utils/number/color/IsValidRGBAColor.js";
-import { assertFiniteCircleCenterComponent } from "../../utils/number/math/AssertFiniteCircleCenterComponent.js";
 import { isPositiveFiniteNumber } from "../../utils/number/math/IsPositiveFiniteNumber.js";
 import { isUnitInterval } from "../../utils/number/math/IsUnitInterval.js";
 import { assertUint32 } from "../../utils/number/math/AssertUint32.js";
+import { resolvePaintMode } from "../paint/ResolvePaintMode.js";
 import { normalizeBrushDynamics } from "./NormalizeBrushDynamics.js";
 import { normalizeBrushJitter } from "./NormalizeBrushJitter.js";
 import { normalizeBrushScatter } from "./NormalizeBrushScatter.js";
@@ -26,19 +28,18 @@ import { resolveBrushDynamics } from "./ResolveBrushDynamics.js";
 import { resolveBrushJitter } from "./ResolveBrushJitter.js";
 import { resolveBrushScatter } from "./ResolveBrushScatter.js";
 import { resolveBrushStampDistance } from "./ResolveBrushStampDistance.js";
-import { resolvePaintMode } from "../paint/ResolvePaintMode.js";
 
 const DEFAULT_BRUSH_SPACING = 0.25;
 
 /**
- * Models a circular brush whose immutable parameters are applied to each stamp.
+ * Models a square hard-edged brush whose footprint aligns to the pixel grid.
  *
- * The brush works exclusively in continuous world space. Rasterization,
- * coverage, alpha compositing, storage, and rendering remain delegated to
- * their respective layers.
+ * Odd footprint sizes snap around one pixel center. Even sizes snap around one
+ * pixel intersection. Every covered pixel receives binary coverage `1`, so a
+ * one-pixel opaque stamp writes exactly one fully opaque pixel.
  */
-export class CircleBrush implements Brush {
-  /** Stamp diameter measured in world units. */
+export class PixelBrush implements Brush {
+  /** Positive safe-integer footprint width and height in world pixels. */
   readonly size: number;
 
   /** Stamp opacity in the inclusive range from zero to one. */
@@ -47,25 +48,22 @@ export class CircleBrush implements Brush {
   /** Distance between stamps expressed as a proportion of {@link size}. */
   readonly spacing: number;
 
-  /** Static rotation offset in radians. */
-  readonly rotation: number;
-
   /** Stable uint32 base seed for stroke derivation and direct stamps. */
   readonly seed: number;
 
   /** Internally owned color so later config mutations cannot alter the brush. */
   private readonly internalColor: RGBAColor;
 
-  /** Validated dynamics owned by this brush, or `null` for the legacy path. */
+  /** Validated size and opacity dynamics, or `null` when disabled. */
   private readonly dynamics: NormalizedBrushDynamics | null;
 
-  /** Validated optional variation applied after dynamics. */
+  /** Validated deterministic size, opacity, and spacing variation. */
   private readonly jitter: NormalizedBrushJitter | null;
 
-  /** Validated optional final-position variation. */
+  /** Validated optional position variation applied before grid snapping. */
   private readonly scatter: NormalizedBrushScatter | null;
 
-  /** Whether dynamics, jitter, or scatter requires per-stamp resolution. */
+  /** Whether a stamp must resolve parameters or its final position. */
   private readonly hasPaintVariation: boolean;
 
   /** Returns a copy of the straight-alpha RGBA8 stamp color. */
@@ -74,26 +72,24 @@ export class CircleBrush implements Brush {
   }
 
   /**
-   * Creates a circular brush with validated, immutable stamp parameters.
+   * Creates an axis-aligned hard-edged pixel brush.
    *
-   * @param config - Base paint parameters, dynamics, uint32 seed, jitter, and scatter.
-   * @throws {ReverieRangeError} Size or spacing is not positive and finite,
-   * opacity is outside the inclusive `0..1` range, rotation is not finite,
-   * color is not valid RGBA8, a dynamics/jitter/scatter mapping is malformed, or seed
-   * is outside the uint32 range.
+   * @param config - Integer footprint, paint parameters, variation, and seed.
+   * @throws {ReverieRangeError} Size is not a positive safe integer, opacity
+   * or spacing is invalid, color is not RGBA8, variation is malformed, or the
+   * seed is outside the uint32 range.
    */
-  constructor(config: CircleBrushConfig) {
+  constructor(config: PixelBrushConfig) {
     const {
       size,
       color,
       opacity = 1,
       spacing = DEFAULT_BRUSH_SPACING,
-      rotation = 0,
       seed = 0,
     } = config;
 
-    if (!isPositiveFiniteNumber(size)) {
-      throw ReverieRangeError.from(ErrorDefinitions.BRUSH.INVALID_SIZE);
+    if (!Number.isSafeInteger(size) || size <= 0) {
+      throw ReverieRangeError.from(ErrorDefinitions.BRUSH.INVALID_PIXEL_SIZE);
     }
 
     if (!isUnitInterval(opacity)) {
@@ -102,10 +98,6 @@ export class CircleBrush implements Brush {
 
     if (!isPositiveFiniteNumber(spacing)) {
       throw ReverieRangeError.from(ErrorDefinitions.BRUSH.INVALID_SPACING);
-    }
-
-    if (typeof rotation !== "number" || !Number.isFinite(rotation)) {
-      throw ReverieRangeError.from(ErrorDefinitions.BRUSH.INVALID_ROTATION);
     }
 
     if (!isValidRGBAColor(color)) {
@@ -117,7 +109,6 @@ export class CircleBrush implements Brush {
     this.size = size;
     this.opacity = opacity;
     this.spacing = spacing;
-    this.rotation = rotation;
     this.seed = seed >>> 0;
     this.internalColor = { ...color };
     this.dynamics = normalizeBrushDynamics(config.dynamics);
@@ -136,21 +127,17 @@ export class CircleBrush implements Brush {
   /**
    * Resolves dynamics and deterministic jitter for one actual stamp.
    *
-   * @param input - Optional dynamics input with uint32 seed and stamp index;
-   * omitted input uses neutral dynamics defaults, the brush seed, and index `0`.
-   * @returns Independent size, opacity, and radian rotation values.
-   * @throws {ReverieRangeError} Used input, identity, curve output, or jitter result
-   * is invalid.
+   * The returned size remains continuous for shared dynamics semantics and is
+   * rounded to the nearest positive integer only when rasterizing a footprint.
+   *
+   * @param input - Optional dynamics and deterministic random context.
+   * @returns Independent size and opacity values with rotation fixed at zero.
+   * @throws {ReverieRangeError} Used input, curve output, identity, or jitter
+   * arithmetic is invalid.
    */
   resolveParameters(input?: StampCommand): ResolvedBrushParameters {
     return resolveBrushJitter(
-      resolveBrushDynamics(
-        this.size,
-        this.opacity,
-        this.rotation,
-        this.dynamics,
-        input,
-      ),
+      resolveBrushDynamics(this.size, this.opacity, 0, this.dynamics, input),
       this.jitter,
       this.seed,
       input,
@@ -160,8 +147,7 @@ export class CircleBrush implements Brush {
   /**
    * Resolves the world-space distance from one stamp to its successor.
    *
-   * @param input - Input and deterministic identity for the stamp that owns
-   * the outgoing interval.
+   * @param input - Input and deterministic identity for the outgoing interval.
    * @returns A finite positive world-space interval.
    */
   resolveStampDistance(input: StampCommand): number {
@@ -176,32 +162,30 @@ export class CircleBrush implements Brush {
   }
 
   /**
-   * Rasterizes and paints one circular stamp centered at a world position.
+   * Snaps and paints one hard-edged square footprint.
    *
    * @param raster - Sparse raster that receives the stamp.
-   * @param position - Continuous world-space center of the stamp.
-   * @param input - Optional dynamics and random context; absent random identity
-   * uses the brush seed and stamp index `0` without invocation state.
+   * @param position - Continuous position snapped according to footprint parity.
+   * @param input - Optional dynamics, operation, and deterministic random context.
    * @throws {ReverieTypeError} A position component is not a number.
-   * @throws {ReverieRangeError} A position is not finite or the resulting
-   * pixel bounds exceed the safe integer range, or used dynamics input or curve
-   * output, random identity, jitter arithmetic, or scatter result is invalid.
+   * @throws {ReverieRangeError} A position is not finite, resolved bounds are
+   * unsafe, or used dynamics, jitter, scatter, or identity input is invalid.
    */
   stamp(raster: Raster, position: WorldPoint, input?: StampCommand): void {
     const paintMode = resolvePaintMode(input?.paintMode);
-    assertFiniteCircleCenterComponent(position.x, "center.x");
-    assertFiniteCircleCenterComponent(position.y, "center.y");
+    PixelBrush.assertFinitePosition(position.x, "position.x");
+    PixelBrush.assertFinitePosition(position.y, "position.y");
 
     if (!this.hasPaintVariation) {
-      this.paintCircle(raster, position, this.size, this.opacity, paintMode);
+      this.paintFootprint(raster, position, this.size, this.opacity, paintMode);
       return;
     }
 
     const resolved = this.resolveParameters(input);
-
     if (resolved.size <= 0 || resolved.opacity <= 0) {
       return;
     }
+
     const paintPosition = resolveBrushScatter(
       position,
       resolved,
@@ -209,8 +193,7 @@ export class CircleBrush implements Brush {
       this.seed,
       input,
     );
-
-    this.paintCircle(
+    this.paintFootprint(
       raster,
       paintPosition,
       resolved.size,
@@ -219,35 +202,46 @@ export class CircleBrush implements Brush {
     );
   }
 
-  /** Rasterizes one resolved circle through the existing trusted write path. */
-  private paintCircle(
+  /** Writes one resolved binary footprint through the trusted pixel path. */
+  private paintFootprint(
     raster: Raster,
     position: WorldPoint,
-    size: number,
+    resolvedSize: number,
     opacity: number,
     paintMode: PaintMode,
   ): void {
     if (
-      size <= 0 ||
+      resolvedSize <= 0 ||
       opacity <= 0 ||
       (paintMode === "paint" && this.internalColor.a === 0)
     ) {
       return;
     }
 
-    rasterizeCirclePixels(
-      {
-        center: position,
-        radius: size / 2,
-      },
-      (x, y, coverage) => {
-        const effectiveAlpha = Math.round(
-          this.internalColor.a * opacity * coverage,
-        );
-        if (paintMode === "paint" && effectiveAlpha === 0) {
-          return;
-        }
+    const footprintSize = PixelBrush.resolveFootprintSize(resolvedSize);
+    const halfSize = Math.floor(footprintSize / 2);
+    const isOddSize = footprintSize % 2 === 1;
+    const horizontalAnchor = isOddSize
+      ? Math.floor(position.x)
+      : Math.floor(position.x + 0.5);
+    const verticalAnchor = isOddSize
+      ? Math.floor(position.y)
+      : Math.floor(position.y + 0.5);
+    const minX = horizontalAnchor - halfSize;
+    const minY = verticalAnchor - halfSize;
+    const maxX = minX + footprintSize - 1;
+    const maxY = minY + footprintSize - 1;
 
+    if (![minX, minY, maxX, maxY].every(Number.isSafeInteger)) {
+      throw ReverieRangeError.from(
+        ErrorDefinitions.BRUSH.UNSAFE_PIXEL_STAMP_BOUNDS,
+      );
+    }
+
+    const effectiveAlpha = Math.round(this.internalColor.a * opacity);
+    const normalizedEffectiveAlpha = effectiveAlpha / 255;
+    for (let y = minY; y <= maxY; y += 1) {
+      for (let x = minX; x <= maxX; x += 1) {
         writeRasterStampPixel(
           raster,
           x,
@@ -257,10 +251,40 @@ export class CircleBrush implements Brush {
           this.internalColor.g,
           this.internalColor.b,
           effectiveAlpha,
-          effectiveAlpha / 255,
-          opacity * coverage,
+          normalizedEffectiveAlpha,
+          opacity,
         );
-      },
-    );
+      }
+    }
+  }
+
+  /** Converts a positive continuous dynamics result into a pixel footprint. */
+  private static resolveFootprintSize(resolvedSize: number): number {
+    const footprintSize = Math.max(1, Math.round(resolvedSize));
+    if (!Number.isSafeInteger(footprintSize)) {
+      throw ReverieRangeError.from(
+        ErrorDefinitions.BRUSH.UNSAFE_PIXEL_STAMP_BOUNDS,
+      );
+    }
+    return footprintSize;
+  }
+
+  /** Rejects malformed continuous positions at the public stamp boundary. */
+  private static assertFinitePosition(
+    value: unknown,
+    parameterName: string,
+  ): asserts value is number {
+    if (typeof value !== "number") {
+      throw ReverieTypeError.from(
+        ErrorDefinitions.BRUSH.INVALID_PIXEL_STAMP_POSITION_TYPE,
+        { param: parameterName, received: typeof value },
+      );
+    }
+    if (!Number.isFinite(value)) {
+      throw ReverieRangeError.from(
+        ErrorDefinitions.BRUSH.INVALID_PIXEL_STAMP_POSITION,
+        { param: parameterName, received: value },
+      );
+    }
   }
 }

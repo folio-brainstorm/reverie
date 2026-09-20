@@ -7,15 +7,9 @@ import {
   ReverieRangeError,
   ReverieTypeError,
 } from "@reverie/core";
-import type {
-  Brush,
-  CircleBrushConfig,
-  PixelCoord,
-  RGBAColor,
-} from "@reverie/core";
+import type { Brush, CircleBrushConfig, RGBAColor } from "@reverie/core";
 
 const OPAQUE_GREEN: RGBAColor = { r: 0, g: 255, b: 0, a: 255 };
-const TRANSPARENT_BLACK: RGBAColor = { r: 0, g: 0, b: 0, a: 0 };
 
 describe("CircleBrush construction", () => {
   it("is available with its contracts through the public package entry point", () => {
@@ -107,18 +101,11 @@ describe("CircleBrush stamping", () => {
 
     brush.stamp(raster, { x: 0.5, y: 0.5 });
 
-    const paintedPixels: PixelCoord[] = [
-      { x: 0, y: -1 },
-      { x: -1, y: 0 },
-      { x: 0, y: 0 },
-      { x: 1, y: 0 },
-      { x: 0, y: 1 },
-    ];
-
-    paintedPixels.forEach((pixel) => {
-      expect(raster.getPixel(pixel)).toEqual(OPAQUE_GREEN);
-    });
-    expect(raster.getPixel({ x: 1, y: 1 })).toEqual(TRANSPARENT_BLACK);
+    expect(collectAlphaMatrix(raster, -1, -1, 3, 3)).toEqual([
+      [22, 128, 22],
+      [128, 255, 128],
+      [22, 128, 22],
+    ]);
   });
 
   it("supports fractional world positions", () => {
@@ -127,7 +114,10 @@ describe("CircleBrush stamping", () => {
 
     brush.stamp(raster, { x: 50.5, y: 50.25 });
 
-    expect(raster.getPixel({ x: 50, y: 50 })).toEqual(OPAQUE_GREEN);
+    expect(raster.getPixel({ x: 50, y: 50 })).toEqual({
+      ...OPAQUE_GREEN,
+      a: 191,
+    });
   });
 
   it("supports negative world positions", () => {
@@ -158,6 +148,54 @@ describe("CircleBrush stamping", () => {
     // #endif
   });
 
+  it("keeps coverage identical across horizontal, vertical, and four-tile boundaries", () => {
+    const localRaster = new Raster({ tileSize: 16 });
+    const verticalRaster = new Raster({ tileSize: 16 });
+    const horizontalRaster = new Raster({ tileSize: 16 });
+    const intersectionRaster = new Raster({ tileSize: 16 });
+    const brush = new CircleBrush({ size: 4, color: OPAQUE_GREEN });
+
+    brush.stamp(localRaster, { x: 4.5, y: 4.5 });
+    brush.stamp(verticalRaster, { x: 15.5, y: 4.5 });
+    brush.stamp(horizontalRaster, { x: 4.5, y: 15.5 });
+    brush.stamp(intersectionRaster, { x: 15.5, y: 15.5 });
+
+    const expected = collectAlphaMatrix(localRaster, 2, 2, 5, 5);
+    expect(collectAlphaMatrix(verticalRaster, 13, 2, 5, 5)).toEqual(expected);
+    expect(collectAlphaMatrix(horizontalRaster, 2, 13, 5, 5)).toEqual(expected);
+    expect(collectAlphaMatrix(intersectionRaster, 13, 13, 5, 5)).toEqual(
+      expected,
+    );
+  });
+
+  it("keeps tiny stamps visible at pixel centers and corners", () => {
+    const centeredRaster = new Raster();
+    const cornerRaster = new Raster();
+    const brush = new CircleBrush({ size: 0.1, color: OPAQUE_GREEN });
+
+    brush.stamp(centeredRaster, { x: 0.5, y: 0.5 });
+    brush.stamp(cornerRaster, { x: 0, y: 0 });
+
+    expect(centeredRaster.getPixel({ x: 0, y: 0 }).a).toBeGreaterThan(0);
+    expect(collectAlphaMatrix(cornerRaster, -1, -1, 2, 2)).toEqual([
+      [1, 1],
+      [1, 1],
+    ]);
+  });
+
+  it("changes edge alpha continuously with subpixel movement", () => {
+    const centeredRaster = new Raster();
+    const shiftedRaster = new Raster();
+    const brush = new CircleBrush({ size: 1, color: OPAQUE_GREEN });
+
+    brush.stamp(centeredRaster, { x: 0.5, y: 0.5 });
+    brush.stamp(shiftedRaster, { x: 0.5, y: 0.25 });
+
+    expect(centeredRaster.getPixel({ x: 0, y: 0 }).a).toBe(255);
+    expect(shiftedRaster.getPixel({ x: 0, y: 0 }).a).toBe(191);
+    expect(shiftedRaster.getPixel({ x: 0, y: -1 }).a).toBe(64);
+  });
+
   it("combines brush opacity with color alpha through the paint pipeline", () => {
     const raster = new Raster();
     const brush = new CircleBrush({
@@ -174,6 +212,22 @@ describe("CircleBrush stamping", () => {
     });
   });
 
+  it("quantizes alpha only after coverage, opacity, and color alpha combine", () => {
+    const raster = new Raster();
+    const brush = new CircleBrush({
+      size: 2,
+      color: { ...OPAQUE_GREEN, a: 101 },
+      opacity: 0.5,
+    });
+
+    brush.stamp(raster, { x: 0.5, y: 0.5 });
+
+    expect(raster.getPixel({ x: 1, y: 0 })).toEqual({
+      ...OPAQUE_GREEN,
+      a: 25,
+    });
+  });
+
   it("accumulates repeated stamps using Source Over", () => {
     const raster = new Raster();
     const brush = new CircleBrush({
@@ -186,6 +240,19 @@ describe("CircleBrush stamping", () => {
     brush.stamp(raster, { x: 0.5, y: 0.5 });
 
     expect(raster.getPixel({ x: 0, y: 0 })).toEqual({
+      ...OPAQUE_GREEN,
+      a: 192,
+    });
+  });
+
+  it("accumulates repeated fractional edge coverage using Source Over", () => {
+    const raster = new Raster();
+    const brush = new CircleBrush({ size: 2, color: OPAQUE_GREEN });
+
+    brush.stamp(raster, { x: 0.5, y: 0.5 });
+    brush.stamp(raster, { x: 0.5, y: 0.5 });
+
+    expect(raster.getPixel({ x: 1, y: 0 })).toEqual({
       ...OPAQUE_GREEN,
       a: 192,
     });
@@ -222,3 +289,22 @@ describe("CircleBrush stamping", () => {
     }).toThrow(ReverieTypeError);
   });
 });
+
+function collectAlphaMatrix(
+  raster: Raster,
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+): number[][] {
+  return Array.from({ length: height }, (_, rowIndex) =>
+    Array.from(
+      { length: width },
+      (_, columnIndex) =>
+        raster.getPixel({
+          x: left + columnIndex,
+          y: top + rowIndex,
+        }).a,
+    ),
+  );
+}

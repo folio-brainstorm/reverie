@@ -65,6 +65,20 @@ describe("Brush paint modes", () => {
     expect(raster.getPixel({ x: 0, y: 0 })).toEqual({ ...RED, a: 64 });
   });
 
+  it("applies fractional circle-edge coverage to erase strength", () => {
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 1, y: 0 }, RED);
+    const brush = new CircleBrush({ size: 2, color: RED });
+
+    brush.stamp(
+      raster,
+      { x: 0.5, y: 0.5 },
+      { position: { x: 0.5, y: 0.5 }, paintMode: "erase" },
+    );
+
+    expect(raster.getPixel({ x: 1, y: 0 })).toEqual({ ...RED, a: 128 });
+  });
+
   it("fully erases without clearing transparent RGB and skips missing tiles", () => {
     const raster = new Raster({ tileSize: 2 });
     raster.setPixel({ x: 0, y: 0 }, RED);
