@@ -1,6 +1,7 @@
 import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
 import { ReverieError } from "../../utils/errors/ReverieErrors.js";
 import { isStableDocumentId } from "../../utils/document/IsStableDocumentId.js";
+import { isPlainRecord } from "../../utils/object/IsPlainRecord.js";
 
 /**
  * Narrows an unknown value to a plain schema record using a caller-selected error.
@@ -75,14 +76,4 @@ export function createRasterSchemaError(reason: string): ReverieError {
   return ReverieError.from(ErrorDefinitions.DOCUMENT.INVALID_RASTER_SCHEMA, {
     reason,
   });
-}
-
-/** Narrows JSON-like document objects without accepting runtime instances. */
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value) &&
-    Object.getPrototypeOf(value) === Object.prototype
-  );
 }

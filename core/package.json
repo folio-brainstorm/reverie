@@ -21,6 +21,10 @@
     "./document": {
       "types": "./dist/src/core/document/index.d.ts",
       "import": "./dist/src/core/document/index.js"
+    },
+    "./project": {
+      "types": "./dist/src/core/project/index.d.ts",
+      "import": "./dist/src/core/project/index.js"
     }
   },
   "files": [

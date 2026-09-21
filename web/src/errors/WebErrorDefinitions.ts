@@ -128,6 +128,11 @@ export const WebErrorDefinitions = {
     template:
       "Download filename must be a non-empty string, but received `$received`.",
   },
+  INVALID_DOWNLOAD_BASE_NAME: {
+    code: "EC_WEB_0032",
+    template:
+      "Download default base name must be a non-empty string, but received `$received`.",
+  },
   EXPORT_REGION_REQUIRED: {
     code: "EC_WEB_0018",
     template: "An export region is required when exporting an unbounded World.",
@@ -140,5 +145,10 @@ export const WebErrorDefinitions = {
     code: "EC_WEB_0020",
     template:
       "CanvasDrawingSession strokeSequence must be an integer between 0 and 4294967295.",
+  },
+  INCOMPATIBLE_INITIAL_WORLD: {
+    code: "EC_WEB_0031",
+    template:
+      "ReverieCanvas initial World must be a World instance and cannot be combined with width, height, or tileSize.",
   },
 } as const satisfies Record<string, ErrorDefinition>;

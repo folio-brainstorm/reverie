@@ -27,7 +27,13 @@ import type {
   WorldPoint,
 } from "@reverie/core";
 import type { ExportFormat, ExportRegion } from "@reverie/exporter";
-import { ReverieCanvas } from "@reverie/web";
+import {
+  ReverieCanvas,
+  downloadProject,
+  importProjectFile,
+  PROJECT_FILE_EXTENSION,
+  PROJECT_MIME_TYPE,
+} from "@reverie/web";
 import type { ReverieDownloadOptions } from "@reverie/web";
 
 import { createBrushOutlinePath } from "./CreateBrushOutlinePath";
@@ -60,10 +66,31 @@ const EXPORT_REQUESTS: readonly ReverieDownloadOptions[] = [
   { format: "jpeg", filename: "reverie-export" },
   { format: "webp", filename: "reverie-export" },
 ];
+const TEXT_EDITABLE_INPUT_TYPES = new Set([
+  "email",
+  "number",
+  "password",
+  "search",
+  "tel",
+  "text",
+  "url",
+]);
+const RANGE_ADJUSTMENT_KEYS = new Set([
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  "ArrowUp",
+  "End",
+  "Home",
+  "PageDown",
+  "PageUp",
+]);
 
 /** Presents the responsive full-screen painting workspace and its controls. */
 export function PaintingWorkspace({
   canvasSize,
+  initialWorld,
+  onImportWorld,
 }: PaintingWorkspaceProps): ReactElement {
   const drawingWidth = canvasSize.width;
   const drawingHeight = canvasSize.height;
@@ -85,6 +112,7 @@ export function PaintingWorkspace({
   const lastPanPositionRef = useRef<ScreenPoint | null>(null);
   const lastPointerPositionRef = useRef<ScreenPoint | null>(null);
   const imageLoadRequestIdRef = useRef(0);
+  const projectImportRequestIdRef = useRef(0);
   const activeHistoryGroupRef = useRef<ActiveHistoryGroup | null>(null);
   const [viewportSize, setViewportSize] = useState<ViewportSize>({
     width: 0,
@@ -258,6 +286,10 @@ export function PaintingWorkspace({
       const activeReverie = reverieRef.current;
       if (activeReverie === null) return;
       try {
+        if (activeHistoryGroupRef.current !== null) {
+          activeReverie.commitHistoryGroup();
+          activeHistoryGroupRef.current = null;
+        }
         if (historyAction === "undo") {
           activeReverie.undo();
         } else {
@@ -273,9 +305,9 @@ export function PaintingWorkspace({
     try {
       reverie = new ReverieCanvas({
         canvas,
-        width: drawingWidth,
-        height: drawingHeight,
-        tileSize: 256,
+        ...(initialWorld === undefined
+          ? { width: drawingWidth, height: drawingHeight, tileSize: 256 }
+          : { world: initialWorld }),
         brush: createDemoBrush(
           null,
           brushSize,
@@ -338,6 +370,7 @@ export function PaintingWorkspace({
     return () => {
       window.cancelAnimationFrame(readyFrame);
       imageLoadRequestIdRef.current += 1;
+      projectImportRequestIdRef.current += 1;
       resizeObserver?.disconnect();
       frame.removeEventListener("wheel", handleWheel);
       window.removeEventListener("pointerdown", handleWindowPointerDown, true);
@@ -742,6 +775,45 @@ export function PaintingWorkspace({
       });
   };
 
+  /** Downloads the current editable document as a standalone `.reverie` project. */
+  const exportProjectFile = (): void => {
+    const reverie = reverieRef.current;
+    if (reverie === null) return;
+    try {
+      downloadProject(reverie.world, { filename: "reverie-project" });
+      setDrawingError(null);
+      setExportStatus("Downloaded Rêverie project");
+    } catch (error) {
+      setExportStatus(null);
+      setDrawingError(formatDrawingError(error));
+    }
+  };
+
+  /** Imports one selected project and remounts the demo only after validation succeeds. */
+  const handleProjectImport = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ): Promise<void> => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (file === undefined) return;
+    const requestId = ++projectImportRequestIdRef.current;
+    setDrawingError(null);
+    setExportStatus("Importing Rêverie project...");
+    try {
+      const world = await importProjectFile(file);
+      if (requestId !== projectImportRequestIdRef.current) return;
+      const importError = onImportWorld(world);
+      if (importError !== null) {
+        setExportStatus(null);
+        setDrawingError(importError);
+      }
+    } catch (error) {
+      if (requestId !== projectImportRequestIdRef.current) return;
+      setExportStatus(null);
+      setDrawingError(formatDrawingError(error));
+    }
+  };
+
   const resetView = (): void => {
     const reverie = reverieRef.current;
     const frame = canvasFrameRef.current;
@@ -1093,6 +1165,19 @@ export function PaintingWorkspace({
                 </button>
               ))}
             </div>
+            <button type="button" onClick={exportProjectFile}>
+              Export project
+            </button>
+            <label className="image-upload-button">
+              <input
+                accept={`.${PROJECT_FILE_EXTENSION},${PROJECT_MIME_TYPE}`}
+                aria-label="Import a Rêverie project"
+                className="visually-hidden"
+                type="file"
+                onChange={(event) => void handleProjectImport(event)}
+              />
+              Import project
+            </label>
             <button type="button" onClick={exportPainting}>
               Export to console
             </button>
@@ -1246,9 +1331,11 @@ export function PaintingWorkspace({
                         onPointerCancel={() =>
                           cancelHistoryGroup("layer-opacity", layer)
                         }
-                        onKeyDown={() =>
-                          beginHistoryGroup("layer-opacity", layer)
-                        }
+                        onKeyDown={(event) => {
+                          if (isRangeAdjustmentKey(event.key)) {
+                            beginHistoryGroup("layer-opacity", layer);
+                          }
+                        }}
                         onKeyUp={() =>
                           commitHistoryGroup("layer-opacity", layer)
                         }
@@ -1422,14 +1509,20 @@ function formatDrawingError(error: unknown): string {
   return error instanceof Error ? error.message : "Drawing failed.";
 }
 
-/** Preserves native text-control Undo instead of intercepting it for the document. */
+/** Preserves native text-control Undo without disabling document history on sliders. */
 function isEditableKeyboardTarget(target: EventTarget | null): boolean {
   return (
-    target instanceof HTMLInputElement ||
+    (target instanceof HTMLInputElement &&
+      TEXT_EDITABLE_INPUT_TYPES.has(target.type)) ||
     target instanceof HTMLTextAreaElement ||
     target instanceof HTMLSelectElement ||
     (target instanceof HTMLElement && target.isContentEditable)
   );
+}
+
+/** Reports whether a keyboard key changes a focused range input's value. */
+function isRangeAdjustmentKey(key: string): boolean {
+  return RANGE_ADJUSTMENT_KEYS.has(key);
 }
 
 /** Normalizes line and page wheel units to CSS pixels. */

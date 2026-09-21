@@ -11,7 +11,7 @@ import type { ExportRegion } from "@reverie/exporter";
 import { CanvasRenderer } from "@reverie/renderer";
 
 import { WebErrorDefinitions } from "../errors/WebErrorDefinitions.js";
-import { WebError, WebRangeError } from "../errors/WebErrors.js";
+import { WebError, WebRangeError, WebTypeError } from "../errors/WebErrors.js";
 import { downloadEncodedImage } from "../export/DownloadEncodedImage.js";
 import { encodeWorldRegion } from "../export/EncodeWorldRegion.js";
 import type { ReverieDownloadOptions } from "../interfaces/export/ReverieDownloadOptions.js";
@@ -24,8 +24,9 @@ const DEFAULT_BRUSH_SPACING = 0.25;
 /**
  * Composes the standard Web drawing runtime behind one convenience facade.
  *
- * The facade owns every object it creates and attaches input automatically.
- * Its exposed models remain available for advanced low-level control.
+ * The facade owns its browser runtime attachments and attaches input
+ * automatically. It can create a World or adopt a caller-supplied World without
+ * changing that document's state.
  */
 export class ReverieCanvas {
   /** Document root carrying finite or infinite World semantics. */
@@ -85,15 +86,12 @@ export class ReverieCanvas {
    * @param config - Canvas, optional dimensions, models, and runtime callbacks.
    * @throws {WebRangeError} Dimensions are incomplete/invalid or the initial
    * stroke sequence is outside the uint32 range.
+   * @throws {WebTypeError} An initial World is invalid or conflicts with geometry.
    * @throws Construction and attachment errors from owned dependencies when no
    * `onError` callback handles an attachment failure.
    */
   constructor(config: ReverieCanvasConfig) {
-    const bounds = ReverieCanvas.resolveBounds(config.width, config.height);
-    this.world = new World({
-      bounds,
-      ...(config.tileSize === undefined ? {} : { tileSize: config.tileSize }),
-    });
+    this.world = ReverieCanvas.resolveWorld(config);
     this.currentActiveLayer = this.world.getLayer(0);
     this.camera = new Camera();
     this.renderer = new CanvasRenderer({
@@ -139,6 +137,26 @@ export class ReverieCanvas {
       },
     );
     this.session.attach();
+  }
+
+  /** Resolves mutually exclusive creation geometry or an adopted World. */
+  private static resolveWorld(config: ReverieCanvasConfig): World {
+    if (config.world !== undefined) {
+      if (
+        !(config.world instanceof World) ||
+        config.width !== undefined ||
+        config.height !== undefined ||
+        config.tileSize !== undefined
+      ) {
+        throw WebTypeError.from(WebErrorDefinitions.INCOMPATIBLE_INITIAL_WORLD);
+      }
+      return config.world;
+    }
+    const bounds = ReverieCanvas.resolveBounds(config.width, config.height);
+    return new World({
+      bounds,
+      ...(config.tileSize === undefined ? {} : { tileSize: config.tileSize }),
+    });
   }
 
   /**

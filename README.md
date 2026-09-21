@@ -611,3 +611,25 @@ pnpm test:watch
 pnpm test:verbose
 pnpm typecheck
 ```
+
+## Project Container
+
+`@reverie/core/project` packages an already captured serialized document as a
+self-contained `.reverie` container. The container keeps its manifest and
+document metadata separate from raw binary Raster Tile payloads; it does not
+persist session state, brushes, history, or file identity.
+
+```ts
+import { deserializeDocument, serializeDocument } from "@reverie/core/document";
+import {
+  decodeProjectContainer,
+  encodeProjectContainer,
+} from "@reverie/core/project";
+
+const snapshot = serializeDocument(world);
+const projectBytes = encodeProjectContainer(snapshot);
+const restoredWorld = deserializeDocument(decodeProjectContainer(projectBytes));
+```
+
+V1 uses deterministic uncompressed entries and rejects empty documents or
+malformed, incomplete, ambiguous, and unsupported containers atomically.

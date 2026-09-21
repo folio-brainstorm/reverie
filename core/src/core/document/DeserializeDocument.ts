@@ -25,8 +25,23 @@ export function deserializeDocument(
   options: DocumentReadOptions = {},
 ): World {
   const document = parseDocument(input, options);
+  return hydrateDocumentV1(document);
+}
+
+/**
+ * Hydrates runtime state from an already-normalized V1 document snapshot.
+ *
+ * This package-internal integration hook preserves the same hydration error
+ * boundary as {@link deserializeDocument}. Unknown input must use
+ * {@link deserializeDocument} instead.
+ *
+ * @param document - Current V1 data already normalized by the document pipeline.
+ * @returns A fresh World that owns independent Raster state.
+ * @throws {ReverieError} Validated data cannot be hydrated into runtime objects.
+ */
+export function hydrateDocumentV1(document: ReverieDocumentV1): World {
   try {
-    return hydrateDocumentV1(document);
+    return createRuntimeWorld(document);
   } catch (cause) {
     const error = ReverieError.from(
       ErrorDefinitions.DOCUMENT.DOCUMENT_HYDRATION_FAILED,
@@ -41,7 +56,7 @@ export function deserializeDocument(
 }
 
 /** Hydrates one already-normalized V1 document through public runtime APIs. */
-function hydrateDocumentV1(document: ReverieDocumentV1): World {
+function createRuntimeWorld(document: ReverieDocumentV1): World {
   const layers = document.world.layers.map((serializedLayer) => {
     const layer = new RasterLayer(
       hydrateSerializedRaster(serializedLayer.raster),

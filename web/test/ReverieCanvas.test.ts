@@ -37,6 +37,46 @@ afterEach(() => {
 });
 
 describe("ReverieCanvas construction", () => {
+  it("adopts an existing World without changing its document state", () => {
+    const runtime = createCanvasRuntime();
+    const world = new World({ id: "adopted-world", tileSize: 2 });
+    world.getLayer(0).raster.setPixel(
+      { x: -1, y: -1 },
+      {
+        r: 12,
+        g: 24,
+        b: 36,
+        a: 0,
+      },
+    );
+
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas, world });
+
+    expect(reverie.world).toBe(world);
+    expect(reverie.activeLayer).toBe(world.getLayer(0));
+    expect(reverie.activeLayer.raster.getPixel({ x: -1, y: -1 })).toEqual({
+      r: 12,
+      g: 24,
+      b: 36,
+      a: 0,
+    });
+    reverie.dispose();
+  });
+
+  it("rejects geometry options when adopting an existing World", () => {
+    const runtime = createCanvasRuntime();
+
+    expect(
+      () =>
+        new ReverieCanvas({
+          canvas: runtime.canvas,
+          world: new World(),
+          width: 16,
+          height: 16,
+        }),
+    ).toThrow(`[${WebErrorDefinitions.INCOMPATIBLE_INITIAL_WORLD.code}]`);
+  });
+
   it("exports its config and creates a fixed World with one active layer", () => {
     const runtime = createCanvasRuntime();
     const config: ReverieCanvasConfig = {

@@ -386,6 +386,46 @@ export const ErrorDefinitions = {
         "Serialized document requires reader version `$requiredVersion`, but this reader supports through `$supportedVersion`.",
     },
   },
+  PROJECT: {
+    INVALID_PROJECT_FORMAT: {
+      code: "EC_PROJECT_0001",
+      template:
+        "Project container bytes do not use the Reverie project format.",
+    },
+    UNSUPPORTED_PROJECT_VERSION: {
+      code: "EC_PROJECT_0002",
+      template: "Project container version `$version` is unsupported.",
+    },
+    INVALID_PROJECT_MANIFEST: {
+      code: "EC_PROJECT_0003",
+      template: "Project manifest is missing or malformed.",
+    },
+    MISSING_PROJECT_DOCUMENT: {
+      code: "EC_PROJECT_0004",
+      template: "Project container does not contain a document metadata entry.",
+    },
+    DUPLICATE_PROJECT_ENTRY: {
+      code: "EC_PROJECT_0005",
+      template: "Project container entry `$entry` is duplicated.",
+    },
+    MISSING_PROJECT_PAYLOAD: {
+      code: "EC_PROJECT_0006",
+      template: "Project container is missing Raster payload entry `$entry`.",
+    },
+    INVALID_PROJECT_PAYLOAD: {
+      code: "EC_PROJECT_0007",
+      template: "Project Raster payload metadata or binary entry is invalid.",
+    },
+    EMPTY_PROJECT: {
+      code: "EC_PROJECT_0008",
+      template: "A project requires at least one allocated Raster tile.",
+    },
+    INVALID_PROJECT_PREVIEW: {
+      code: "EC_PROJECT_0009",
+      template:
+        "Project preview requires a valid MIME type and Uint8Array data.",
+    },
+  },
   STROKE: {
     INVALID_NUMBER_TYPE: {
       code: "EC_STROKE_0001",

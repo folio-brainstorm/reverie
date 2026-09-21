@@ -1,9 +1,12 @@
-import type { Brush, PaintMode, SelectionMask } from "@reverie/core";
+import type { Brush, PaintMode, SelectionMask, World } from "@reverie/core";
 
 /** Configuration for a complete browser drawing surface. */
 export interface ReverieCanvasConfig {
   /** Canvas receiving pointer input and rendered pixels. */
   readonly canvas: HTMLCanvasElement;
+
+  /** Existing World to attach without changing its document state. */
+  readonly world?: World;
 
   /** Positive fixed World width; must be supplied together with `height`. */
   readonly width?: number;
