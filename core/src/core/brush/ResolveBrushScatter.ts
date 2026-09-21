@@ -59,12 +59,8 @@ export function resolveBrushScatter(
     scatter.across,
   );
 
-  if (!Number.isFinite(alongOffset) || !Number.isFinite(acrossOffset)) {
-    throw ReverieRangeError.from(
-      ErrorDefinitions.BRUSH.INVALID_SCATTER_RESULT,
-      { param: "offset" },
-    );
-  }
+  assertFinitePosition(alongOffset, "offset.along");
+  assertFinitePosition(acrossOffset, "offset.across");
 
   const cosine = Math.cos(direction);
   const sine = Math.sin(direction);

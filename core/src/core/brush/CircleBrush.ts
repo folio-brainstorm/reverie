@@ -127,11 +127,17 @@ export class CircleBrush implements Brush {
     this.hasPaintVariation =
       this.jitter !== null ||
       this.scatter !== null ||
-      (this.dynamics !== null &&
-        (this.dynamics.size.pressure !== null ||
+      (
+        this.dynamics !== null &&
+        (
+          this.dynamics.hasDirectionRotation ||
+          this.dynamics.hasTiltRotation ||
+          this.dynamics.size.pressure !== null ||
           this.dynamics.size.velocity !== null ||
           this.dynamics.opacity.pressure !== null ||
-          this.dynamics.opacity.velocity !== null));
+          this.dynamics.opacity.velocity !== null
+        )
+      );
   }
 
   /**

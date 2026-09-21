@@ -51,3 +51,4 @@ coverage/
 .vite/
 *.log
 .DS_Store
+ocr-scan.**.txt

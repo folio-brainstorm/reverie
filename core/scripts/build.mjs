@@ -1,15 +1,32 @@
 import { spawn } from "node:child_process";
 import { watch as watchFileSystem } from "node:fs";
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+  rename,
+} from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { unplugin } from "unplugin-preprocessor-directives";
 
+import {
+  getTransformedCode,
+  resolvePreprocessor,
+  verifyPreprocessor,
+} from "./preprocessor.mjs";
+
 const SCRIPT_DIRECTORY = path.dirname(fileURLToPath(import.meta.url));
 const CORE_DIRECTORY = path.resolve(SCRIPT_DIRECTORY, "..");
 const SOURCE_DIRECTORY = path.join(CORE_DIRECTORY, "src");
 const CACHE_DIRECTORY = path.join(CORE_DIRECTORY, ".cache", "preprocessor");
+const PREPROCESSOR_PROBE_FILE = path.join(
+  SOURCE_DIRECTORY,
+  "PreprocessorProbe.ts",
+);
 const TYPESCRIPT_PACKAGE_DIRECTORY = path.dirname(
   fileURLToPath(import.meta.resolve("typescript/package.json")),
 );
@@ -77,30 +94,6 @@ async function findTypeScriptFiles(directory) {
 }
 
 /**
- * Extracts transformed code from the result accepted by Unplugin adapters.
- *
- * @param {unknown} result - Value returned by the raw transform hook.
- * @param {string} source - Original source used when no transform was needed.
- * @returns {string} Source to pass to TypeScript.
- */
-function getTransformedCode(result, source) {
-  if (typeof result === "string") {
-    return result;
-  }
-
-  if (
-    typeof result === "object" &&
-    result !== null &&
-    "code" in result &&
-    typeof result.code === "string"
-  ) {
-    return result.code;
-  }
-
-  return source;
-}
-
-/**
  * Writes a file only when its contents changed, preventing unnecessary watch
  * rebuilds.
  *
@@ -124,7 +117,10 @@ async function writeIfChanged(filePath, contents) {
   }
 
   await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, contents, "utf8");
+
+  const temporaryFile = `${filePath}.${process.pid}.tmp`;
+  await writeFile(temporaryFile, contents, "utf8");
+  await rename(temporaryFile, filePath);
 }
 
 /**
@@ -132,10 +128,11 @@ async function writeIfChanged(filePath, contents) {
  * applying preprocessor directives.
  *
  * @param {string} stagingDirectory - Mode-specific staging directory.
- * @param {ReturnType<typeof unplugin.raw>} plugin - Configured raw plugin.
+ * @param {{ shouldTransform: (id: string) => boolean, transform: (code: string, id: string) => unknown }} preprocessor
+ *   Hooks returned by {@link resolvePreprocessor}.
  * @returns {Promise<void>}
  */
-async function synchronizeSources(stagingDirectory, plugin) {
+async function synchronizeSources(stagingDirectory, preprocessor) {
   const sourceFiles = [
     path.join(CORE_DIRECTORY, "index.ts"),
     ...(await findTypeScriptFiles(SOURCE_DIRECTORY)),
@@ -146,20 +143,21 @@ async function synchronizeSources(stagingDirectory, plugin) {
     const relativePath = path.relative(CORE_DIRECTORY, sourceFile);
     const stagedFile = path.join(stagingDirectory, relativePath);
     const source = await readFile(sourceFile, "utf8");
-    const shouldTransform = plugin.transformInclude?.(sourceFile) ?? true;
-    const result = shouldTransform
-      ? await plugin.transform?.call({}, source, sourceFile)
+    const result = preprocessor.shouldTransform(sourceFile)
+      ? await preprocessor.transform(source, sourceFile)
       : undefined;
 
     expectedStagedFiles.add(path.normalize(stagedFile));
-    await writeIfChanged(stagedFile, getTransformedCode(result, source));
+    await writeIfChanged(
+      stagedFile,
+      getTransformedCode(result, source, sourceFile),
+    );
   }
 
-  const stagedSourceDirectory = path.join(stagingDirectory, "src");
   let stagedFiles = [];
 
   try {
-    stagedFiles = await findTypeScriptFiles(stagedSourceDirectory);
+    stagedFiles = await findTypeScriptFiles(stagingDirectory);
   } catch (error) {
     if (error?.code !== "ENOENT") {
       throw error;
@@ -219,10 +217,17 @@ function startCompiler(stagingDirectory, isWatch) {
     arguments_.push("--watch", "--preserveWatchOutput");
   }
 
-  return spawn(process.execPath, arguments_, {
+  const compiler = spawn(process.execPath, arguments_, {
     cwd: CORE_DIRECTORY,
     stdio: "inherit",
   });
+
+  compiler.on("error", (error) => {
+    console.error("Failed to start the TypeScript compiler.", error);
+    process.exitCode = 1;
+  });
+
+  return compiler;
 }
 
 /**
@@ -264,14 +269,18 @@ async function main() {
   const modeName = isDebug ? "debug" : "no-debug";
   const stagingDirectory = path.join(CACHE_DIRECTORY, modeName);
 
+  // The plugin snapshots `process.env` when it is created, so the debug flag
+  // must be set before the plugin exists.
   process.env.DEBUG = String(isDebug);
   const plugin = unplugin.raw({
     include: /(?:^|[\\/])core[\\/](?:index|src[\\/].+)\.ts$/,
   });
+  const preprocessor = resolvePreprocessor(plugin);
 
+  await verifyPreprocessor(isDebug, preprocessor, PREPROCESSOR_PROBE_FILE);
   await mkdir(stagingDirectory, { recursive: true });
   await writeStagingConfig(stagingDirectory);
-  await synchronizeSources(stagingDirectory, plugin);
+  await synchronizeSources(stagingDirectory, preprocessor);
 
   const compiler = startCompiler(stagingDirectory, isWatch);
 
@@ -300,7 +309,7 @@ async function main() {
   };
 
   watchers = watchSources(
-    () => synchronizeSources(stagingDirectory, plugin),
+    () => synchronizeSources(stagingDirectory, preprocessor),
     handleSynchronizationError,
   );
   process.once("SIGINT", () => stop("SIGINT"));
