@@ -3,11 +3,15 @@
 <h1 align="center">Rêverie</h1>
 
 <p align="center">
-  <strong>为浏览器创作工具构建的 TypeScript 位图绘制引擎。</strong>
+  English · <a href="./README.zh.md">简体中文</a>
 </p>
 
 <p align="center">
-  用独立的绘制模型、渲染器和浏览器运行时，构建属于你自己的画布体验。
+  <strong>A TypeScript raster painting engine for browser-based creative tools.</strong>
+</p>
+
+<p align="center">
+  Build your own canvas experience with independent drawing models, renderers, and browser runtime.
 </p>
 
 <p align="center">
@@ -26,21 +30,21 @@
 
 ## What is this?
 
-Rêverie 是一个面向绘图、标注和轻量图像编辑体验的位图绘制引擎。它处理连续笔触、稀疏像素、图层、选区、历史记录、Canvas 呈现和图片导出；应用则保有自己的界面、工作流与产品规则。
+Rêverie is a raster painting engine for drawing, annotation, and lightweight image-editing experiences. It handles continuous strokes, sparse pixels, layers, selections, history, Canvas presentation, and image export; your application retains its own interface, workflow, and product rules.
 
-它适合需要自定义画布而不想从零拼装绘制基础设施的团队，也适合希望从浏览器门面逐步下沉到渲染或文档模型的 TypeScript 应用。
+It is for teams that need a custom canvas without assembling drawing infrastructure from scratch, and for TypeScript applications that want to begin with a browser facade before taking control of rendering or document models.
 
 ## Preview
 
 <!-- TODO: Place an approved screenshot or <=10-second GIF of the React drawing workspace below. It should show a brush stroke, layers, and one export action. -->
 
-仓库内置 React + Vite 演示应用，覆盖绘制、平移缩放、图层、选区、撤销/重做、图像笔刷和 PNG/JPEG/WebP 导出。运行 `pnpm dev` 即可查看。
+The repository includes a React + Vite demo with drawing, pan and zoom, layers, selections, undo/redo, image brushes, and PNG/JPEG/WebP export. Run `pnpm dev` to explore it locally.
 
 ## Why?
 
-原生 Canvas 能画像素，却不提供连续笔触、稀疏大画布、图层文档、撤销历史、缩放显示和导出的协同模型。把这些能力分别塞进 UI、事件处理和渲染循环，往往会使产品逻辑难以替换和测试。
+Native Canvas can draw pixels, but it does not provide a coherent model for continuous strokes, sparse large canvases, layer documents, undo history, zoomed presentation, and export. When these concerns are folded into UI code, event handlers, and rendering loops, product logic becomes hard to replace and test.
 
-Rêverie 将持久的绘制模型与平台能力分开：`core` 不依赖浏览器；渲染、导出和输入运行时各自独立；`web` 再组合出可直接接入的画布体验。这个取舍让应用可以先快速集成，再在需要时接管更低层的控制。
+Rêverie separates the persistent drawing model from platform capabilities: `core` has no browser dependency; rendering, export, and input runtime are independent; `web` then composes them into a ready-to-use canvas experience. This lets applications integrate quickly, then take lower-level control when they need it.
 
 ## Features
 
@@ -48,32 +52,28 @@ Rêverie 将持久的绘制模型与平台能力分开：`core` 不依赖浏览�
   <tr>
     <td width="50%">
       <h3>◌ Sparse document model</h3>
-      <br />
-      <p>像素按 Tile 按需保存。<code>World</code> 管理有序图层、透明度、可见性和有限或无限的绘制边界。</p>
+      <p>Pixels are stored in Tiles on demand. <code>World</code> manages ordered layers, opacity, visibility, and finite or infinite paint bounds.</p>
     </td>
     <td width="50%">
       <h3>✦ Deterministic strokes</h3>
-      <br />
-      <p>圆形、像素和图像笔刷走同一笔触管线，并支持压力、速度、方向、倾角及可复现的随机变化。</p>
+      <p>Circle, pixel, and image brushes share one stroke pipeline, with pressure, velocity, direction, tilt, and reproducible random variation.</p>
     </td>
   </tr>
   <tr>
     <td width="50%">
       <h3>◫ Browser-ready canvas</h3>
-      <br />
-      <p>浏览器运行时处理 Pointer Events、坐标转换、按帧调度、响应式尺寸和每笔一次的历史记录。</p>
+      <p>The browser runtime handles Pointer Events, coordinate conversion, frame-budgeted scheduling, responsive sizing, and one history entry per stroke.</p>
     </td>
     <td width="50%">
       <h3>↗ Independent export</h3>
-      <br />
-      <p>屏幕渲染与世界坐标导出分离；缩放预览不会改写源像素或影响 PNG、JPEG、WebP 输出。</p>
+      <p>Screen rendering and world-coordinate export are separate, so a zoomed preview never rewrites source pixels or changes PNG, JPEG, or WebP output.</p>
     </td>
   </tr>
 </table>
 
 ## Architecture
 
-应用可以只使用平台无关的核心模型，也可以接入浏览器运行时获得交互式画布。渲染和导出共享同一份文档状态，但彼此不耦合。
+An application can use the platform-independent model alone, or add the browser runtime for an interactive canvas. Rendering and export share document state without depending on one another.
 
 ```mermaid
 graph LR
@@ -89,22 +89,22 @@ graph LR
 
 ## How it works
 
-| Stage      | Responsibility                                                                        |
-| ---------- | ------------------------------------------------------------------------------------- |
-| 1. Input   | 浏览器运行时将指针输入归一化为连续笔触，并按帧预算执行绘制命令。                      |
-| 2. Paint   | 核心包将笔触重采样为 stamps，写入当前图层的稀疏 RGBA Raster；选区与历史记录在此生效。 |
-| 3. Present | Canvas 渲染器按 Camera 显示当前视图；导出器则在世界坐标中合成指定区域并编码图片。     |
+| Stage      | Responsibility                                                                                                                 |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| 1. Input   | The browser runtime normalizes pointer input into continuous strokes and runs drawing commands within a frame budget.          |
+| 2. Paint   | The core resamples strokes into stamps and writes the active layer's sparse RGBA Raster; selection and history apply here.     |
+| 3. Present | The Canvas renderer displays the current Camera view, while the exporter composites a world-space region and encodes an image. |
 
 ## Quick Start
 
-在仓库根目录安装依赖并启动包含的演示应用：
+Install dependencies and start the included demo from the repository root:
 
 ```bash
 pnpm install
 pnpm dev
 ```
 
-在浏览器项目中，`ReverieCanvas` 是最短的接入路径：
+For a browser project, `ReverieCanvas` is the shortest integration path:
 
 ```ts
 import { ReverieCanvas } from "@reverie/web";
@@ -124,26 +124,26 @@ const reverie = new ReverieCanvas({
 // Pointer input is attached automatically. Dispose when the owning view unmounts.
 ```
 
-需要 Node.js `^22.12.0`、`^24.0.0` 或 `>=26.0.0`，以及 pnpm `11.18.0`。
+Requires Node.js `^22.12.0`, `^24.0.0`, or `>=26.0.0`, and pnpm `11.18.0`.
 
 ## Examples
 
-| Example                                             | What it demonstrates                                     |
-| --------------------------------------------------- | -------------------------------------------------------- |
-| [React drawing workspace](./demo)                   | 固定尺寸画布、笔刷设置、平移缩放、选区、图层和图片导出。 |
-| [Browser facade](./web/src/facade/ReverieCanvas.ts) | 将输入、调度、渲染、历史与下载组合为一个画布运行时。     |
-| [Core integration tests](./test/integration)        | 笔触、文档、图层、选择与像素行为的可执行示例。           |
+| Example                                             | What it demonstrates                                                                     |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| [React drawing workspace](./demo)                   | Fixed-size canvases, brush settings, pan and zoom, selections, layers, and image export. |
+| [Browser facade](./web/src/facade/ReverieCanvas.ts) | One canvas runtime that composes input, scheduling, rendering, history, and downloads.   |
+| [Core integration tests](./test/integration)        | Executable examples of stroke, document, layer, selection, and pixel behavior.           |
 
 ## Packages
 
-| Package                           | Responsibility                                                 |
-| --------------------------------- | -------------------------------------------------------------- |
-| [`@reverie/core`](./core)         | 平台无关的世界、图层、稀疏像素、笔刷、笔触、选区与文档模型。   |
-| [`@reverie/renderer`](./renderer) | 以 HTML Canvas 呈现当前 Camera 视图，并维护缩小时的 LOD 缓存。 |
-| [`@reverie/web`](./web)           | 浏览器输入、绘制调度、历史记录、画布门面和下载能力。           |
-| [`@reverie/exporter`](./exporter) | 世界区域合成，以及 PNG、JPEG、WebP 编码。                      |
-| [`@reverie/demo`](./demo)         | 使用 React + Vite 构建的浏览器示例应用。                       |
-| [`@reverie/test`](./test)         | 核心行为的 Vitest 集成测试。                                   |
+| Package                           | Responsibility                                                                                        |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| [`@reverie/core`](./core)         | Platform-independent world, layers, sparse pixels, brushes, strokes, selections, and document models. |
+| [`@reverie/renderer`](./renderer) | Presents the active Camera view with HTML Canvas and maintains a LOD cache for zoomed-out views.      |
+| [`@reverie/web`](./web)           | Browser input, drawing scheduling, history, canvas facade, and download capabilities.                 |
+| [`@reverie/exporter`](./exporter) | World-region composition plus PNG, JPEG, and WebP encoding.                                           |
+| [`@reverie/demo`](./demo)         | Browser example application built with React and Vite.                                                |
+| [`@reverie/test`](./test)         | Vitest integration tests for core behavior.                                                           |
 
 ## Built with
 
@@ -151,7 +151,7 @@ TypeScript · Node.js · pnpm workspaces · HTML Canvas · React · Vite · Vite
 
 ## Documentation
 
-README 保持在项目介绍层面，不重复维护 API Reference。完整接口以各 package 的 typed entry point 为准：[`core`](./core/index.ts)、[`renderer`](./renderer/index.ts)、[`web`](./web/index.ts) 和 [`exporter`](./exporter/index.ts)。独立文档站正在准备中。
+This README stays at the project-introduction level and does not duplicate the API reference. The typed entry points are the source of truth for complete interfaces: [`core`](./core/index.ts), [`renderer`](./renderer/index.ts), [`web`](./web/index.ts), and [`exporter`](./exporter/index.ts). A standalone documentation site is in preparation.
 
 ## Development
 
@@ -165,7 +165,7 @@ pnpm test
 pnpm build
 ```
 
-仓库使用 pnpm workspace 管理；请勿使用 npm 或 Yarn 生成锁文件。
+The repository uses pnpm workspaces. Do not create lockfiles with npm or Yarn.
 
 ## License
 
