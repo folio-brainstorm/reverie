@@ -761,6 +761,9 @@ button {
 button:hover {
   background: #34464c;
 }
+.layers-add-button:hover {
+  background: #f4af7d;
+}
 .image-upload-button:hover {
   background: #f4af7d;
 }

@@ -1,8 +1,7 @@
 // Runtime engine API.
 export { Raster } from "./src/core/raster/index.js";
 export { SelectionMask } from "./src/core/selection/index.js";
-export { RasterLayer, World } from "./src/core/world/index.js";
-export { isLayerBlendMode } from "./src/core/world/index.js";
+export { RasterLayer, World, isLayerBlendMode } from "./src/core/world/index.js";
 export { LAYER_BLEND_MODES } from "./src/config/world/LayerBlendModes.js";
 export { Camera } from "./src/core/camera/index.js";
 export {

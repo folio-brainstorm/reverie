@@ -163,7 +163,7 @@ function normalizeMinimum(
   minimum: number | undefined,
   parameterName: string,
 ): number {
-  const resolvedMinimum = minimum ?? DEFAULT_MINIMUM_RATIO;
+  const resolvedMinimum = minimum === undefined ? DEFAULT_MINIMUM_RATIO : minimum;
 
   if (!isUnitInterval(resolvedMinimum)) {
     throw ReverieRangeError.from(ErrorDefinitions.BRUSH.INVALID_DYNAMICS_MIN, {
@@ -195,7 +195,7 @@ function normalizeCurve(
     );
   }
 
-  return curve;
+  return Object.freeze(curve);
 }
 
 /** Rejects malformed nested configuration before reading its properties. */

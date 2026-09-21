@@ -2,7 +2,7 @@ import type { BrushImageConfig } from "../../interfaces/brush/BrushImageConfig.j
 import type { RGBABrushImageSource } from "../../interfaces/brush/RGBABrushImageSource.js";
 
 import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
-import { ReverieRangeError } from "../../utils/errors/ReverieErrors.js";
+import { ReverieRangeError, ReverieTypeError } from "../../utils/errors/ReverieErrors.js";
 
 const OPAQUE_ALPHA = 255;
 const RGBA_CHANNEL_COUNT = 4;
@@ -30,9 +30,16 @@ export class BrushImage {
    * Creates an immutable alpha mask or an opaque fallback when alpha is absent.
    *
    * @param config - Positive dimensions and optional one-byte-per-pixel alpha.
+   * @throws {ReverieTypeError} Invalid image dimensions config.
    * @throws {ReverieRangeError} Dimensions or alpha buffer length are invalid.
    */
   constructor(config: BrushImageConfig) {
+    if (config === null || typeof config !== "object") {
+      throw ReverieTypeError.from(
+        ErrorDefinitions.BRUSH.INVALID_IMAGE_DIMENSIONS
+      );
+    }
+
     const pixelCount = resolvePixelCount(config.width, config.height);
     const suppliedAlpha = config.alpha;
 
@@ -41,7 +48,7 @@ export class BrushImage {
       this.alphaData.fill(OPAQUE_ALPHA);
     } else {
       if (
-        !(suppliedAlpha instanceof Uint8Array) ||
+        !isByteArray(suppliedAlpha) ||
         suppliedAlpha.length !== pixelCount
       ) {
         throw ReverieRangeError.from(
@@ -181,12 +188,8 @@ function isByteArray(value: unknown): value is Uint8Array | Uint8ClampedArray {
 }
 
 /** Reads a candidate byte length without trusting its runtime shape. */
-function getByteLength(value: unknown): number | string {
-  if (isByteArray(value)) {
-    return value.length;
-  }
-
-  return "invalid";
+function getByteLength(value: unknown): number {
+  return isByteArray(value) ? value.length : Number.NaN;
 }
 
 /** Scans an owned alpha mask once so transparent brushes can skip stamping. */

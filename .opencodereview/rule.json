@@ -21,6 +21,7 @@
     "**/package-lock.json",
     "**/yarn.lock",
     "**/interfaces/**",
+    "**/test/**",
     "**/session-result.json",
     "**/eslint.config.js",
     "**/rule.json"
