@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/Logo.png" />
+  <img src="./assets/Logo.png" style="width: 128px" />
 </p>
 
 <h1 align="center">Rêverie</h1>
