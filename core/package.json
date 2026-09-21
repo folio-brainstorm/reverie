@@ -17,6 +17,10 @@
     "./history": {
       "types": "./dist/src/core/history/index.d.ts",
       "import": "./dist/src/core/history/index.js"
+    },
+    "./document": {
+      "types": "./dist/src/core/document/index.d.ts",
+      "import": "./dist/src/core/document/index.js"
     }
   },
   "files": [

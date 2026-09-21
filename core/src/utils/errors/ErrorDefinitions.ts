@@ -248,6 +248,10 @@ export const ErrorDefinitions = {
       template:
         "World bounds require safe-integer x and y origins plus positive safe-integer width and height.",
     },
+    EMPTY_INITIAL_LAYERS: {
+      code: "EC_WORLD_0010",
+      template: "World initialLayers must contain at least one detached Layer.",
+    },
   },
   PAINT: {
     INVALID_MODE: {
@@ -310,6 +314,76 @@ export const ErrorDefinitions = {
       code: "EC_HISTORY_0007",
       template:
         "Nested Raster History mutation scopes on the same Raster are unsupported.",
+    },
+  },
+  DOCUMENT: {
+    INVALID_DOCUMENT_FORMAT: {
+      code: "EC_DOCUMENT_0001",
+      template: "Serialized document format must be `reverie-document`.",
+    },
+    INVALID_DOCUMENT_SCHEMA: {
+      code: "EC_DOCUMENT_0002",
+      template: "Serialized document schema is invalid: $reason.",
+    },
+    UNSUPPORTED_DOCUMENT_VERSION: {
+      code: "EC_DOCUMENT_0003",
+      template: "Serialized document version `$version` is unsupported.",
+    },
+    UNSUPPORTED_DOCUMENT_FEATURE: {
+      code: "EC_DOCUMENT_0004",
+      template: "Serialized document requires unsupported feature `$feature`.",
+    },
+    DOCUMENT_MIGRATION_FAILED: {
+      code: "EC_DOCUMENT_0005",
+      template:
+        "Serialized document migration from version `$fromVersion` to `$toVersion` failed.",
+    },
+    DUPLICATE_LAYER_ID: {
+      code: "EC_DOCUMENT_0006",
+      template: "Document Layer identifier `$id` is duplicated.",
+    },
+    INVALID_DOCUMENT_ID: {
+      code: "EC_DOCUMENT_0007",
+      template: "Document and Layer identifiers must be non-empty strings.",
+    },
+    INVALID_DOCUMENT_FEATURE: {
+      code: "EC_DOCUMENT_0008",
+      template: "Document feature identifiers must be non-empty strings.",
+    },
+    INVALID_RASTER_SCHEMA: {
+      code: "EC_DOCUMENT_0009",
+      template: "Serialized Raster schema is invalid: $reason.",
+    },
+    UNSUPPORTED_PIXEL_FORMAT: {
+      code: "EC_DOCUMENT_0010",
+      template: "Serialized Raster pixel format `$pixelFormat` is unsupported.",
+    },
+    UNSUPPORTED_RASTER_ENCODING: {
+      code: "EC_DOCUMENT_0011",
+      template:
+        "Serialized Raster payload encoding `$encoding` is unsupported.",
+    },
+    INVALID_TILE_PAYLOAD: {
+      code: "EC_DOCUMENT_0012",
+      template:
+        "Serialized Raster tile `$index` must contain `$expected` raw bytes, but received `$received`.",
+    },
+    DUPLICATE_TILE_COORDINATE: {
+      code: "EC_DOCUMENT_0013",
+      template: "Serialized Raster tile coordinate (`$x`, `$y`) is duplicated.",
+    },
+    UNSUPPORTED_TILE_SIZE: {
+      code: "EC_DOCUMENT_0014",
+      template: "Serialized Raster tile size `$tileSize` is unsupported.",
+    },
+    DOCUMENT_HYDRATION_FAILED: {
+      code: "EC_DOCUMENT_0015",
+      template: "Serialized document could not be hydrated into runtime state.",
+    },
+    UNSUPPORTED_READER_VERSION: {
+      code: "EC_DOCUMENT_0016",
+      template:
+        "Serialized document requires reader version `$requiredVersion`, but this reader supports through `$supportedVersion`.",
     },
   },
   STROKE: {

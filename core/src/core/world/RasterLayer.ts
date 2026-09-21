@@ -9,6 +9,8 @@ import type { SelectionMask } from "../selection/SelectionMask.js";
 
 import { RasterPaintTarget } from "../../internal/paint-target/RasterPaintTarget.js";
 import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
+import { createStableDocumentId } from "../../utils/document/CreateStableDocumentId.js";
+import { isStableDocumentId } from "../../utils/document/IsStableDocumentId.js";
 import {
   ReverieRangeError,
   ReverieTypeError,
@@ -18,6 +20,9 @@ import { isLayerBlendMode } from "./IsLayerBlendMode.js";
 
 /** Owns an unbounded Raster and applies its World's bounds while painting. */
 export class RasterLayer {
+  /** Stable serializable identity, independent of array position and Tile IDs. */
+  readonly id: string;
+
   /** Descriptive metadata, independent of rendering. */
   private assignedName: string | undefined;
 
@@ -149,8 +154,17 @@ export class RasterLayer {
    *
    * @param raster - Unbounded sparse storage owned by the layer.
    * @param bounds - Effective World bounds, or `null` when unbounded.
+   * @param id - Stable identity to preserve during future document hydration.
+   * @throws {ReverieTypeError} The supplied identifier is empty or not text.
    */
-  constructor(raster: Raster, bounds: WorldBounds | null) {
+  constructor(raster: Raster, bounds: WorldBounds | null, id?: string) {
+    const resolvedId = id ?? createStableDocumentId("layer");
+    if (!isStableDocumentId(resolvedId)) {
+      throw ReverieTypeError.from(
+        ErrorDefinitions.DOCUMENT.INVALID_DOCUMENT_ID,
+      );
+    }
+    this.id = resolvedId;
     this.raster = raster;
     this.internalBounds = bounds === null ? null : { ...bounds };
     this.paintTarget = new RasterPaintTarget(raster, this.internalBounds);

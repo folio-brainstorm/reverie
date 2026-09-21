@@ -20,6 +20,8 @@ import { reportDiagnostic } from "../../utils/diagnostic/Diagnostics.js";
 import { consoleDiagnosticReporter } from "../../utils/diagnostic/Diagnostics.js";
 // #endif
 import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
+import { createStableDocumentId } from "../../utils/document/CreateStableDocumentId.js";
+import { isStableDocumentId } from "../../utils/document/IsStableDocumentId.js";
 import {
   ReverieError,
   ReverieRangeError,
@@ -39,6 +41,9 @@ const RASTER_OWNERS = new WeakMap<Raster, RasterLayer>();
  * Standalone Raster storage and coordinate conversion remain independent.
  */
 export class World {
+  /** Stable serializable identity for this document root. */
+  readonly id: string;
+
   private readonly config: ResolvedWorldConfig;
   private orderedLayers: readonly RasterLayer[] = Object.freeze([]);
   private readonly removalObservers = new Set<LayerRemovalObserver>();
@@ -61,16 +66,29 @@ export class World {
     return bounds === null ? null : { ...bounds };
   }
 
+  /** Returns the immutable square Raster tile edge length in document pixels. */
+  get tileSize(): number {
+    return this.config.tileSize;
+  }
+
   /**
    * Creates a world using explicit configuration or the current runtime defaults.
    *
    * An invalid runtime default is replaced with `DEFAULT_WORLD_TILE_SIZE` and
    * reported as a non-fatal diagnostic. An explicitly invalid size is rejected.
    *
-   * @param config - Optional tile size, document bounds, and reporter overrides.
+   * @param config - Optional identity, tile size, document bounds, and reporter overrides.
+   * @throws {ReverieTypeError} The optional document identity is invalid.
    * @throws {ReverieRangeError} Tile size or bounds are invalid.
    */
   constructor(config: WorldConfig = {}) {
+    const id = config.id ?? createStableDocumentId("document");
+    if (!isStableDocumentId(id)) {
+      throw ReverieTypeError.from(
+        ErrorDefinitions.DOCUMENT.INVALID_DOCUMENT_ID,
+      );
+    }
+    this.id = id;
     const reporter =
       config.reporter ??
       defaultWorldConfig.reporter ??
@@ -99,7 +117,7 @@ export class World {
         bounds: ownedBounds,
         reporter,
       };
-      this.addLayer();
+      this.addInitialLayers(config.initialLayers);
       return;
     }
 
@@ -118,7 +136,40 @@ export class World {
     }
 
     this.config = { tileSize, bounds: ownedBounds, reporter };
-    this.addLayer();
+    this.addInitialLayers(config.initialLayers);
+  }
+
+  /** Establishes the required initial Layer set after immutable config resolves. */
+  private addInitialLayers(
+    initialLayers: readonly RasterLayer[] | undefined,
+  ): void {
+    if (initialLayers === undefined) {
+      this.addLayer();
+      return;
+    }
+    if (!Array.isArray(initialLayers)) {
+      throw ReverieTypeError.from(ErrorDefinitions.WORLD.INCOMPATIBLE_LAYER);
+    }
+    if (initialLayers.length === 0) {
+      throw ReverieRangeError.from(ErrorDefinitions.WORLD.EMPTY_INITIAL_LAYERS);
+    }
+    const registered: RasterLayer[] = [];
+    const initialLayerNumber = this.nextLayerNumber;
+    try {
+      for (const layer of initialLayers) {
+        this.addLayer(layer);
+        registered.push(layer);
+      }
+    } catch (cause) {
+      for (const layer of registered) {
+        this.detachLayerMutationObservation(layer);
+        LAYER_OWNERS.delete(layer);
+        RASTER_OWNERS.delete(layer.raster);
+      }
+      this.orderedLayers = Object.freeze([]);
+      this.nextLayerNumber = initialLayerNumber;
+      throw cause;
+    }
   }
 
   /**
@@ -193,6 +244,11 @@ export class World {
     }
     if (LAYER_OWNERS.has(candidate) || RASTER_OWNERS.has(candidate.raster)) {
       throw ReverieError.from(ErrorDefinitions.WORLD.DUPLICATE_LAYER_OWNERSHIP);
+    }
+    if (this.layers.some((existing) => existing.id === candidate.id)) {
+      throw ReverieError.from(ErrorDefinitions.DOCUMENT.DUPLICATE_LAYER_ID, {
+        id: candidate.id,
+      });
     }
     const bounds = candidate.bounds;
     const expected = this.config.bounds;

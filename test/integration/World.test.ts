@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   CircleBrush,
   ErrorCodes,
+  Raster,
+  RasterLayer,
   ReverieRangeError,
   World,
 } from "@reverie/core";
@@ -98,6 +100,51 @@ describe("World bounds", () => {
   });
 });
 
+describe("World initial Layers", () => {
+  it("establishes supplied detached Layers without creating a placeholder Layer", () => {
+    const layer = new RasterLayer(new Raster({ tileSize: 4 }), null, "layer-1");
+    layer.name = "Restored";
+
+    const world = new World({ tileSize: 4, initialLayers: [layer] });
+
+    expect(world.layers).toEqual([layer]);
+    expect(world.getLayer(0).name).toBe("Restored");
+  });
+
+  it("rejects an explicit empty initial Layer collection", () => {
+    expect(() => new World({ initialLayers: [] })).toThrow(
+      `[${ErrorCodes.WORLD.EMPTY_INITIAL_LAYERS}]`,
+    );
+  });
+
+  it("rejects a non-array initial Layer collection with a stable runtime error", () => {
+    expect(
+      () =>
+        new World({
+          // @ts-expect-error Runtime validation protects JavaScript callers.
+          initialLayers: {},
+        }),
+    ).toThrow(`[${ErrorCodes.WORLD.INCOMPATIBLE_LAYER}]`);
+  });
+
+  it("releases earlier initial Layers when a later Layer is rejected", () => {
+    const reusable = new RasterLayer(new Raster({ tileSize: 2 }), null);
+    const incompatible = new RasterLayer(new Raster({ tileSize: 4 }), null);
+
+    expect(
+      () =>
+        new World({
+          tileSize: 2,
+          initialLayers: [reusable, incompatible],
+        }),
+    ).toThrow(`[${ErrorCodes.WORLD.INCOMPATIBLE_LAYER}]`);
+
+    expect(
+      new World({ tileSize: 2, initialLayers: [reusable] }).getLayer(0),
+    ).toBe(reusable);
+  });
+});
+
 describe("RasterLayer bounded painting", () => {
   it("clips a CircleBrush that crosses the World boundary", () => {
     const world = new World({
@@ -110,9 +157,7 @@ describe("RasterLayer bounded painting", () => {
     layer.stamp(brush, { x: 98, y: 50 });
 
     expect(layer.raster.getPixel({ x: 99, y: 50 })).toEqual(OPAQUE_BLUE);
-    expect(layer.raster.getPixel({ x: 100, y: 50 })).toEqual(
-      TRANSPARENT_BLACK,
-    );
+    expect(layer.raster.getPixel({ x: 100, y: 50 })).toEqual(TRANSPARENT_BLACK);
   });
 
   it("does not allocate a tile for a stamp wholly outside finite bounds", () => {
@@ -141,9 +186,7 @@ describe("RasterLayer bounded painting", () => {
     layer.stamp(brush, { x: 7.5, y: 4.5 });
 
     expect(layer.raster.getPixel({ x: 7, y: 4 })).toEqual(OPAQUE_BLUE);
-    expect(layer.raster.getPixel({ x: 8, y: 4 })).toEqual(
-      TRANSPARENT_BLACK,
-    );
+    expect(layer.raster.getPixel({ x: 8, y: 4 })).toEqual(TRANSPARENT_BLACK);
     // #if DEBUG
     expect(layer.raster.allocatedTileCount).toBe(1);
     // #endif
@@ -166,9 +209,7 @@ describe("RasterLayer bounded painting", () => {
     layer.stamp(brush, { x: 0.5, y: 0.5 });
 
     expect(layer.raster.getPixel({ x: 0, y: 0 })).toEqual(OPAQUE_BLUE);
-    expect(layer.raster.getPixel({ x: 1, y: 0 })).toEqual(
-      TRANSPARENT_BLACK,
-    );
+    expect(layer.raster.getPixel({ x: 1, y: 0 })).toEqual(TRANSPARENT_BLACK);
   });
 
   it("preserves infinite painting and direct low-level Raster writes", () => {
@@ -184,9 +225,7 @@ describe("RasterLayer bounded painting", () => {
     expect(infiniteLayer.raster.getPixel({ x: -101, y: 200 })).toEqual(
       OPAQUE_BLUE,
     );
-    expect(fixedLayer.raster.getPixel({ x: 100, y: 100 })).toEqual(
-      OPAQUE_BLUE,
-    );
+    expect(fixedLayer.raster.getPixel({ x: 100, y: 100 })).toEqual(OPAQUE_BLUE);
   });
 
   it("exposes the WorldBounds contract through the package entry point", () => {

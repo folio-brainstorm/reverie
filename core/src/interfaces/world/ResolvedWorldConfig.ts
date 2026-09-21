@@ -3,7 +3,7 @@ import type { WorldConfig } from "./World.js";
 
 /** Resolved document geometry with reporting explicitly optional in release builds. */
 export interface ResolvedWorldConfig extends Required<
-  Omit<WorldConfig, "reporter">
+  Omit<WorldConfig, "id" | "reporter" | "initialLayers">
 > {
   reporter: DiagnosticReporter | undefined;
 }

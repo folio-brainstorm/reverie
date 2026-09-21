@@ -168,6 +168,39 @@ Core `World`、`RasterLayer` 或 `Raster` 不会自动创建 History。普通的
 `Raster.setPixel()` 调用不属于 Session History，除非调用方显式使用
 `@reverie/core/history` 的 Raster transaction integration。
 
+## Versioned Document Schema
+
+`@reverie/core/document` 定义独立于 engine/package 版本的 V1 文档 envelope。
+`World.id` 与 `RasterLayer.id` 是稳定的字符串身份；Layer ID 不依赖图层数组位置或
+Tile runtime ID。当前 writer 复制 World 的 `tileSize`、bounds、Layer metadata 及其稀疏
+RGBA8 Raster tiles；Camera、Selection、active Layer、History、Renderer 与 LOD cache 不写入：
+
+```ts
+import { parseDocument, serializeDocument } from "@reverie/core/document";
+
+const serialized = serializeDocument(world);
+const normalized = parseDocument(serialized);
+```
+
+Writer 始终输出 `reverie-document` 的当前整数 schema 版本和
+`minimumReaderVersion`。V1 Raster payload 使用独立拥有的 `Uint8Array` raw RGBA8 bytes，
+只保存已分配的 tiles，并以 tile-Y、tile-X 顺序输出；tile ID、revision 与 dirty state
+不会持久化。Reader 在返回 plain schema data 前验证格式、版本、required features、bounds、
+tileSize、Layer metadata、唯一 ID 与 Raster payload；未知的非语义字段会被忽略，未知 blend
+mode、required feature 或不兼容版本会拒绝。`migrateDocument()` 提供只处理内存 serialized
+data（包括 `Uint8Array` payload）的相邻版本迁移管线。Runtime World hydration 与文件 I/O
+分别留给 Step 28D 和 Step 29。
+
+兼容性边界由 `DOCUMENT_COMPATIBILITY` 显式声明：writer/current/minimum-supported
+versions 都是文档 schema 版本，不是 package 或产品版本。Reader 只接受该范围内的版本；
+历史格式必须通过集中注册的相邻 migration，并在每一步的 source 与 target schema
+validation 后才会成为 current schema。当前开发阶段仅有 V1，因此 registry 为空；
+current V1 会直接验证而不经过 migration。
+
+`deserializeDocument(input, options?)` 将受支持的输入先归一化为 current schema，再恢复为
+新的 `World`。它保留 World/Layer ID、bounds、Layer order/metadata 与稀疏 RGBA8 tiles，
+但不会恢复 Camera、Selection、History、Renderer 或 LOD state；加载失败不会修改既有 World。
+
 ## Stroke
 
 `Stroke` 保存连续 World Space 中的原始输入采样，并按照 `brush.size ×

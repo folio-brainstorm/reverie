@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { Camera, Raster, World } from "@reverie/core";
+import { deserializeDocument, serializeDocument } from "@reverie/core/document";
 import type { Renderer } from "@reverie/core/renderer";
 
 import {
@@ -66,6 +67,31 @@ function createCanvasFixture(width = 4, height = 4) {
 }
 
 describe("CanvasRenderer World composition", () => {
+  it("renders a hydrated World through the normal composition path", () => {
+    const { canvas, tileContexts } = createCanvasFixture(2, 2);
+    const source = new World({ tileSize: 2 });
+    source
+      .getLayer(0)
+      .raster.setPixel({ x: 0, y: 0 }, { r: 12, g: 34, b: 56, a: 255 });
+    const hydrated = deserializeDocument(serializeDocument(source));
+
+    new CanvasRenderer({
+      canvas,
+      camera: new Camera(),
+      world: hydrated,
+    }).render();
+
+    const tileContext = tileContexts[0];
+    if (tileContext === undefined) {
+      throw new Error("Expected a hydrated World tile context.");
+    }
+    const imageData = vi.mocked(tileContext.putImageData).mock.calls[0]?.[0];
+    if (imageData === undefined) {
+      throw new Error("Expected hydrated World tile upload.");
+    }
+    expect(Array.from(imageData.data.slice(0, 4))).toEqual([12, 34, 56, 255]);
+  });
+
   it("composes custom blend modes into the projected tile", () => {
     const { canvas, tileContexts } = createCanvasFixture(2, 2);
     const world = new World({ tileSize: 2 });

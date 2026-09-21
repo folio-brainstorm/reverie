@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { Raster } from "@reverie/core";
+import { Raster, World } from "@reverie/core";
 import type { RGBAColor } from "@reverie/core";
+import { deserializeDocument, serializeDocument } from "@reverie/core/document";
 import {
   getRasterTilePixels,
   getRasterTileVersion,
@@ -70,6 +71,25 @@ describe("ExportRenderer construction", () => {
     const renderer = new ExportRenderer({ raster });
 
     expect(renderer.raster).toBe(raster);
+  });
+});
+
+describe("ExportRenderer document round-trip integration", () => {
+  it("exports a hydrated World with the same composed pixels", () => {
+    const source = new World({ tileSize: 2 });
+    source
+      .getLayer(0)
+      .raster.setPixel({ x: 0, y: 0 }, createColor(100, 50, 25, 255));
+    const top = source.addLayer();
+    top.raster.setPixel({ x: 0, y: 0 }, createColor(50, 100, 200, 255));
+    top.opacity = 0.5;
+
+    const hydrated = deserializeDocument(serializeDocument(source));
+    const region = { x: 0, y: 0, width: 2, height: 2 };
+
+    expect(new ExportRenderer({ world: hydrated }).render(region)).toEqual(
+      new ExportRenderer({ world: source }).render(region),
+    );
   });
 });
 
