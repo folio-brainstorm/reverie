@@ -1,0 +1,28 @@
+{
+  "rules": [],
+  "exclude": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/coverage/**",
+    "**/.next/**",
+    "**/.turbo/**",
+    "**/.cache/**",
+    "/.opencodereview",
+    "**/out/**",
+    "**/generated/**",
+    "**/*.min.js",
+    "**/*.min.css",
+    "**/*.map",
+    "**/pnpm-lock.yaml",
+    "**/package.json",
+    "**/vitest.config.ts",
+    "**/tsconfig.json",
+    "**/package-lock.json",
+    "**/yarn.lock",
+    "**/interfaces/**",
+    "**/session-result.json",
+    "**/eslint.config.js",
+    "**/rule.json"
+  ]
+}
