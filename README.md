@@ -1,635 +1,172 @@
-# Rêverie
+<!-- TODO: Add an approved Rêverie logo and a 16:9 editor screenshot or short demo GIF. No suitable visual asset is currently tracked in this repository. -->
 
-这是一个使用 pnpm workspace 管理的多包项目：
+<h1 align="center">Rêverie</h1>
 
-- `core`：可独立构建的 TypeScript 核心包（`@reverie/core`）
-- `renderer`：可扩展的渲染后端包（`@reverie/renderer`）
-- `web`：浏览器运行时包（`@reverie/web`）
-- `exporter`：导出包（`@reverie/exporter`）
-- `demo`：独立的 Vite + React + TypeScript 示例应用
-- `test`：独立的 Vitest 测试包，负责测试 `core`
+<p align="center">
+  <strong>为浏览器创作工具构建的 TypeScript 位图绘制引擎。</strong>
+</p>
 
-## Raster Pixel API
+<p align="center">
+  用独立的绘制模型、渲染器和浏览器运行时，构建属于你自己的画布体验。
+</p>
 
-`Raster` 使用 World Pixel Coordinate 提供稀疏像素读写；调用方无需接触内部的
-`TileStore` 或 `Tile`：
+<p align="center">
+  <a href="#what-is-this">Overview</a> ·
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="#packages">Packages</a> ·
+  <a href="#documentation">Documentation</a>
+</p>
 
-```ts
-import { Raster } from "@reverie/core";
+<p align="center">
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-0F6BFF?style=flat-square" alt="Apache-2.0 license" /></a>
+  <img src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript strict mode" />
+  <img src="https://img.shields.io/badge/Node.js-22%20%7C%2024%20%7C%20%E2%89%A526-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Supported Node.js versions" />
+  <img src="https://img.shields.io/badge/pnpm-11.18.0-F69220?style=flat-square&logo=pnpm&logoColor=white" alt="pnpm 11.18.0" />
+</p>
 
-const raster = new Raster();
+## What is this?
 
-raster.setPixel({ x: -1, y: 300 }, { r: 255, g: 0, b: 0, a: 255 });
+Rêverie 是一个面向绘图、标注和轻量图像编辑体验的位图绘制引擎。它处理连续笔触、稀疏像素、图层、选区、历史记录、Canvas 呈现和图片导出；应用则保有自己的界面、工作流与产品规则。
 
-raster.blendPixel({ x: -1, y: 300 }, { r: 0, g: 0, b: 255, a: 128 });
+它适合需要自定义画布而不想从零拼装绘制基础设施的团队，也适合希望从浏览器门面逐步下沉到渲染或文档模型的 TypeScript 应用。
 
-const color = raster.getPixel({ x: -1, y: 300 });
+## Preview
+
+<!-- TODO: Place an approved screenshot or <=10-second GIF of the React drawing workspace below. It should show a brush stroke, layers, and one export action. -->
+
+仓库内置 React + Vite 演示应用，覆盖绘制、平移缩放、图层、选区、撤销/重做、图像笔刷和 PNG/JPEG/WebP 导出。运行 `pnpm dev` 即可查看。
+
+## Why?
+
+原生 Canvas 能画像素，却不提供连续笔触、稀疏大画布、图层文档、撤销历史、缩放显示和导出的协同模型。把这些能力分别塞进 UI、事件处理和渲染循环，往往会使产品逻辑难以替换和测试。
+
+Rêverie 将持久的绘制模型与平台能力分开：`core` 不依赖浏览器；渲染、导出和输入运行时各自独立；`web` 再组合出可直接接入的画布体验。这个取舍让应用可以先快速集成，再在需要时接管更低层的控制。
+
+## Features
+
+<table>
+  <tr>
+    <td width="50%">
+      <h3>◌ Sparse document model</h3>
+      <br />
+      <p>像素按 Tile 按需保存。<code>World</code> 管理有序图层、透明度、可见性和有限或无限的绘制边界。</p>
+    </td>
+    <td width="50%">
+      <h3>✦ Deterministic strokes</h3>
+      <br />
+      <p>圆形、像素和图像笔刷走同一笔触管线，并支持压力、速度、方向、倾角及可复现的随机变化。</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <h3>◫ Browser-ready canvas</h3>
+      <br />
+      <p>浏览器运行时处理 Pointer Events、坐标转换、按帧调度、响应式尺寸和每笔一次的历史记录。</p>
+    </td>
+    <td width="50%">
+      <h3>↗ Independent export</h3>
+      <br />
+      <p>屏幕渲染与世界坐标导出分离；缩放预览不会改写源像素或影响 PNG、JPEG、WebP 输出。</p>
+    </td>
+  </tr>
+</table>
+
+## Architecture
+
+应用可以只使用平台无关的核心模型，也可以接入浏览器运行时获得交互式画布。渲染和导出共享同一份文档状态，但彼此不耦合。
+
+```mermaid
+graph LR
+  Application["Application UI"] --> Web["Web runtime"]
+  Application --> Core["Core engine"]
+  Web --> Renderer["Canvas renderer"]
+  Web --> Exporter["Image exporter"]
+  Web --> Core
+  Renderer --> Core
+  Exporter --> Core
+  Core --> Document["World / Layers / Raster"]
 ```
 
-`setPixel` 会直接替换 RGBA8 像素；`blendPixel` 则使用 straight-alpha Source
-Over 合成，并会忽略完全透明的源颜色。
+## How it works
 
-## Paint Pipeline
+| Stage      | Responsibility                                                                        |
+| ---------- | ------------------------------------------------------------------------------------- |
+| 1. Input   | 浏览器运行时将指针输入归一化为连续笔触，并按帧预算执行绘制命令。                      |
+| 2. Paint   | 核心包将笔触重采样为 stamps，写入当前图层的稀疏 RGBA Raster；选区与历史记录在此生效。 |
+| 3. Present | Canvas 渲染器按 Camera 显示当前视图；导出器则在世界坐标中合成指定区域并编码图片。     |
 
-`paintPixel` 将 Rasterizer 的 coverage、画笔颜色 Alpha 和 operation opacity
-合成为有效 Alpha，再写入 Raster：
+## Quick Start
 
-```ts
-import { paintPixel, Raster, Rasterizers } from "@reverie/core";
-
-const raster = new Raster();
-
-Rasterizers.rasterizeCircle(
-  { center: { x: 100.5, y: 100.5 }, radius: 20 },
-  (hit) => {
-    paintPixel(raster, hit, {
-      color: { r: 255, g: 0, b: 0, a: 255 },
-      opacity: 0.5,
-    });
-  },
-);
-```
-
-## Circle Brush
-
-`CircleBrush` 封装了圆形 Rasterizer 与 Paint Pipeline。`size` 表示 World
-Space 中的直径，`stamp` 接受连续 World Position。圆形边缘默认生成归一化的
-fractional coverage；coverage、resolved opacity 与颜色 Alpha 在最终写入 RGBA8
-前组合，因此亚像素中心、小于一个 World Pixel 的笔刷与 erase 边缘都会平滑过渡：
-
-```ts
-import { CircleBrush, Raster } from "@reverie/core";
-
-const raster = new Raster();
-const brush = new CircleBrush({
-  size: 20,
-  color: { r: 0, g: 255, b: 0, a: 255 },
-  opacity: 0.8,
-  spacing: 0.25,
-});
-
-brush.stamp(raster, { x: 50.5, y: 50.25 });
-```
-
-## Image Brush
-
-`BrushImage` 是运行时中立、可重复使用的不可变 Alpha Mask；源图 RGB 会被忽略，
-最终颜色始终来自 `ImageBrush.color`。`size` 表示图像最长边的 World Space 长度，
-另一边按原始宽高比缩放；默认 anchor 为图像中心，也可传入 `[0, 1]` 范围内的
-归一化坐标：
-
-```ts
-import { BrushImage, ImageBrush } from "@reverie/core";
-
-const image = BrushImage.fromRGBA({
-  width: 2,
-  height: 1,
-  pixels: new Uint8ClampedArray([255, 255, 255, 255, 255, 255, 255, 96]),
-});
-const imageBrush = new ImageBrush({
-  image,
-  size: 40,
-  color: { r: 84, g: 153, b: 255, a: 255 },
-  opacity: 0.8,
-  spacing: 0.2,
-  anchor: { x: 0.5, y: 0.5 },
-  rotation: -Math.PI / 2,
-  dynamics: {
-    rotation: { direction: {} },
-  },
-});
-
-imageBrush.stamp(raster, { x: 50.5, y: 50.25 });
-```
-
-Stamp 会围绕 anchor 旋转，通过逆变换与双线性采样读取 Mask，并把图像边缘之外
-视为透明。省略 `BrushImage.alpha` 时会创建全不透明 Mask，适合没有 Alpha 通道的
-来源。图片文件的浏览器解码不属于 Core；`demo` 提供本地上传入口，将解码后的
-RGBA 转为 `BrushImage`，但不会保存上传文件或画笔设置。
-
-## Selection Mask
-
-`SelectionMask` 以稀疏单通道 Tile 保存 World Pixel coverage。缺失 Tile 的
-coverage 为 `0`；公开 API 使用归一化的 `0..1` 数值，并在内部量化为 8-bit。
-`null` Selection 与空 Mask 不同：前者不限制写入，后者阻止全部写入。
-
-```ts
-import { PixelBrush, Raster, SelectionMask } from "@reverie/core";
-
-const raster = new Raster();
-const selection = SelectionMask.fromRect({
-  x: -32,
-  y: -16,
-  width: 64,
-  height: 32,
-});
-const pixelBrush = new PixelBrush({
-  size: 1,
-  color: { r: 0, g: 0, b: 0, a: 255 },
-});
-
-pixelBrush.stamp(raster, { x: 0.5, y: 0.5 }, undefined, selection);
-```
-
-Selection coverage 会在最终像素位置与 Circle、Image 或 Pixel Brush 的 coverage
-相乘，因此 scatter、抗锯齿边缘、paint 和 erase 使用同一套裁剪语义。它不属于
-`World` 或 `Raster`，不会影响渲染及导出。Web 入口通过
-`ReverieCanvas.setSelection(selectionOrNull)` 或
-`CanvasDrawingSession.setSelection(selectionOrNull)` 管理瞬态 Selection；活动
-笔画或调度队列未完成时不能替换 Selection。Session 捕获 Mask 引用而不复制，
-调用方不得在相关绘制工作完成前直接修改已安装的 Mask。
-
-## Undo and Redo
-
-`ReverieCanvas` 为破坏性文档修改维护每个 Session 独立的、按近似字节预算限制的
-Undo/Redo History；V1 的内部默认预算为 256 MiB，且始终保留最新一项，即使它本身
-超过预算。一个完整 Brush 或 Eraser Stroke 只产生一个历史步骤；Redo
-恢复提交时捕获的 Tile 内容，不重新运行 Brush 随机变化。Layer 新增、删除、排序、
-名称、显隐、透明度、混合模式以及 `clear()` 同样可撤销：
-
-```ts
-if (reverie.canUndo) reverie.undo();
-if (reverie.canRedo) reverie.redo();
-
-reverie.beginHistoryGroup();
-reverie.setLayerName(reverie.activeLayer, "Ink");
-reverie.setLayerOpacity(reverie.activeLayer, 0.7);
-reverie.commitHistoryGroup();
-```
-
-History 只保存受影响 Tile 的 before/after RGBA8 数据，并区分缺失 Tile 与已分配的
-透明 Tile。Undo/Redo 通过正常 revision/invalidation 路径恢复内容，不保存 Renderer、
-LOD、Exporter、Camera、Brush、Selection 或 active Layer 状态。新提交的修改会清空
-Redo；空 Undo/Redo 安全 no-op。活动 Stroke、未执行完的调度命令或 Layer removal
-期间不能调用 History API。
-
-绑定 `ReverieCanvas` 后，通过其 `world` 对 Layer 文档执行的变更也会被观察；独立使用
-Core `World`、`RasterLayer` 或 `Raster` 不会自动创建 History。普通的直接
-`Raster.setPixel()` 调用不属于 Session History，除非调用方显式使用
-`@reverie/core/history` 的 Raster transaction integration。
-
-## Versioned Document Schema
-
-`@reverie/core/document` 定义独立于 engine/package 版本的 V1 文档 envelope。
-`World.id` 与 `RasterLayer.id` 是稳定的字符串身份；Layer ID 不依赖图层数组位置或
-Tile runtime ID。当前 writer 复制 World 的 `tileSize`、bounds、Layer metadata 及其稀疏
-RGBA8 Raster tiles；Camera、Selection、active Layer、History、Renderer 与 LOD cache 不写入：
-
-```ts
-import { parseDocument, serializeDocument } from "@reverie/core/document";
-
-const serialized = serializeDocument(world);
-const normalized = parseDocument(serialized);
-```
-
-Writer 始终输出 `reverie-document` 的当前整数 schema 版本和
-`minimumReaderVersion`。V1 Raster payload 使用独立拥有的 `Uint8Array` raw RGBA8 bytes，
-只保存已分配的 tiles，并以 tile-Y、tile-X 顺序输出；tile ID、revision 与 dirty state
-不会持久化。Reader 在返回 plain schema data 前验证格式、版本、required features、bounds、
-tileSize、Layer metadata、唯一 ID 与 Raster payload；未知的非语义字段会被忽略，未知 blend
-mode、required feature 或不兼容版本会拒绝。`migrateDocument()` 提供只处理内存 serialized
-data（包括 `Uint8Array` payload）的相邻版本迁移管线。Runtime World hydration 与文件 I/O
-分别留给 Step 28D 和 Step 29。
-
-兼容性边界由 `DOCUMENT_COMPATIBILITY` 显式声明：writer/current/minimum-supported
-versions 都是文档 schema 版本，不是 package 或产品版本。Reader 只接受该范围内的版本；
-历史格式必须通过集中注册的相邻 migration，并在每一步的 source 与 target schema
-validation 后才会成为 current schema。当前开发阶段仅有 V1，因此 registry 为空；
-current V1 会直接验证而不经过 migration。
-
-`deserializeDocument(input, options?)` 将受支持的输入先归一化为 current schema，再恢复为
-新的 `World`。它保留 World/Layer ID、bounds、Layer order/metadata 与稀疏 RGBA8 tiles，
-但不会恢复 Camera、Selection、History、Renderer 或 LOD state；加载失败不会修改既有 World。
-
-## Stroke
-
-`Stroke` 保存连续 World Space 中的原始输入采样，并按照 `brush.size ×
-brush.spacing` 沿折线路径均匀生成 `StampCommand`。命令由外部 Consumer
-决定何时绘制：
-
-```ts
-import { Stroke } from "@reverie/core";
-
-const stroke = new Stroke({ brush });
-
-stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
-stroke.addSample({ position: { x: 100, y: 50 }, timestamp: 16 });
-stroke.end();
-
-while (stroke.hasPendingStamps) {
-  const command = stroke.nextStamp();
-
-  if (command === undefined) break;
-  stroke.brush.stamp(raster, command.position, command);
-}
-```
-
-每个 `addSample` 还可以携带归一化压力与倾角。这些属性会在平滑、重采样与
-Stamp Placement 中被一致地插值，并出现在每一条 `StampCommand` 上：
-
-```ts
-stroke.addSample({
-  position: { x: 100, y: 50 },
-  timestamp: 16,
-  pressure: 0.4,
-  tiltX: -20,
-  tiltY: 10,
-});
-```
-
-`pressure` 必须是 `[0, 1]` 内的有限数，`tiltX` / `tiltY` 必须是以度为单位、
-位于 `[-90, 90]` 内的有限数。省略时分别取默认值 `1`、`0`、`0`，因此
-`{ position, timestamp }` 形式的旧调用保持完全兼容。每条命令还包含相邻实际
-Stamp 之间的速度，单位为 World Unit/ms；首条命令或非正时间差使用 `0`。
-从第二个实际 Stamp 开始，命令还会包含由相邻 Stamp World Position 通过
-`atan2(dy, dx)` 推导的弧度方向；首个 Stamp 没有真实方向，零距离也不会伪造
-方向值。
-浏览器输入由 `@reverie/web` 归一化：只有 `pointerType === "pen"` 的压力会被
-采信，鼠标与触摸一律取 `1`。
-
-## Brush Dynamics
-
-`CircleBrush` 与 `ImageBrush` 都可以独立配置 Pressure → Size、Pressure →
-Opacity、Velocity → Size、Velocity → Opacity、Direction → Rotation 和 Tilt →
-Rotation。顶层 `rotation` 是静态弧度偏移；Direction 与 Tilt 配置项存在即启用，
-最终角度按 Base + Direction + Tilt 相加。`min` 表示相对基础值的最小比例；
-Pressure 和 Velocity 同时影响同一参数时，其归一化因子相乘：
-
-```ts
-const dynamicBrush = new CircleBrush({
-  size: 20,
-  color: { r: 0, g: 255, b: 0, a: 255 },
-  opacity: 0.8,
-  rotation: Math.PI / 8,
-  dynamics: {
-    size: {
-      pressure: { min: 0.2 },
-      velocity: { min: 0.5, maxVelocity: 1 },
-    },
-    opacity: {
-      pressure: { min: 0.1 },
-    },
-    rotation: { direction: {}, tilt: {} },
-  },
-});
-```
-
-默认曲线为线性，也可提供实现 `DynamicsCurve.evaluate(input)` 的确定性自定义
-曲线。输入和输出均为 `[0, 1]`。Tilt 旋转以弧度解析；圆形 Brush 的像素结果不受
-旋转影响。未配置 dynamics 时仍使用原有固定参数快路径。
-
-## Deterministic Brush Jitter and Scatter
-
-`CircleBrush` 与 `ImageBrush` 均支持可选的 `seed`、`jitter` 和 `scatter`。
-每个 Stamp 依次执行 Dynamics、Jitter 和 Scatter；Scatter 只移动最终绘制位置，
-不修改基础参数、原始命令位置、路径数据或 Stamp 间距：
-
-```ts
-import { CircleBrush, Stroke } from "@reverie/core";
-
-const jitterBrush = new CircleBrush({
-  size: 20,
-  color: { r: 0, g: 255, b: 0, a: 255 },
-  opacity: 0.8,
-  seed: 123,
-  jitter: {
-    size: 0.2,
-    opacity: 0.2,
-    rotation: Math.PI / 12,
-  },
-  scatter: {
-    along: 0.3,
-    across: 0.15,
-  },
-});
-const stroke = new Stroke({ brush: jitterBrush, strokeSequence: 7 });
-const replaySeed = stroke.strokeSeed;
-const replay = new Stroke({ brush: jitterBrush, strokeSeed: replaySeed });
-```
-
-`size` / `opacity` 是对称乘数的幅度：`0.2` 对应 `[0.8, 1.2]`。比例允许大于
-`1`，最终尺寸截到非负数，透明度截到 `[0, 1]`；零尺寸或零透明度不绘制。
-`rotation` 是弧度表示的最大加性偏移；圆形 Brush 的旋转没有可见效果。三个
-幅度都必须是非负有限数，省略或 `0` 表示关闭；有限配置的计算若溢出则抛错。
-
-Scatter 的 `along` 与 `across` 是最终尺寸的比例，均为非负有限数，默认 `0`，
-并可大于 `1`。沿路径方向为 `(cos(direction), sin(direction))`，横向方向为
-`(-sin(direction), cos(direction))`；方向缺失时采用 `0`，即沿路径为 +X、横向为
-+Y。每个分量使用独立的 `[-1, 1)` 样本乘以最终尺寸和对应比例。最终尺寸为
-零时不会计算 Scatter 或绘制；无 Scatter 时绘制坐标保持不变。
-
-Seed、笔画序号、Stamp 编号和 channel ID 均使用 `[0, 4294967295]` 内的整数；
-负数、小数、越界和非有限值会被拒绝。所有种子混合、乘法、移位及哈希步骤
-显式保持 uint32 语义，乘法采用 `Math.imul`，中间结果按 `2^32` 取模。
-Brush seed 默认 `0`；Core 不使用全局计数器，独立调用方负责递增并记录
-`strokeSequence`（默认 `0`）。显式 `strokeSeed` 是最终种子，会覆盖派生过程，
-包括显式值 `0`。恢复最终种子时，不使用也不校验 Brush seed 和笔画序号。
-
-Stroke 为每条实际生成的命令附带最终 `strokeSeed` 和从 `0` 开始的 `stampIndex`。
-编号不随队列消费或调度分帧改变；超过 uint32 编号空间会抛出
-`ErrorCodes.STROKE.STAMP_INDEX_EXHAUSTED`，而非重复编号。
-`@reverie/web` 的 `CanvasDrawingSession` 自动递增笔画序号，并在 uint32 上限后
-回到 `0`；保存时可读取 `session.nextStrokeSequence`，恢复时传入
-`ReverieCanvasConfig` 或 `CanvasDrawingSessionConfig` 的 `strokeSequence`。
-固定 seed 空间在完整循环后会重用序列。
-
-```ts
-import { ReverieCanvas } from "@reverie/web";
-
-const savedSequence = reverie.session.nextStrokeSequence;
-reverie.dispose();
-const restoredCanvas = new ReverieCanvas({
-  canvas,
-  brush: jitterBrush,
-  strokeSequence: savedSequence,
-});
-```
-
-直接 `brush.stamp(raster, position)` 或旧命令缺少随机上下文时，使用 Brush seed
-和编号 `0`，方向采用 `0`，所以不会因调用次数产生隐式变化。也可在命令中独立提供
-`strokeSeed`、`stampIndex` 与 `direction`。Jitter 和 Scatter 均关闭时，旧命令和绘制行为保持兼容。
-`brush.resolveParameters()` 同样允许省略输入，使用中性 Dynamics 默认值和
-上述固定随机上下文；`stamp` 复用这个参数解析入口。
-
-随机基础设施可通过 `deriveStrokeSeed(brushSeed, strokeSequence)`、
-`sampleStampRandom(strokeSeed, stampIndex, channel)` 和冻结的
-`STAMP_RANDOM_CHANNELS` 使用。固定 channel ID 为 size `1`、rotation `2`、
-opacity `3`、scatterAlong `4` 和 scatterAcross `5`；新功能应使用新的稳定 ID。Sample 范围为 `[0, 1)`，
-`sample * 2 - 1` 得到 `[-1, 1)`。按 seed、编号、channel 独立寻址，无可变 RNG
-流，也不依赖 `Math.random()`、Web API、渲染时机或 frame budget。
-Channel 会先进行 uint32 哈希再与 seed 混合，使两个参数具有不同角色。
-
-## Canvas Renderer
-
-`CanvasRenderer` 将稀疏 Raster 按照 Camera 当前视图绘制到 Canvas backing
-buffer。修改 Camera 或 Raster 后需要显式调用 `render()`：
-
-```ts
-import { Camera, Raster } from "@reverie/core";
-import { CanvasRenderer } from "@reverie/renderer";
-
-const raster = new Raster();
-const camera = new Camera({ zoom: 8 });
-const renderer = new CanvasRenderer({ canvas, raster, camera });
-
-renderer.resize(800, 600);
-renderer.render();
-```
-
-显示采样使用 `camera.zoom × pixelRatio` 作为 World 到设备像素的实际比例。比例
-大于或等于 `1` 时保持清晰的 Raster 像素结构；比例小于 `1` 时，Renderer 会先按
-Tile revision 和八邻接状态复用或生成 alpha-correct LOD，再把可见 Tile 组装为一个
-连续离屏表面并执行高质量缩小。这样不会把过滤结果写回 Raster，也不会让 Camera
-zoom 影响导出。派生 LOD 使用每个 Renderer `128 MiB` 的内部 LRU 预算。
-
-真实浏览器像素测试可通过以下命令运行；`imageSmoothingQuality = "high"` 仅作为
-best-effort 提示，测试不会假定所有浏览器都采用相同过滤实现：
-
-```bash
-pnpm --filter @reverie/renderer exec playwright install chromium firefox
-pnpm --filter @reverie/renderer test:browser
-```
-
-macOS Safari 17+ 使用真实设备人工验收，不以 Playwright WebKit 代替。
-
-## World 图层合成
-
-`World` 自动创建一个空的 `Layer 1`，并始终保留至少一个图层。`layers`
-是不可修改的集合快照，按底层到顶层排列；通过 World API 修改成员和顺序：
-
-```ts
-import { World } from "@reverie/core";
-
-const world = new World({ tileSize: 256 });
-const background = world.getLayer(0);
-const sketch = world.addLayer();
-sketch.name = "Sketch";
-sketch.opacity = 0.5;
-sketch.visible = true;
-world.moveLayer(sketch, 0);
-world.removeLayer(sketch); // 保留 Raster 内容；最后一个图层不可删除
-```
-
-所有图层共享 World 坐标，只支持 Normal / Source Over。图层透明度在
-合成时乘以像素 alpha，不修改原始 Raster。隐藏层和零透明度层不参与合成，
-空层及缺失 Tile 是透明的；有限 World 的合成结果裁剪到 `world.bounds`。
-
-`createRasterLayer()` 保持原行为，仅创建未注册的空层；`addLayer(layer)`
-或 `insertLayer(index, layer)` 才将其加入文档。插入位置支持 `0..layers.length`，
-移动位置是移动后的最终索引 `0..layers.length - 1`。图层与 Raster 不可重复
-注册，跨 World 转移前需移除原归属，且 Tile 大小及绘制边界必须匹配。
-自动编号只应用于 `hasAssignedName === false` 的图层；明确设置为 `"Layer"`
-或空字符串的名称也会保留。索引和最终层删除失败使用 `ReverieRangeError`，
-类型/几何不兼容使用 `ReverieTypeError`，归属、缺失引用及重入使用 `ReverieError`；
-原有 `EC_WORLD_*` 编号保持不变。
-默认控制台诊断仅在 DEBUG 构建启用；Release 不自动输出诊断，但仍遵守显式
-`WorldConfig.reporter` 或运行时默认 reporter。内部解析配置允许 reporter 缺省。
-
-```ts
-const renderer = new CanvasRenderer({ canvas, world, camera });
-renderer.render();
-const image = new ExportRenderer({ world }).render({
-  x: -100,
-  y: -100,
-  width: 200,
-  height: 200,
-});
-```
-
-两个 Renderer 都接受且只接受一个 `raster` 或 `world` 来源，低层 Raster
-入口仍独立工作。World 模式的 `.world` 是文档引用，`.raster` 为 `undefined`；
-Raster 模式相反。屏幕渲染使用 Canvas Source Over 和 `globalAlpha`，导出
-输出 straight-alpha RGBA8；运行时舍入可能产生细微通道差异。Tile 上传缓存
-按 Raster 身份隔离，调整顺序、显隐或透明度不重新上传未变更的像素。
-来源在构造时捕获，之后修改原配置不会重新绑定来源，也不会冻结调用方的配置。
-`@reverie/core/renderer` 提供 `RenderSource` / `RenderSourceSnapshot`、
-`resolveRenderSource(config, createInvalidSourceError)` 和
-`intersectRenderRegion(region, bounds)`：前者校验独占来源并创建固定快照，
-后者对已验证的连续/整数区域执行半开区间相交，无交集时返回 `null`。
-
-`ReverieCanvas.setActiveLayer(layerOrIndex)` 只改变后续绘制目标；渲染及下载
-仍使用完整 World。`clear()` 保持只清空活动层的行为。删除活动层时优先选择
-下方邻层，没有下方层时选择上方层；直接调用 `world.removeLayer()` 也适用。
-活动笔画或尚未完成的调度工作会阻止切换或修改 Layer 文档，返回
-`EC_WEB_0021`，以保证 Stroke History 的先后顺序。底层
-`CanvasDrawingSession.setLayer(layer)` 使用相同忙碌检查。
-`World.observeLayerRemoval()` 为保留图层引用的外部消费者提供
-移除前校验和移除后通知，不把编辑选择存入文档；回调不能更改集合成员或排序，
-移除后回调不得抛错，返回的函数用于取消订阅。`afterRemovalAttempt()` 无论
-移除成功或校验失败都会执行，必须不抛错，用于释放临时预留。
-`CanvasDrawingSession.observeLayerRemoval(world, onLayerChange)` 为单个文档
-绑定相同的校验/目标修复流程，返回取消订阅函数；`onLayerChange` 必须不抛错。
-移除回调期间拒绝目标切换（`EC_WEB_0023`）并忽略新笔画输入；移除后的赋值
-不会重新校验生命周期。已销毁 Session 的目标切换返回 `EC_WEB_0022`。
-Facade 与 Session 在清理前即关闭；即使笔画结束回调抛错，也会尝试释放全部
-自有资源并传播异常，多处清理失败通过 `AggregateError` 保留各个原因。
-
-## Drawing Scheduler
-
-`@reverie/web` 的 `DrawingScheduler` 将 `StampCommand` 包装为可执行的
-`DrawingCommand`，并通过可注入的 `FrameDriver` 在软帧预算内按 FIFO 顺序
-分批绘制：
-
-```ts
-import { DrawingScheduler } from "@reverie/web";
-
-const scheduler = new DrawingScheduler({
-  frameBudget: 4,
-  onRender: () => renderer.render(),
-  onError: (error) => reportDrawingError(error),
-});
-
-while (stroke.hasPendingStamps) {
-  const stamp = stroke.nextStamp();
-
-  if (stamp === undefined) break;
-  scheduler.enqueue({ stamp, brush: stroke.brush, raster });
-}
-```
-
-`demo` 提供了可直接按下并拖动绘画的连续 Stroke 画布，并可调整颜色、
-Brush Size、Spacing、Opacity、Pan 和 Zoom，也可临时上传图片切换为 Image
-Brush；上传的非对称 Brush Tip 默认沿实际 Stamp 路径旋转。绘制命令由主线程上的
-`DrawingScheduler` 按帧消费。
-
-## Export Renderer
-
-`@reverie/exporter` 的 `ExportRenderer` 将 World Pixel Region 导出为稠密的
-RGBA8 buffer。导出区域使用半开区间 `[x, x + width) × [y, y + height)`，未
-分配的 Tile 在输出中保持透明黑，且 Raster 本身不会被修改：
-
-```ts
-import { ExportRenderer } from "@reverie/exporter";
-
-const exporter = new ExportRenderer({ raster });
-
-const image = exporter.render({
-  x: 0,
-  y: 0,
-  width: 1920,
-  height: 1080,
-});
-
-// image.width === 1920
-// image.height === 1080
-// image.pixels.length === 1920 * 1080 * 4
-```
-
-`render()` 是同步 API，每次调用都返回一个全新的 buffer；buffer 使用 straight
-alpha，不进行 premultiply、缩放或图层合成。`render()` 只输出原始 RGBA 数据，
-编码为实际图片文件由 `Image Encoders` 负责。
-
-`demo` 中的 “Export to console” 按钮会把当前画布导出为 1920 × 1080 的 RGBA
-buffer，并把完整的 `Uint8ClampedArray` 输出到浏览器控制台。
-
-## Image Encoders
-
-`@reverie/exporter` 的 `PNGEncoder`、`JPEGEncoder` 与 `WebPEncoder` 将
-`ExportResult` 编码为完整的图片文件。Encoder 只读取 bitmap，不接触 Raster、
-World 或 Camera，输出统一为运行时中立的 `Uint8Array`：
-
-```ts
-import { JPEGEncoder, PNGEncoder, WebPEncoder } from "@reverie/exporter";
-
-const png = await new PNGEncoder().encode(image, { compressionLevel: 6 });
-const jpeg = await new JPEGEncoder().encode(image, { quality: 0.92 });
-const webp = await new WebPEncoder().encode(image, { lossless: true });
-
-// png.mimeType === "image/png";   png.extension === "png"
-// jpeg.mimeType === "image/jpeg"; jpeg.extension === "jpg"
-// webp.mimeType === "image/webp"; webp.extension === "webp"
-```
-
-PNG 始终无损，包括完全透明像素中保留的颜色通道。JPEG 没有 Alpha 通道，因此会
-先把 RGBA 合成到不透明背景上（默认白色，可通过 `background` 指定）。WebP 默认
-无损编码并精确保留 Alpha，只有显式传入 `lossless: false` 时才走有损路径；有损
-bitstream 无法携带 Alpha，会退化为颜色通道本身。
-
-所有 Encoder 都是无状态的：既不修改传入的 bitmap，也不在实例上保留上一次的
-输入或结果，因此同一个实例可以并发编码。输入会在编码前校验，非法尺寸、错误的
-buffer 长度或越界的 quality / compressionLevel 都会抛出带稳定 code 的
-`ExporterTypeError` 或 `ExporterRangeError`。
-
-## Web Download
-
-`@reverie/web` 的 `downloadEncodedImage` 把已编码的 `EncodedImage` 交付给浏览器下载：字节被包装为 `Blob`（MIME 取自 `image.mimeType`），通过临时 Object URL 与临时 `<a>` 触发下载，随后撤销 Object URL 并移除临时节点。该 Helper 是浏览器专用逻辑，只负责交付字节，不读取 Raster、不渲染、不编码：
-
-```ts
-import { downloadEncodedImage } from "@reverie/web";
-
-downloadEncodedImage(image, { filename: "artwork" });
-```
-
-省略 `filename` 时使用 `drawing.<extension>`；`filename` 缺少扩展名时会补上编码结果的扩展名，已有扩展名则原样保留，因此不会出现 `artwork.png.png`。
-
-`ReverieCanvas` 在同一个 Helper 之上提供高层入口。它以 `world.bounds` 作为默认导出区域，固定尺寸画布一次调用即可导出整幅画面；无限 World 没有自然的完整尺寸，必须显式传入 `region`：
-
-```ts
-await reverie.download({ format: "png", filename: "drawing.png" });
-
-await reverie.download({
-  format: "jpeg",
-  filename: "artwork.jpg",
-  quality: 0.9,
-});
-
-await reverie.download({
-  format: "webp",
-  filename: "artwork.webp",
-  lossless: false,
-});
-
-await reverie.download({
-  format: "png",
-  region: { x: -1024, y: -1024, width: 2048, height: 2048 },
-});
-```
-
-`download()` 导出完整 World 合成，遵守图层顺序、显隐和透明度，与 `activeLayer` 选择无关；导出过程只读取 Raster，不会修改像素、Camera、Brush 或 Scheduler。PNG 支持 `compressionLevel`（`0..9`，默认 `6`）。JPEG 需要全局 `Buffer`，`download()` 会自动安装对应的 shim，因此浏览器环境无需手动调用；只有直接使用 `JPEGEncoder` 时才需要先调用一次 `JPEGEncoder.installJpegJsBufferShim()`。
-
-`demo` 中的 “Export PNG / JPEG / WebP” 按钮通过 `ReverieCanvas.download()` 直接下载导出结果。
-
-## 开始使用
+在仓库根目录安装依赖并启动包含的演示应用：
 
 ```bash
 pnpm install
 pnpm dev
 ```
 
-`dev` 和测试命令会保留使用 `// #if DEBUG` 标记的调试代码；生产构建和
-带有 `no-debug` 后缀的命令会在编译时移除这些代码。
-
-常用命令：
-
-```bash
-pnpm build
-pnpm dev
-pnpm dev:no-debug
-pnpm test
-pnpm test:no-debug
-pnpm test:watch
-pnpm test:verbose
-pnpm typecheck
-```
-
-## Project Container
-
-`@reverie/core/project` packages an already captured serialized document as a
-self-contained `.reverie` container. The container keeps its manifest and
-document metadata separate from raw binary Raster Tile payloads; it does not
-persist session state, brushes, history, or file identity.
+在浏览器项目中，`ReverieCanvas` 是最短的接入路径：
 
 ```ts
-import { deserializeDocument, serializeDocument } from "@reverie/core/document";
-import {
-  decodeProjectContainer,
-  encodeProjectContainer,
-} from "@reverie/core/project";
+import { ReverieCanvas } from "@reverie/web";
 
-const snapshot = serializeDocument(world);
-const projectBytes = encodeProjectContainer(snapshot);
-const restoredWorld = deserializeDocument(decodeProjectContainer(projectBytes));
+const canvas = document.querySelector("canvas");
+
+if (!(canvas instanceof HTMLCanvasElement)) {
+  throw new Error("A canvas element is required.");
+}
+
+const reverie = new ReverieCanvas({
+  canvas,
+  width: 1024,
+  height: 768,
+});
+
+// Pointer input is attached automatically. Dispose when the owning view unmounts.
 ```
 
-V1 uses deterministic uncompressed entries and rejects empty documents or
-malformed, incomplete, ambiguous, and unsupported containers atomically.
+需要 Node.js `^22.12.0`、`^24.0.0` 或 `>=26.0.0`，以及 pnpm `11.18.0`。
+
+## Examples
+
+| Example                                             | What it demonstrates                                     |
+| --------------------------------------------------- | -------------------------------------------------------- |
+| [React drawing workspace](./demo)                   | 固定尺寸画布、笔刷设置、平移缩放、选区、图层和图片导出。 |
+| [Browser facade](./web/src/facade/ReverieCanvas.ts) | 将输入、调度、渲染、历史与下载组合为一个画布运行时。     |
+| [Core integration tests](./test/integration)        | 笔触、文档、图层、选择与像素行为的可执行示例。           |
+
+## Packages
+
+| Package                           | Responsibility                                                 |
+| --------------------------------- | -------------------------------------------------------------- |
+| [`@reverie/core`](./core)         | 平台无关的世界、图层、稀疏像素、笔刷、笔触、选区与文档模型。   |
+| [`@reverie/renderer`](./renderer) | 以 HTML Canvas 呈现当前 Camera 视图，并维护缩小时的 LOD 缓存。 |
+| [`@reverie/web`](./web)           | 浏览器输入、绘制调度、历史记录、画布门面和下载能力。           |
+| [`@reverie/exporter`](./exporter) | 世界区域合成，以及 PNG、JPEG、WebP 编码。                      |
+| [`@reverie/demo`](./demo)         | 使用 React + Vite 构建的浏览器示例应用。                       |
+| [`@reverie/test`](./test)         | 核心行为的 Vitest 集成测试。                                   |
+
+## Built with
+
+TypeScript · Node.js · pnpm workspaces · HTML Canvas · React · Vite · Vitest · Playwright
+
+## Documentation
+
+README 保持在项目介绍层面，不重复维护 API Reference。完整接口以各 package 的 typed entry point 为准：[`core`](./core/index.ts)、[`renderer`](./renderer/index.ts)、[`web`](./web/index.ts) 和 [`exporter`](./exporter/index.ts)。独立文档站正在准备中。
+
+## Development
+
+```bash
+# Start the demo and package watchers
+pnpm dev
+
+# Validate the workspace
+pnpm typecheck
+pnpm test
+pnpm build
+```
+
+仓库使用 pnpm workspace 管理；请勿使用 npm 或 Yarn 生成锁文件。
+
+## License
+
+Released under the [Apache License 2.0](./LICENSE).
