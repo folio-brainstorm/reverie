@@ -139,7 +139,7 @@ const reverie = new ReverieCanvas({
 | Package                           | Responsibility                                                 |
 | --------------------------------- | -------------------------------------------------------------- |
 | [`@reverie/core`](./core)         | 平台无关的世界、图层、稀疏像素、笔刷、笔触、选区与文档模型。   |
-| [`@reverie/renderer`](./renderer) | 以 HTML Canvas 呈现当前 Camera 视图，并维护缩小时的 LOD 缓存。 |
+| [`@reverie/canvas-renderer`](./renderers/canvas-renderer) | 以 HTML Canvas 呈现当前 Camera 视图，并维护缩小时的 LOD 缓存。 |
 | [`@reverie/web`](./web)           | 浏览器输入、绘制调度、历史记录、画布门面和下载能力。           |
 | [`@reverie/exporter`](./exporter) | 世界区域合成，以及 PNG、JPEG、WebP 编码。                      |
 | [`@reverie/demo`](./demo)         | 使用 React + Vite 构建的浏览器示例应用。                       |
@@ -151,7 +151,7 @@ TypeScript · Node.js · pnpm workspaces · HTML Canvas · React · Vite · Vite
 
 ## Documentation
 
-README 保持在项目介绍层面，不重复维护 API Reference。完整接口以各 package 的 typed entry point 为准：[`core`](./core/index.ts)、[`renderer`](./renderer/index.ts)、[`web`](./web/index.ts) 和 [`exporter`](./exporter/index.ts)。独立文档站正在准备中。
+README 保持在项目介绍层面，不重复维护 API Reference。完整接口以各 package 的 typed entry point 为准：[`core`](./core/index.ts)、[`canvas-renderer`](./renderers/canvas-renderer/index.ts)、[`web`](./web/index.ts) 和 [`exporter`](./exporter/index.ts)。独立文档站正在准备中。
 
 ## Development
 

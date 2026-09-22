@@ -64,6 +64,26 @@ export const ErrorDefinitions = {
         "Camera viewport `$param` must be non-negative, but received `$received`.",
     },
   },
+  RENDERING: {
+    INVALID_REQUEST: {
+      code: "EC_RENDERING_0001",
+      template: "Render request must provide a viewport object.",
+    },
+    INVALID_VIEWPORT_COMPONENT_TYPE: {
+      code: "EC_RENDERING_0002",
+      template:
+        "Render viewport `$component` must be a number, but received `$received`.",
+    },
+    INVALID_VIEWPORT_COMPONENT_VALUE: {
+      code: "EC_RENDERING_0003",
+      template:
+        "Render viewport `$component` must be finite, but received `$received`.",
+    },
+    INVALID_VIEWPORT_EXTENT: {
+      code: "EC_RENDERING_0004",
+      template: "Render viewport width and height must be non-negative.",
+    },
+  },
   BRUSH: {
     INVALID_SIZE: {
       code: "EC_BRUSH_0001",

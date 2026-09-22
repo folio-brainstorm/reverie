@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { Camera, Raster, World } from "@reverie/core";
 import { deserializeDocument, serializeDocument } from "@reverie/core/document";
+import { RenderingCore } from "@reverie/core/renderer";
 import type { Renderer } from "@reverie/core/renderer";
 
 import {
@@ -67,6 +68,24 @@ function createCanvasFixture(width = 4, height = 4) {
 }
 
 describe("CanvasRenderer World composition", () => {
+  it("resolves rendering demand through Rendering Core before presentation", () => {
+    const { canvas } = createCanvasFixture(2, 2);
+    const raster = new Raster({ tileSize: 2 });
+    const render = vi.spyOn(RenderingCore.prototype, "render");
+
+    new CanvasRenderer({
+      canvas,
+      camera: new Camera(),
+      raster,
+    }).render();
+
+    expect(render).toHaveBeenCalledOnce();
+    expect(render).toHaveBeenCalledWith(
+      expect.objectContaining({ source: { raster } }),
+    );
+    render.mockRestore();
+  });
+
   it("renders a hydrated World through the normal composition path", () => {
     const { canvas, tileContexts } = createCanvasFixture(2, 2);
     const source = new World({ tileSize: 2 });
@@ -163,7 +182,7 @@ describe("CanvasRenderer World composition", () => {
       });
     }).toThrow("EC_RENDERER_0004");
   });
-  it("draws bottom-to-top with layer opacity and isolates same-coordinate tile caches", () => {
+  it("uploads one precomposited World tile with layer opacity", () => {
     const { canvas, context, tileContexts } = createCanvasFixture(2, 2);
     const world = new World({ tileSize: 2 });
     const bottom = world.getLayer(0);
@@ -181,37 +200,26 @@ describe("CanvasRenderer World composition", () => {
       camera: new Camera(),
     });
     renderer.render();
-    expect(alphas).toEqual([1, 0.5]);
+    expect(alphas).toEqual([1]);
     expect(context.globalCompositeOperation).toBe("source-over");
-    expect(tileContexts).toHaveLength(2);
+    expect(tileContexts).toHaveLength(1);
     expect(
       vi
         .mocked(tileContexts[0]?.putImageData ?? context.putImageData)
         .mock.calls[0]?.[0].data.slice(0, 4),
-    ).toEqual(new Uint8ClampedArray([255, 0, 0, 255]));
-    expect(
-      vi
-        .mocked(tileContexts[1]?.putImageData ?? context.putImageData)
-        .mock.calls[0]?.[0].data.slice(0, 4),
-    ).toEqual(new Uint8ClampedArray([0, 0, 255, 255]));
-    const firstCanvas = vi.mocked(context.drawImage).mock.calls[0]?.[0];
-    const secondCanvas = vi.mocked(context.drawImage).mock.calls[1]?.[0];
+    ).toEqual(new Uint8ClampedArray([128, 0, 128, 255]));
     world.moveLayer(top, 0);
     alphas.length = 0;
     vi.mocked(context.drawImage).mockClear();
     renderer.render();
-    expect(alphas).toEqual([0.5, 1]);
-    expect(
-      vi.mocked(context.drawImage).mock.calls.map((call) => call[0]),
-    ).toEqual([secondCanvas, firstCanvas]);
-    for (const tileContext of tileContexts) {
-      expect(tileContext.putImageData).toHaveBeenCalledTimes(1);
-    }
+    expect(alphas).toEqual([1]);
+    expect(vi.mocked(context.drawImage).mock.calls).toHaveLength(1);
+    expect(tileContexts[0]?.putImageData).toHaveBeenCalledTimes(2);
     expect(context.save).toHaveBeenCalledTimes(2);
     expect(context.restore).toHaveBeenCalledTimes(2);
   });
 
-  it("does not upload hidden, zero-opacity, or empty layers and reuses uploads on metadata changes", () => {
+  it("skips hidden, zero-opacity, and empty layers while updating changed composition", () => {
     const { canvas, context, tileContexts } = createCanvasFixture(2, 2);
     const world = new World({ tileSize: 2 });
     const layer = world.getLayer(0);
@@ -235,7 +243,7 @@ describe("CanvasRenderer World composition", () => {
     layer.opacity = 0.2;
     renderer.render();
     expect(tileContexts).toHaveLength(1);
-    expect(tileContexts[0]?.putImageData).toHaveBeenCalledTimes(1);
+    expect(tileContexts[0]?.putImageData).toHaveBeenCalledTimes(2);
   });
 
   it("clips negative World bounds through the Camera and DPR and culls outside tiles", () => {
@@ -626,7 +634,7 @@ describe("CanvasRenderer rendering", () => {
     expect(Array.from(lodUpload?.data ?? [])).toEqual([255, 0, 0, 64]);
   });
 
-  it("invalidates a Tile LOD when any neighbor identity or revision changes", () => {
+  it("uploads only the changed final LOD region", () => {
     const { canvas, tileContexts } = createCanvasFixture(2, 1);
     const raster = new Raster({ tileSize: 2 });
     raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
@@ -653,7 +661,7 @@ describe("CanvasRenderer rendering", () => {
         count + vi.mocked(context.putImageData).mock.calls.length,
       0,
     );
-    expect(uploadCountAfterChange).toBe(4);
+    expect(uploadCountAfterChange).toBe(3);
   });
 
   it("composes World pixels at full resolution before generating a minified Tile", () => {

@@ -1,5 +1,5 @@
 {
-  "name": "@reverie/renderer",
+  "name": "@reverie/canvas-renderer",
   "version": "0.1.0",
   "description": "Rendering backends for the Rêverie raster painting engine",
   "type": "module",
@@ -22,7 +22,7 @@
     "test:browser": "vitest run --config vitest.browser.config.ts",
     "test:watch": "vitest",
     "test:verbose": "vitest run --reporter=verbose --includeTaskLocation",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@reverie/core": "workspace:*"

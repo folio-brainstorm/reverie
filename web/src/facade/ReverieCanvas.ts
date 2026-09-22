@@ -8,7 +8,7 @@ import type {
   WorldBounds,
 } from "@reverie/core";
 import type { ExportRegion } from "@reverie/exporter";
-import { CanvasRenderer } from "@reverie/renderer";
+import { CanvasRenderer } from "@reverie/canvas-renderer";
 
 import { WebErrorDefinitions } from "../errors/WebErrorDefinitions.js";
 import { WebError, WebRangeError, WebTypeError } from "../errors/WebErrors.js";

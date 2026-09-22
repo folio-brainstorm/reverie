@@ -9,7 +9,7 @@ import type {
 } from "@reverie/core";
 import { DocumentHistory } from "@reverie/core/history";
 import type { RasterHistoryTransaction } from "@reverie/core/history";
-import type { CanvasRenderer } from "@reverie/renderer";
+import type { CanvasRenderer } from "@reverie/canvas-renderer";
 
 import { WebErrorDefinitions } from "../errors/WebErrorDefinitions.js";
 import { WebError, WebRangeError, WebTypeError } from "../errors/WebErrors.js";

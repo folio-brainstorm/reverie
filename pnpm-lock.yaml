@@ -36,15 +36,15 @@ importers:
 
   demo:
     dependencies:
+      '@reverie/canvas-renderer':
+        specifier: workspace:*
+        version: link:../renderers/canvas-renderer
       '@reverie/core':
         specifier: workspace:*
         version: link:../core
       '@reverie/exporter':
         specifier: workspace:*
         version: link:../exporter
-      '@reverie/renderer':
-        specifier: workspace:*
-        version: link:../renderer
       '@reverie/web':
         specifier: workspace:*
         version: link:../web
@@ -93,11 +93,11 @@ importers:
         specifier: ^5.0.0
         version: 5.0.0(@types/node@26.5.1)(@vitest/browser-playwright@5.0.0)(@vitest/ui@5.0.0)(vite@8.3.0(@types/node@26.5.1))
 
-  renderer:
+  renderers/canvas-renderer:
     dependencies:
       '@reverie/core':
         specifier: workspace:*
-        version: link:../core
+        version: link:../../core
     devDependencies:
       '@vitest/browser-playwright':
         specifier: 5.0.0
@@ -127,15 +127,15 @@ importers:
 
   web:
     dependencies:
+      '@reverie/canvas-renderer':
+        specifier: workspace:*
+        version: link:../renderers/canvas-renderer
       '@reverie/core':
         specifier: workspace:*
         version: link:../core
       '@reverie/exporter':
         specifier: workspace:*
         version: link:../exporter
-      '@reverie/renderer':
-        specifier: workspace:*
-        version: link:../renderer
     devDependencies:
       typescript:
         specifier: ^7.0.2
