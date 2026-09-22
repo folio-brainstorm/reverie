@@ -169,7 +169,7 @@ export function getRasterAllocatedByteLength(raster: Raster): number {
   if (tileStore === undefined) {
     return 0;
   }
-  return tileStore.size * raster.tileSize * raster.tileSize * 4;
+  return tileStore.getRawPixelBytes();
 }
 
 /**

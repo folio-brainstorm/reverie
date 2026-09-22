@@ -21,6 +21,7 @@ import type {
   LayerBlendMode,
   PaintMode,
   RasterLayer,
+  RasterStatistics,
   Rect,
   RGBAColor,
   ScreenPoint,
@@ -150,6 +151,14 @@ export function PaintingWorkspace({
   const [exportStatus, setExportStatus] = useState<string | null>(null);
   const [isLayersPanelOpen, setIsLayersPanelOpen] = useState(false);
   const [, setLayersRevision] = useState(0);
+  const worldRasterStatistics =
+    reverieRef.current?.world.getRasterStatistics() ?? null;
+  const layerStatisticsById = new Map(
+    worldRasterStatistics?.layers.map((layer) => [
+      layer.id,
+      layer.statistics,
+    ]) ?? [],
+  );
 
   const hideBrushIndicator = (): void => {
     brushIndicatorRef.current?.setAttribute("visibility", "hidden");
@@ -322,7 +331,10 @@ export function PaintingWorkspace({
           setDrawingError(formatDrawingError(error));
         },
         onStrokeStart: () => setIsPainting(true),
-        onStrokeEnd: () => setIsPainting(false),
+        onStrokeEnd: () => {
+          setIsPainting(false);
+          setLayersRevision((revision) => revision + 1);
+        },
       });
 
       if (hasInitializationError) {
@@ -413,6 +425,7 @@ export function PaintingWorkspace({
       reverieRef.current?.clear();
       setDrawingError(null);
       setExportStatus(null);
+      setLayersRevision((revision) => revision + 1);
     } catch (error) {
       setDrawingError(formatDrawingError(error));
     }
@@ -1208,6 +1221,14 @@ export function PaintingWorkspace({
             <small>Zoom</small>
             {zoomPercentage}%
           </span>
+          <span className="storage-metric">
+            <small>Tiles</small>
+            {worldRasterStatistics?.tileCount ?? 0}
+          </span>
+          <span className="storage-metric">
+            <small>RGBA bytes</small>
+            {formatRawPixelBytes(worldRasterStatistics?.rawPixelBytes ?? 0)}
+          </span>
         </div>
       </header>
 
@@ -1260,6 +1281,23 @@ export function PaintingWorkspace({
               + Add
             </button>
           </div>
+          <section className="storage-statistics" aria-label="Raster storage">
+            <p className="layers-eyebrow">Raster storage</p>
+            <dl>
+              <div>
+                <dt>Allocated Tiles</dt>
+                <dd>{worldRasterStatistics?.tileCount ?? 0}</dd>
+              </div>
+              <div>
+                <dt>Raw RGBA bytes</dt>
+                <dd>
+                  {formatRawPixelBytes(
+                    worldRasterStatistics?.rawPixelBytes ?? 0,
+                  )}
+                </dd>
+              </div>
+            </dl>
+          </section>
           <div className="layers-list">
             {[
               ...((reverieRef.current?.world.layers ??
@@ -1267,6 +1305,7 @@ export function PaintingWorkspace({
             ]
               .reverse()
               .map((layer) => {
+                const statistics = layerStatisticsById.get(layer.id);
                 const index =
                   reverieRef.current?.world.layers.indexOf(layer) ?? -1;
                 const isActive = reverieRef.current?.activeLayer === layer;
@@ -1360,6 +1399,11 @@ export function PaintingWorkspace({
                         ))}
                       </select>
                     </label>
+                    <p className="layer-statistics">
+                      {statistics === undefined
+                        ? "No Raster statistics available"
+                        : formatLayerStatistics(statistics)}
+                    </p>
                     <div className="layer-actions">
                       <button
                         type="button"
@@ -1539,4 +1583,19 @@ function normalizeWheelDelta(
 /** Restricts a coordinate or zoom value to an inclusive interval. */
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
+}
+
+/** Formats an exact raw RGBA8 payload byte count without implying heap usage. */
+function formatRawPixelBytes(rawPixelBytes: number): string {
+  return `${rawPixelBytes.toLocaleString()} B`;
+}
+
+/** Creates a compact diagnostic summary for one Layer-owned Raster. */
+function formatLayerStatistics(statistics: RasterStatistics): string {
+  const { tileBounds } = statistics;
+  if (tileBounds === null) {
+    return `${statistics.tileCount} Tiles | ${formatRawPixelBytes(statistics.rawPixelBytes)} | empty`;
+  }
+
+  return `${statistics.tileCount} Tiles | ${formatRawPixelBytes(statistics.rawPixelBytes)} | Tile bounds: ${tileBounds.minX},${tileBounds.minY} to ${tileBounds.maxX},${tileBounds.maxY}`;
 }

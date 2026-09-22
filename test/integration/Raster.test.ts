@@ -107,6 +107,50 @@ describe("Raster world-pixel access", () => {
     expect(raster.allocatedTileCount).toBe(1);
     // #endif
   });
+
+  it(
+    "gives missing and allocated canonical-empty Tiles identical pixel reads",
+    () => {
+      const missingTileRaster = new Raster({ tileSize: 2 });
+      const allocatedEmptyTileRaster = new Raster({ tileSize: 2 });
+      allocatedEmptyTileRaster.setPixel({ x: 0, y: 0 }, TRANSPARENT_BLACK);
+
+      for (const pixel of [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 0, y: 1 },
+        { x: 1, y: 1 },
+      ]) {
+        expect(allocatedEmptyTileRaster.getPixel(pixel)).toEqual(
+          missingTileRaster.getPixel(pixel),
+        );
+      }
+      // #if DEBUG
+      expect(missingTileRaster.allocatedTileCount).toBe(0);
+      expect(allocatedEmptyTileRaster.allocatedTileCount).toBe(1);
+      // #endif
+    },
+  );
+
+  it("distinguishes erase from clear for hidden RGB data", () => {
+    const raster = new Raster({ tileSize: 2 });
+    const pixel = { x: 0, y: 0 };
+
+    raster.setPixel(pixel, { r: 255, g: 10, b: 20, a: 255 });
+    raster.erasePixel(pixel, 1);
+
+    expect(raster.getPixel(pixel)).toEqual({ r: 255, g: 10, b: 20, a: 0 });
+    // #if DEBUG
+    expect(raster.allocatedTileCount).toBe(1);
+    // #endif
+
+    raster.clear();
+
+    expect(raster.getPixel(pixel)).toEqual(TRANSPARENT_BLACK);
+    // #if DEBUG
+    expect(raster.allocatedTileCount).toBe(0);
+    // #endif
+  });
 });
 
 describe("Raster sparse tile allocation", () => {

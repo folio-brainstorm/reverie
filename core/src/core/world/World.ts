@@ -9,6 +9,7 @@ import type { LayerRemovalObserver } from "../../interfaces/world/LayerRemovalOb
 import type { RasterLayerMutation } from "../../interfaces/world/RasterLayerMutation.js";
 import type { WorldMutation } from "../../interfaces/world/WorldMutation.js";
 import type { WorldMutationObserver } from "../../interfaces/world/WorldMutationObserver.js";
+import type { WorldRasterStatistics } from "../../interfaces/world/WorldRasterStatistics.js";
 
 import {
   DEFAULT_WORLD_TILE_SIZE,
@@ -30,6 +31,7 @@ import {
 import { CoordCoverter } from "../../utils/number/coords/CoordCoverter.js";
 import { isValidCoord } from "../../utils/number/coords/isValidCoord.js";
 import { isValidTileSize } from "../../utils/number/tile/IsValidTileSize.js";
+import { isValidWorldBounds } from "../../utils/number/world/IsValidWorldBounds.js";
 import { Raster } from "../raster/Raster.js";
 import { RasterLayer } from "./RasterLayer.js";
 
@@ -72,6 +74,31 @@ export class World {
   }
 
   /**
+   * Returns aggregate sparse Raster-storage statistics for this World's Layers.
+   *
+   * The result is a query snapshot only: it does not include history, renderer,
+   * GPU, or runtime-memory resources and does not subscribe to future changes.
+   *
+   * @returns Total raw Tile storage plus independent statistics for each Layer.
+   */
+  getRasterStatistics(): WorldRasterStatistics {
+    const layers = this.layers.map((layer) => ({
+      id: layer.id,
+      statistics: layer.raster.getStatistics(),
+    }));
+    const tileCount = layers.reduce(
+      (total, layer) => total + layer.statistics.tileCount,
+      0,
+    );
+    const rawPixelBytes = layers.reduce(
+      (total, layer) => total + layer.statistics.rawPixelBytes,
+      0,
+    );
+
+    return { tileCount, rawPixelBytes, layers };
+  }
+
+  /**
    * Creates a world using explicit configuration or the current runtime defaults.
    *
    * An invalid runtime default is replaced with `DEFAULT_WORLD_TILE_SIZE` and
@@ -99,7 +126,7 @@ export class World {
 
     const bounds = config.bounds ?? null;
 
-    if (bounds !== null && !World.isValidBounds(bounds)) {
+    if (bounds !== null && !isValidWorldBounds(bounds)) {
       throw ReverieRangeError.from(ErrorDefinitions.WORLD.INVALID_BOUNDS);
     }
 
@@ -544,32 +571,4 @@ export class World {
     return CoordCoverter.World.locateWorldPixel(coord, this.config.tileSize);
   }
 
-  /** Determines whether a candidate is a valid finite World region. */
-  private static isValidBounds(bounds: unknown): bounds is WorldBounds {
-    if (typeof bounds !== "object" || bounds === null) {
-      return false;
-    }
-
-    if (
-      !("x" in bounds) ||
-      !("y" in bounds) ||
-      !("width" in bounds) ||
-      !("height" in bounds)
-    ) {
-      return false;
-    }
-
-    return (
-      typeof bounds.x === "number" &&
-      Number.isSafeInteger(bounds.x) &&
-      typeof bounds.y === "number" &&
-      Number.isSafeInteger(bounds.y) &&
-      typeof bounds.width === "number" &&
-      Number.isSafeInteger(bounds.width) &&
-      bounds.width > 0 &&
-      typeof bounds.height === "number" &&
-      Number.isSafeInteger(bounds.height) &&
-      bounds.height > 0
-    );
-  }
 }

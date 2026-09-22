@@ -121,6 +121,42 @@ export class Tile {
   }
 
   /**
+   * Reports whether a local rectangular region contains any non-zero RGBA byte.
+   *
+   * @param bounds - Positive half-open region wholly contained in this Tile.
+   * @returns Whether at least one stored channel in the region is non-zero.
+   * @throws {ReverieRangeError} The region is invalid or extends outside the Tile.
+   */
+  hasContent(bounds: Rect): boolean {
+    this.validateRegion(bounds);
+    for (let y = bounds.y; y < bounds.y + bounds.height; y += 1) {
+      const firstIndex = this.getPixelBufferOffset({ x: bounds.x, y });
+      const finalIndex = firstIndex + bounds.width * 4;
+      for (let index = firstIndex; index < finalIndex; index += 1) {
+        if (this.pixels[index] !== 0) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Clears a local rectangular region to transparent black and marks it dirty.
+   *
+   * @param bounds - Positive half-open region wholly contained in this Tile.
+   * @throws {ReverieRangeError} The region is invalid or extends outside the Tile.
+   */
+  clearRegion(bounds: Rect): void {
+    this.validateRegion(bounds);
+    for (let y = bounds.y; y < bounds.y + bounds.height; y += 1) {
+      const firstIndex = this.getPixelBufferOffset({ x: bounds.x, y });
+      this.pixels.fill(0, firstIndex, firstIndex + bounds.width * 4);
+    }
+    this.markRegionWritten(bounds.x, bounds.y, bounds.width, bounds.height);
+  }
+
+  /**
    * Marks all pending pixel changes as processed.
    */
   resetDirtyBounds(): void {
@@ -129,20 +165,30 @@ export class Tile {
 
   /** Expands the half-open dirty rectangle to include one validated pixel. */
   private markPixelWritten(x: number, y: number): void {
+    this.markRegionWritten(x, y, 1, 1);
+  }
+
+  /** Expands the half-open dirty rectangle to include one validated local region. */
+  private markRegionWritten(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ): void {
     this.currentRevision += 1;
 
     if (this.currentDirtyBounds === null) {
-      this.currentDirtyBounds = { x, y, width: 1, height: 1 };
+      this.currentDirtyBounds = { x, y, width, height };
       return;
     }
 
     const right = Math.max(
       this.currentDirtyBounds.x + this.currentDirtyBounds.width,
-      x + 1,
+      x + width,
     );
     const bottom = Math.max(
       this.currentDirtyBounds.y + this.currentDirtyBounds.height,
-      y + 1,
+      y + height,
     );
     const left = Math.min(this.currentDirtyBounds.x, x);
     const top = Math.min(this.currentDirtyBounds.y, y);
@@ -153,6 +199,32 @@ export class Tile {
       width: right - left,
       height: bottom - top,
     };
+  }
+
+  /** Rejects invalid or out-of-range local half-open rectangular regions. */
+  private validateRegion(bounds: Rect): void {
+    const hasValidComponents =
+      Number.isSafeInteger(bounds.x) &&
+      Number.isSafeInteger(bounds.y) &&
+      Number.isSafeInteger(bounds.width) &&
+      bounds.width > 0 &&
+      Number.isSafeInteger(bounds.height) &&
+      bounds.height > 0;
+    const isOutsideTile =
+      bounds.x < 0 ||
+      bounds.y < 0 ||
+      bounds.x >= this.size ||
+      bounds.y >= this.size ||
+      bounds.width > this.size - bounds.x ||
+      bounds.height > this.size - bounds.y;
+    if (hasValidComponents && !isOutsideTile) {
+      return;
+    }
+
+    throw ReverieRangeError.from(
+      ErrorDefinitions.TILE.LOCAL_PIXEL_COORDINATE_OUT_OF_BOUNDS,
+      { x: bounds.x, y: bounds.y, tileSize: this.size },
+    );
   }
 
   /** Rejects coordinates that cannot address a pixel in this tile. */

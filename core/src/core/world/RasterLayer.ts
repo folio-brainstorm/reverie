@@ -200,6 +200,16 @@ export class RasterLayer {
     this.paintTarget.stamp(brush, position, input, selection);
   }
 
+  /**
+   * Removes every allocated Tile while preserving this Layer and its metadata.
+   *
+   * Callers that require Undo should execute this operation inside their
+   * existing Raster history transaction.
+   */
+  clear(): void {
+    this.raster.clear();
+  }
+
   /** Invokes current validation observers before changing a property. */
   private notifyBeforeMutation(mutation: RasterLayerMutation): void {
     for (const observer of [...this.mutationObservers]) {

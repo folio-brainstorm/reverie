@@ -113,4 +113,33 @@ describe("Raster renderer bridge", () => {
     expect(raster.allocatedTileCount).toBe(0);
     // #endif
   });
+
+  it("makes cleared Tile state unavailable to renderer-facing queries", () => {
+    const raster = new Raster({ tileSize: TILE_SIZE });
+    const coord: TileCoord = { x: 0, y: 0 };
+    raster.setPixel({ x: 0, y: 0 }, { r: 10, g: 20, b: 30, a: 40 });
+
+    expect(getRasterTileVersion(raster, coord)).toBeDefined();
+    raster.clear();
+
+    expect(getRasterTilePixels(raster, coord)).toBeUndefined();
+    expect(getRasterTileVersion(raster, coord)).toBeUndefined();
+    expect(getRasterTileView(raster, coord)).toBeUndefined();
+  });
+
+  it("keeps hidden RGB distinct from a canonical-empty Tile payload", () => {
+    const emptyRaster = new Raster({ tileSize: TILE_SIZE });
+    const hiddenRgbRaster = new Raster({ tileSize: TILE_SIZE });
+    emptyRaster.setPixel({ x: 0, y: 0 }, { r: 0, g: 0, b: 0, a: 0 });
+    hiddenRgbRaster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 0 });
+
+    expect(
+      Array.from(getRasterTilePixels(emptyRaster, { x: 0, y: 0 }) ?? []),
+    ).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    expect(
+      Array.from(getRasterTilePixels(hiddenRgbRaster, { x: 0, y: 0 }) ?? []),
+    ).toEqual([
+      255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    ]);
+  });
 });

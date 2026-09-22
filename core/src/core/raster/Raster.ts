@@ -4,6 +4,8 @@ import type {
   PixelLocation,
 } from "../../interfaces/pixel/PixelCoords.js";
 import type { RasterConfig } from "../../interfaces/raster/Raster.js";
+import type { RasterStatistics } from "../../interfaces/raster/RasterStatistics.js";
+import type { WorldBounds } from "../../interfaces/world/WorldBounds.js";
 
 import { TRANSPARENT_RGBA } from "../../config/color/ColorConstants.js";
 import {
@@ -19,6 +21,7 @@ import { CoordCoverter } from "../../utils/number/coords/CoordCoverter.js";
 import { isValidCoord } from "../../utils/number/coords/isValidCoord.js";
 import { isUnitInterval } from "../../utils/number/math/IsUnitInterval.js";
 import { isValidTileSize } from "../../utils/number/tile/IsValidTileSize.js";
+import { isValidWorldBounds } from "../../utils/number/world/IsValidWorldBounds.js";
 import { blendSourceOver } from "../paint/BlendSourceOver.js";
 import { registerRasterTileStore } from "../renderer/RasterRenderBridge.js";
 import { TileStore } from "../tile/index.js";
@@ -174,8 +177,94 @@ export class Raster {
 
   /** Removes every allocated tile, returning the raster to empty sparse state. */
   clear(): void {
+    if (this.tileStore.size === 0) {
+      return;
+    }
+
     captureAllocatedRasterTilesBeforeClear(this);
     this.tileStore.clear();
+  }
+
+  /**
+   * Returns a snapshot of this Raster's allocated sparse-storage structure.
+   *
+   * The result counts raw RGBA8 Tile payloads, including all-zero Tiles, but
+   * excludes JavaScript, renderer, history, and process-memory overhead.
+   *
+   * @returns Current Tile count, raw pixel bytes, and allocated Tile bounds.
+   */
+  getStatistics(): RasterStatistics {
+    return this.tileStore.getStatistics();
+  }
+
+  /**
+   * Removes Raster content inside an integer, half-open world region.
+   *
+   * Fully covered allocated Tiles are released directly. Partially covered
+   * Tiles retain their allocation, even when their resulting pixels happen to
+   * be transparent, so this operation does not perform implicit compaction.
+   * Missing Tiles are never allocated.
+   *
+   * @param bounds - Positive finite world-pixel region to clear.
+   * @throws {ReverieRangeError} The bounds are invalid or extend beyond safe
+   * world-pixel coordinates.
+   */
+  clearRegion(bounds: WorldBounds): void {
+    if (!isValidWorldBounds(bounds)) {
+      throw ReverieRangeError.from(ErrorDefinitions.WORLD.INVALID_BOUNDS);
+    }
+    const lastPixel: PixelCoord = {
+      x: bounds.x + (bounds.width - 1),
+      y: bounds.y + (bounds.height - 1),
+    };
+    const firstLocation = this.locateValidPixel(bounds);
+    const lastLocation = this.locateValidPixel(lastPixel);
+
+    this.tileStore.forEach((tile, coord) => {
+      const isOutsideRegion =
+        coord.x < firstLocation.tile.x ||
+        coord.x > lastLocation.tile.x ||
+        coord.y < firstLocation.tile.y ||
+        coord.y > lastLocation.tile.y;
+      if (isOutsideRegion) {
+        return;
+      }
+
+      const left = coord.x === firstLocation.tile.x ? firstLocation.local.x : 0;
+      const top = coord.y === firstLocation.tile.y ? firstLocation.local.y : 0;
+      const right =
+        coord.x === lastLocation.tile.x
+          ? lastLocation.local.x + 1
+          : this.tileSize;
+      const bottom =
+        coord.y === lastLocation.tile.y
+          ? lastLocation.local.y + 1
+          : this.tileSize;
+      const isEntireTileCovered =
+        left === 0 &&
+        top === 0 &&
+        right === this.tileSize &&
+        bottom === this.tileSize;
+
+      if (isEntireTileCovered) {
+        captureRasterTileBeforeWrite(this, coord.x, coord.y);
+        this.tileStore.delete(coord);
+        return;
+      }
+
+      const tileBounds = {
+        x: left,
+        y: top,
+        width: right - left,
+        height: bottom - top,
+      };
+      if (!tile.hasContent(tileBounds)) {
+        return;
+      }
+
+      captureRasterTileBeforeWrite(this, coord.x, coord.y);
+      tile.clearRegion(tileBounds);
+    });
   }
 
   /**
@@ -203,4 +292,5 @@ export class Raster {
   private locateValidPixel(pixel: PixelCoord): PixelLocation {
     return CoordCoverter.World.locateWorldPixel(pixel, this.tileSize);
   }
+
 }

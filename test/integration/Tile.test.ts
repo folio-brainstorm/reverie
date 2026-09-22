@@ -196,3 +196,35 @@ describe("Tile dirty bounds", () => {
     });
   });
 });
+
+describe("Tile rectangular regions", () => {
+  it("clears raw RGBA content in a local region and marks that region dirty", () => {
+    const tile = new Tile({ size: TILE_SIZE });
+    tile.setPixel({ x: 1, y: 1 }, { r: 255, g: 0, b: 0, a: 0 });
+    tile.setPixel({ x: 3, y: 3 }, TEST_COLOR);
+    tile.resetDirtyBounds();
+    const region = { x: 1, y: 1, width: 2, height: 2 };
+
+    expect(tile.hasContent(region)).toBe(true);
+    tile.clearRegion(region);
+
+    expect(tile.getPixel({ x: 1, y: 1 })).toEqual(TRANSPARENT_BLACK);
+    expect(tile.getPixel({ x: 3, y: 3 })).toEqual(TEST_COLOR);
+    expect(tile.hasContent(region)).toBe(false);
+    expect(tile.dirtyBounds).toEqual(region);
+  });
+
+  it.each([
+    { x: -1, y: 0, width: 1, height: 1 },
+    { x: 0, y: 0, width: 0, height: 1 },
+    { x: 3, y: 0, width: 2, height: 1 },
+    { x: 0, y: 3, width: 1, height: 2 },
+  ])("rejects invalid local region $x,$y,$width,$height", (region) => {
+    const tile = new Tile({ size: TILE_SIZE });
+
+    expect(() => tile.hasContent(region)).toThrow(ReverieRangeError);
+    expect(() => tile.clearRegion(region)).toThrow(
+      `[${ErrorCodes.TILE.LOCAL_PIXEL_COORDINATE_OUT_OF_BOUNDS}]`,
+    );
+  });
+});

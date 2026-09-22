@@ -154,6 +154,22 @@ describe("TileStore sparse storage", () => {
       expect(store.get(coord)).toBeUndefined();
     });
   });
+
+  it("returns exact bounds after consecutive extremal Tile removals", () => {
+    const store = new TileStore({ tileSize: TILE_SIZE });
+    store.create({ x: -1, y: 0 });
+    store.create({ x: 0, y: 0 });
+    store.create({ x: 1, y: 0 });
+
+    store.delete({ x: -1, y: 0 });
+    store.delete({ x: 0, y: 0 });
+
+    expect(store.getStatistics()).toEqual({
+      tileCount: 1,
+      rawPixelBytes: TILE_SIZE * TILE_SIZE * 4,
+      tileBounds: { minX: 1, minY: 0, maxX: 1, maxY: 0 },
+    });
+  });
 });
 
 describe("TileStore coordinate validation", () => {

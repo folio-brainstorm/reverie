@@ -96,6 +96,10 @@ export type { RasterLayerMutationObserver } from "./src/interfaces/world/RasterL
 export type { WorldMutation } from "./src/interfaces/world/WorldMutation.js";
 export type { WorldMutationObserver } from "./src/interfaces/world/WorldMutationObserver.js";
 export type { RasterConfig } from "./src/interfaces/raster/Raster.js";
+export type { RasterStatistics } from "./src/interfaces/raster/RasterStatistics.js";
+export type { TileBounds } from "./src/interfaces/tile/TileBounds.js";
+export type { RasterLayerStatistics } from "./src/interfaces/world/RasterLayerStatistics.js";
+export type { WorldRasterStatistics } from "./src/interfaces/world/WorldRasterStatistics.js";
 export type { SelectionMaskConfig } from "./src/interfaces/selection/SelectionMaskConfig.js";
 export type { RGBAColor } from "./src/interfaces/color/Colors.js";
 export type { LocalPixelCoord } from "./src/interfaces/pixel/LocalPixelCoord.js";
