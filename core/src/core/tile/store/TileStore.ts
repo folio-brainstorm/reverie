@@ -1,5 +1,7 @@
-import type { TileStoreConfig } from "../../../interfaces/tile/store/TileStore.js";
+import type { RasterStatistics } from "../../../interfaces/raster/RasterStatistics.js";
+import type { TileBounds } from "../../../interfaces/tile/TileBounds.js";
 import type { TileCoord } from "../../../interfaces/tile/TileCoord.js";
+import type { TileStoreConfig } from "../../../interfaces/tile/store/TileStore.js";
 
 import { ErrorDefinitions } from "../../../utils/errors/ErrorDefinitions.js";
 import {
@@ -24,6 +26,19 @@ export class TileStore {
   /** Sparse tile storage keyed by an internal, unambiguous coordinate string. */
   private readonly tiles = new Map<string, Tile>();
 
+  /** Incrementally maintained structure metrics for the owned sparse storage. */
+  private storageStatistics: RasterStatistics = {
+    tileCount: 0,
+    rawPixelBytes: 0,
+    tileBounds: null,
+  };
+
+  /** Whether a boundary deletion deferred coordinate-bound recomputation. */
+  private hasStaleTileBounds = false;
+
+  /** Raw RGBA8 payload bytes contributed by each uniformly sized Tile. */
+  private readonly rawPixelBytesPerTile: number;
+
   /**
    * Creates an empty sparse tile store.
    *
@@ -40,6 +55,7 @@ export class TileStore {
     }
 
     this.tileSize = tileSize;
+    this.rawPixelBytesPerTile = tileSize * tileSize * 4;
   }
 
   /**
@@ -49,6 +65,35 @@ export class TileStore {
    */
   get size(): number {
     return this.tiles.size;
+  }
+
+  /**
+   * Returns a defensive snapshot of the current sparse-storage structure.
+   *
+   * The snapshot is maintained without inspecting Tile pixel payloads. A prior
+   * boundary deletion may defer a coordinate-only bounds rebuild until this query.
+   *
+   * @returns Allocated Tile count, raw RGBA8 bytes, and Tile-coordinate extent.
+   */
+  getStatistics(): RasterStatistics {
+    if (this.hasStaleTileBounds) {
+      this.recalculateTileBounds();
+      this.hasStaleTileBounds = false;
+    }
+    const { tileBounds } = this.storageStatistics;
+    return {
+      ...this.storageStatistics,
+      tileBounds: tileBounds === null ? null : { ...tileBounds },
+    };
+  }
+
+  /**
+   * Returns the tracked raw RGBA8 payload byte count without resolving bounds.
+   *
+   * @returns Combined payload bytes for currently allocated Tiles.
+   */
+  getRawPixelBytes(): number {
+    return this.storageStatistics.rawPixelBytes;
   }
 
   /**
@@ -70,7 +115,7 @@ export class TileStore {
     }
 
     const tile = this.createTile();
-    this.tiles.set(key, tile);
+    this.storeTile(key, coord, tile);
     return tile;
   }
 
@@ -90,7 +135,7 @@ export class TileStore {
     }
 
     const tile = this.createTile();
-    this.tiles.set(key, tile);
+    this.storeTile(key, { x, y }, tile);
     return tile;
   }
 
@@ -114,7 +159,7 @@ export class TileStore {
     }
 
     const tile = this.createTile();
-    this.tiles.set(key, tile);
+    this.storeTile(key, coord, tile);
     return tile;
   }
 
@@ -161,12 +206,24 @@ export class TileStore {
    * @throws {ReverieRangeError} A coordinate component is not a safe integer.
    */
   delete(coord: TileCoord): boolean {
-    return this.tiles.delete(this.tileCoordToKey(coord));
+    const key = this.tileCoordToKey(coord);
+    if (!this.tiles.delete(key)) {
+      return false;
+    }
+
+    this.removeStoredTile(coord);
+    return true;
   }
 
   /** Removes every tile from the store. Existing external references remain valid. */
   clear(): void {
     this.tiles.clear();
+    this.storageStatistics = {
+      tileCount: 0,
+      rawPixelBytes: 0,
+      tileBounds: null,
+    };
+    this.hasStaleTileBounds = false;
   }
 
   /**
@@ -188,6 +245,46 @@ export class TileStore {
     return new Tile({ size: this.tileSize });
   }
 
+  /** Records a newly allocated Tile in the sparse store and its metrics. */
+  private storeTile(key: string, coord: TileCoord, tile: Tile): void {
+    this.tiles.set(key, tile);
+    const tileBounds = this.storageStatistics.tileBounds;
+    this.storageStatistics.tileCount += 1;
+    this.storageStatistics.rawPixelBytes += this.rawPixelBytesPerTile;
+    this.storageStatistics.tileBounds = expandTileBounds(tileBounds, coord);
+  }
+
+  /** Updates metrics after removing one existing Tile without reading its pixels. */
+  private removeStoredTile(coord: TileCoord): void {
+    const tileBounds = this.storageStatistics.tileBounds;
+    this.storageStatistics.tileCount -= 1;
+    this.storageStatistics.rawPixelBytes -= this.rawPixelBytesPerTile;
+    if (this.storageStatistics.tileCount === 0) {
+      this.storageStatistics.tileBounds = null;
+      this.hasStaleTileBounds = false;
+      return;
+    }
+
+    const isBoundaryTile =
+      tileBounds !== null &&
+      (coord.x === tileBounds.minX ||
+        coord.x === tileBounds.maxX ||
+        coord.y === tileBounds.minY ||
+        coord.y === tileBounds.maxY);
+    if (isBoundaryTile) {
+      this.hasStaleTileBounds = true;
+    }
+  }
+
+  /** Rebuilds sparse coordinate bounds after deferred boundary removals. */
+  private recalculateTileBounds(): void {
+    let tileBounds: TileBounds | null = null;
+    this.forEach((_, coord) => {
+      tileBounds = expandTileBounds(tileBounds, coord);
+    });
+    this.storageStatistics.tileBounds = tileBounds;
+  }
+
   /**
    * Validates a tile coordinate and encodes it as an internal collision-free key.
    *
@@ -204,4 +301,21 @@ export class TileStore {
 
     return `${coord.x}:${coord.y}`;
   }
+}
+
+/** Extends optional inclusive Tile-coordinate bounds to contain one coordinate. */
+function expandTileBounds(
+  tileBounds: TileBounds | null,
+  coord: TileCoord,
+): TileBounds {
+  if (tileBounds === null) {
+    return { minX: coord.x, minY: coord.y, maxX: coord.x, maxY: coord.y };
+  }
+
+  return {
+    minX: Math.min(tileBounds.minX, coord.x),
+    minY: Math.min(tileBounds.minY, coord.y),
+    maxX: Math.max(tileBounds.maxX, coord.x),
+    maxY: Math.max(tileBounds.maxY, coord.y),
+  };
 }

@@ -38,6 +38,38 @@ describe("Raster serialization", () => {
     });
   });
 
+  it(
+    "preserves pixel semantics for missing and redundantly allocated empty Tiles",
+    () => {
+      const missingTileRaster = new Raster({ tileSize: 2 });
+      const allocatedEmptyTileRaster = new Raster({ tileSize: 2 });
+      allocatedEmptyTileRaster.setPixel({ x: 0, y: 0 }, {
+        r: 0,
+        g: 0,
+        b: 0,
+        a: 0,
+      });
+
+      const restoredMissingTileRaster = deserializeRaster(
+        serializeRaster(missingTileRaster),
+      );
+      const restoredAllocatedEmptyTileRaster = deserializeRaster(
+        serializeRaster(allocatedEmptyTileRaster),
+      );
+
+      for (const pixel of [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 0, y: 1 },
+        { x: 1, y: 1 },
+      ]) {
+        expect(restoredAllocatedEmptyTileRaster.getPixel(pixel)).toEqual(
+          restoredMissingTileRaster.getPixel(pixel),
+        );
+      }
+    },
+  );
+
   it("serializes only allocated tiles in deterministic tile-Y then tile-X order", () => {
     const raster = new Raster({ tileSize: 2 });
     raster.setPixel({ x: 4, y: -2 }, { r: 1, g: 2, b: 3, a: 4 });

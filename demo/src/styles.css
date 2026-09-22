@@ -499,6 +499,45 @@ summary {
   font-size: 0.68rem;
 }
 
+.storage-statistics {
+  display: grid;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.storage-statistics .layers-eyebrow {
+  margin: 0;
+}
+
+.storage-statistics dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.storage-statistics dl > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.storage-statistics dt {
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+
+.storage-statistics dd {
+  margin: 0;
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .layers-toggle {
   min-height: 34px;
   border-color: var(--border);
@@ -661,6 +700,18 @@ summary {
   color: var(--text);
   background: var(--page);
   font-size: 0.68rem;
+}
+
+.layer-statistics {
+  grid-column: 1 / -1;
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.61rem;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .layer-actions {
@@ -894,6 +945,7 @@ summary:focus-visible {
     font-size: 0.65rem;
   }
   .canvas-metrics .pan-metric,
+  .canvas-metrics .storage-metric,
   .canvas-metrics small {
     display: none;
   }

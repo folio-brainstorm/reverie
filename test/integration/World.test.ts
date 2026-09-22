@@ -69,6 +69,7 @@ describe("World bounds", () => {
     { x: 0, y: 0, width: 1.5, height: 1 },
     { x: 0, y: 0, width: 1, height: 0 },
     { x: 0, y: 0, width: 1, height: Number.MAX_SAFE_INTEGER + 1 },
+    { x: Number.MAX_SAFE_INTEGER, y: 0, width: 2, height: 1 },
   ])("rejects invalid bounds $x,$y,$width,$height", (bounds) => {
     const createWorld = () => new World({ bounds });
 

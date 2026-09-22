@@ -75,6 +75,31 @@ describe("Document runtime hydration", () => {
     expect(second).toEqual(first);
   });
 
+  it(
+    "preserves Raster pixels outside finite World bounds through a document round-trip",
+    () => {
+      const source = new World({
+        tileSize: 2,
+        bounds: { x: 0, y: 0, width: 2, height: 2 },
+      });
+      source
+        .getLayer(0)
+        .raster.setPixel({ x: 10, y: -10 }, { r: 1, g: 2, b: 3, a: 4 });
+
+      const hydrated = deserializeDocument(serializeDocument(source));
+
+      expect(hydrated.bounds).toEqual({ x: 0, y: 0, width: 2, height: 2 });
+      expect(hydrated.getLayer(0).raster.getPixel({ x: 10, y: -10 })).toEqual(
+        {
+          r: 1,
+          g: 2,
+          b: 3,
+          a: 4,
+        },
+      );
+    },
+  );
+
   it("rejects malformed input without mutating an unrelated runtime World", () => {
     const existing = new World({ id: "existing-world", tileSize: 2 });
     existing
