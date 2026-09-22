@@ -23,7 +23,7 @@ import { isUnitInterval } from "../../utils/number/math/IsUnitInterval.js";
 import { isValidTileSize } from "../../utils/number/tile/IsValidTileSize.js";
 import { isValidWorldBounds } from "../../utils/number/world/IsValidWorldBounds.js";
 import { blendSourceOver } from "../paint/BlendSourceOver.js";
-import { registerRasterTileStore } from "../renderer/RasterRenderBridge.js";
+import { registerRasterTileStore } from "../rendering/bridge/RasterRenderBridge.js";
 import { TileStore } from "../tile/index.js";
 
 const DEFAULT_RASTER_TILE_SIZE = 256;

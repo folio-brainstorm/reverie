@@ -73,4 +73,10 @@ export default class CanvasLodCache {
     this.currentByteCost -= entry.byteCost;
     this.entries.delete(key);
   }
+
+  /** Removes every retained derived surface and resets the tracked byte cost. */
+  clear(): void {
+    this.entries.clear();
+    this.currentByteCost = 0;
+  }
 }

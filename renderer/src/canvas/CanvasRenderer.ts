@@ -585,6 +585,13 @@ export class CanvasRenderer<
     this.currentPixelRatio = pixelRatio;
   }
 
+  /** Releases cached canvas surfaces retained by this renderer. */
+  dispose(): void {
+    this.worldCompositeTileCache.clear();
+    this.derivedLodCache.clear();
+    this.frameSurface = undefined;
+  }
+
   /** Draws one allocated tile, uploading only when its version changed. */
   private renderTile(raster: Raster, coord: TileCoord): void {
     const version = getRasterTileVersion(raster, coord);

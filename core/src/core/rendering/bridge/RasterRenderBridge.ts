@@ -1,12 +1,12 @@
-import type { RasterTileSnapshot } from "../../interfaces/history/RasterTileSnapshot.js";
-import type { RasterTileVersion } from "../../interfaces/renderer/RasterTileVersion.js";
-import type { RasterTileView } from "../../interfaces/renderer/RasterTileView.js";
-import type { TileCoord } from "../../interfaces/tile/TileCoord.js";
-import type { Raster } from "../raster/Raster.js";
-import type { Tile } from "../tile/Tile.js";
-import type { TileStore } from "../tile/store/TileStore.js";
+import type { RasterTileSnapshot } from "../../../interfaces/history/RasterTileSnapshot.js";
+import type { RasterTileVersion } from "../../../interfaces/renderer/RasterTileVersion.js";
+import type { RasterTileView } from "../../../interfaces/renderer/RasterTileView.js";
+import type { TileCoord } from "../../../interfaces/tile/TileCoord.js";
+import type { Raster } from "../../raster/Raster.js";
+import type { Tile } from "../../tile/Tile.js";
+import type { TileStore } from "../../tile/store/TileStore.js";
 
-import { captureRasterTileBeforeWrite } from "../../internal/history/ActiveRasterHistoryTransaction.js";
+import { captureRasterTileBeforeWrite } from "../../../internal/history/ActiveRasterHistoryTransaction.js";
 
 const RASTER_TILE_STORES = new WeakMap<Raster, TileStore>();
 const TILE_PIXEL_BUFFERS = new WeakMap<Tile, Uint8ClampedArray>();

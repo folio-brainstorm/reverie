@@ -1,7 +1,7 @@
 import type { SerializedRasterV1 } from "../../interfaces/document/SerializedRasterV1.js";
 import type { Raster } from "../raster/Raster.js";
 
-import { getAllocatedRasterTileSnapshots } from "../renderer/RasterRenderBridge.js";
+import { getAllocatedRasterTileSnapshots } from "../rendering/bridge/RasterRenderBridge.js";
 
 /**
  * Creates an independent, sparse V1 representation of a Raster's RGBA8 tiles.

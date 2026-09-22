@@ -1,5 +1,5 @@
-import type { RenderSource } from "../../interfaces/renderer/RenderSource.js";
-import type { RenderSourceSnapshot } from "../../interfaces/renderer/RenderSourceSnapshot.js";
+import type { RenderSource } from "../../../interfaces/renderer/RenderSource.js";
+import type { RenderSourceSnapshot } from "../../../interfaces/renderer/RenderSourceSnapshot.js";
 
 /**
  * Captures an owned, shallow-frozen dependency snapshot with exactly one source.

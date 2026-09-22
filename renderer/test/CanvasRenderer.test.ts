@@ -291,6 +291,7 @@ describe("CanvasRenderer construction", () => {
     const renderer: Renderer = new CanvasRenderer(config);
 
     expect(renderer).toBeInstanceOf(CanvasRenderer);
+    expect(() => renderer.dispose()).not.toThrow();
   });
 
   it("keeps its dependencies fixed after construction", () => {

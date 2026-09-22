@@ -4,7 +4,7 @@ import type { SerializedRasterV1 } from "../../interfaces/document/SerializedRas
 import { ErrorDefinitions } from "../../utils/errors/ErrorDefinitions.js";
 import { ReverieError } from "../../utils/errors/ReverieErrors.js";
 import { Raster } from "../raster/Raster.js";
-import { restoreRasterTileSnapshot } from "../renderer/RasterRenderBridge.js";
+import { restoreRasterTileSnapshot } from "../rendering/bridge/RasterRenderBridge.js";
 import { parseRaster } from "./ParseRaster.js";
 
 /**

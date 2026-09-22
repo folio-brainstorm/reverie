@@ -1,5 +1,5 @@
-import type { World } from "../world/World.js";
-import type { RasterLayer } from "../world/RasterLayer.js";
+import type { World } from "../../world/World.js";
+import type { RasterLayer } from "../../world/RasterLayer.js";
 
 /**
  * Enumerates contributing layers in Normal / Source Over stacking order.

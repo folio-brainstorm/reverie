@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { Raster } from "@reverie/core";
+import type { Renderer as RootRenderer } from "@reverie/core";
 import {
   getRasterTilePixels,
   getRasterTileVersion,
@@ -13,10 +14,17 @@ const TILE_SIZE = 2;
 describe("Raster renderer bridge", () => {
   it("is available through the dedicated core renderer entry point", () => {
     const coord: TileCoord = { x: 0, y: 0 };
-    const renderer: Renderer = { render: () => undefined };
+    const renderer: Renderer = {
+      render: () => undefined,
+      resize: () => undefined,
+      dispose: () => undefined,
+    };
+    const rootRenderer: RootRenderer = renderer;
     const raster = new Raster({ tileSize: TILE_SIZE });
 
     renderer.render();
+    rootRenderer.resize(100, 100);
+    rootRenderer.dispose();
 
     expect(getRasterTilePixels(raster, coord)).toBeUndefined();
   });

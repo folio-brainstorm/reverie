@@ -1,8 +1,8 @@
-import { MAX_CHANNEL_VALUE } from "../../config/color/RgbaChannelConstants.js";
-import type { LayerBlendMode } from "../../interfaces/world/LayerBlendMode.js";
-import { blendRgbChannel } from "../../internal/color/BlendRgbChannel.js";
-import { blendSourceOverChannel } from "../../internal/color/BlendSourceOverChannel.js";
-import { roundAndClampChannel } from "../../internal/color/RoundAndClampChannel.js";
+import { MAX_CHANNEL_VALUE } from "../../../config/color/RgbaChannelConstants.js";
+import type { LayerBlendMode } from "../../../interfaces/world/LayerBlendMode.js";
+import { blendRgbChannel } from "../../../internal/color/BlendRgbChannel.js";
+import { blendSourceOverChannel } from "../../../internal/color/BlendSourceOverChannel.js";
+import { roundAndClampChannel } from "../../../internal/color/RoundAndClampChannel.js";
 
 /**
  * Composes one straight-alpha RGBA8 pixel into a dense destination in place.

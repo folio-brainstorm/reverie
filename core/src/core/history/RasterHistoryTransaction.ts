@@ -13,7 +13,7 @@ import { RasterTileHistoryEntry } from "../../internal/history/RasterTileHistory
 import {
   getAllocatedRasterTileSnapshots,
   getRasterTilePixels,
-} from "../renderer/RasterRenderBridge.js";
+} from "../rendering/bridge/RasterRenderBridge.js";
 import type { Raster } from "../raster/Raster.js";
 
 /** Captures one asynchronous Raster edit as a single before/after history entry. */

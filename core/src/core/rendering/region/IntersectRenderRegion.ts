@@ -1,5 +1,5 @@
-import type { WorldRect } from "../../interfaces/camera/WorldRect.js";
-import type { WorldBounds } from "../../interfaces/world/WorldBounds.js";
+import type { WorldRect } from "../../../interfaces/camera/WorldRect.js";
+import type { WorldBounds } from "../../../interfaces/world/WorldBounds.js";
 
 /**
  * Intersects a validated render region with optional half-open document bounds.

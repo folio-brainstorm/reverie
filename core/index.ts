@@ -117,3 +117,7 @@ export type {
 } from "./src/interfaces/rasterizers/Rasterizers.js";
 export type { Rect } from "./src/interfaces/pixel/Rect.js";
 export type { TileConfig } from "./src/interfaces/tile/Tile.js";
+export type { Renderer } from "./src/interfaces/renderer/Renderer.js";
+export type { RendererBackend } from "./src/interfaces/renderer/RendererBackend.js";
+export type { RenderTarget } from "./src/interfaces/renderer/RenderTarget.js";
+export type { RenderContext } from "./src/interfaces/renderer/RenderContext.js";
