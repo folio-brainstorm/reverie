@@ -86,6 +86,152 @@ describe("CanvasRenderer World composition", () => {
     render.mockRestore();
   });
 
+  it("presents sparse batches before their continuation completes", () => {
+    const { canvas, context } = createCanvasFixture(258, 2);
+    const raster = new Raster({ tileSize: 2 });
+    for (let x = 0; x < 258; x += 2) {
+      raster.setPixel({ x, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    }
+    const renderer = new CanvasRenderer({
+      canvas,
+      camera: new Camera(),
+      raster,
+    });
+
+    renderer.render();
+
+    expect(renderer.hasPendingRender).toBe(true);
+    const firstBatchDrawCount = vi.mocked(context.drawImage).mock.calls.length;
+    expect(firstBatchDrawCount).toBeGreaterThan(0);
+    expect(firstBatchDrawCount).toBeLessThan(129);
+
+    renderer.render();
+
+    expect(renderer.hasPendingRender).toBe(false);
+    expect(context.drawImage).toHaveBeenCalledTimes(129);
+  });
+
+  it("reprojects cached tiles when panning a fully visible bounded World", () => {
+    const { canvas, context } = createCanvasFixture(300, 4);
+    const world = new World({
+      tileSize: 2,
+      bounds: { x: 0, y: 0, width: 260, height: 2 },
+    });
+    for (let x = 0; x < 260; x += 2) {
+      world
+        .getLayer(0)
+        .raster.setPixel({ x, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    }
+    const camera = new Camera({ panX: -10, panY: -1 });
+    const renderer = new CanvasRenderer({ canvas, world, camera });
+
+    renderer.render();
+    expect(renderer.hasPendingRender).toBe(true);
+    vi.mocked(context.clearRect).mockClear();
+    vi.mocked(context.drawImage).mockClear();
+
+    camera.setPan(-12, -1);
+    renderer.render();
+
+    expect(context.clearRect).toHaveBeenCalledWith(0, 0, 300, 4);
+    expect(vi.mocked(context.drawImage).mock.calls[0]?.slice(1)).toEqual([
+      12, 1, 2, 2,
+    ]);
+    expect(renderer.hasPendingRender).toBe(true);
+  });
+
+  it("presents newly allocated tiles while the request is incomplete", () => {
+    const { canvas, context } = createCanvasFixture(260, 2);
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    const renderer = new CanvasRenderer({
+      canvas,
+      camera: new Camera(),
+      raster,
+    });
+
+    renderer.render();
+    vi.mocked(context.clearRect).mockClear();
+    for (let x = 2; x < 260; x += 2) {
+      raster.setPixel({ x, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    }
+    renderer.render();
+
+    expect(renderer.hasPendingRender).toBe(true);
+    expect(vi.mocked(context.drawImage).mock.calls.length).toBeGreaterThan(1);
+    expect(context.clearRect).not.toHaveBeenCalledWith(0, 0, 260, 2);
+  });
+
+  it("clears cached tiles when an unfinished request is invalidated", () => {
+    const { canvas, context } = createCanvasFixture(260, 2);
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    const renderer = new CanvasRenderer({
+      canvas,
+      camera: new Camera(),
+      raster,
+    });
+
+    renderer.render();
+    for (let x = 2; x < 260; x += 2) {
+      raster.setPixel({ x, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    }
+    renderer.render();
+    renderer.invalidate();
+
+    expect(renderer.hasPendingRender).toBe(false);
+    expect(vi.mocked(context.clearRect).mock.calls.at(-1)).toEqual([
+      0, 0, 260, 2,
+    ]);
+  });
+
+  it("refreshes tiles edited while a continuation is pending", () => {
+    const { canvas, tileContexts } = createCanvasFixture(260, 2);
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    const renderer = new CanvasRenderer({
+      canvas,
+      camera: new Camera(),
+      raster,
+    });
+
+    renderer.render();
+    for (let x = 2; x < 260; x += 2) {
+      raster.setPixel({ x, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    }
+    renderer.render();
+    raster.setPixel({ x: 0, y: 0 }, { r: 0, g: 0, b: 255, a: 255 });
+    renderer.markSourceChanged();
+    for (let index = 0; renderer.hasPendingRender && index < 10; index += 1) {
+      renderer.render();
+    }
+
+    expect(renderer.hasPendingRender).toBe(false);
+    const latestUpload = vi.mocked(tileContexts[0]?.putImageData).mock
+      .calls[1]?.[0];
+    expect(Array.from(latestUpload?.data.slice(0, 4) ?? [])).toEqual([
+      0, 0, 255, 255,
+    ]);
+  });
+
+  it("clears regions absent from a completed replacement frame", () => {
+    const { canvas, context } = createCanvasFixture(2, 2);
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    const renderer = new CanvasRenderer({
+      canvas,
+      camera: new Camera(),
+      raster,
+    });
+
+    renderer.render();
+    raster.clear();
+    renderer.render();
+
+    expect(context.clearRect).toHaveBeenCalledTimes(2);
+    expect(context.drawImage).toHaveBeenCalledOnce();
+  });
+
   it("renders a hydrated World through the normal composition path", () => {
     const { canvas, tileContexts } = createCanvasFixture(2, 2);
     const source = new World({ tileSize: 2 });

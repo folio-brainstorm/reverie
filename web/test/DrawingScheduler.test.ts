@@ -115,6 +115,31 @@ describe("DrawingScheduler frame execution", () => {
     expect(driver.pendingFrameCount).toBe(0);
   });
 
+  it("keeps requesting frames while presentation returns a continuation signal", () => {
+    const driver = new ManualFrameDriver();
+    const onRender = vi
+      .fn<(hasNewDrawingCommands: boolean) => boolean>()
+      .mockReturnValueOnce(true)
+      .mockReturnValueOnce(false);
+    const scheduler = new DrawingScheduler({
+      frameDriver: driver,
+      onRender,
+    });
+
+    scheduler.enqueue(createCommand(1, () => undefined));
+    driver.runNextFrame();
+
+    expect(scheduler.idle).toBe(false);
+    expect(driver.pendingFrameCount).toBe(1);
+    driver.runNextFrame();
+
+    expect(onRender).toHaveBeenCalledTimes(2);
+    expect(onRender).toHaveBeenNthCalledWith(1, true);
+    expect(onRender).toHaveBeenNthCalledWith(2, false);
+    expect(scheduler.idle).toBe(true);
+    expect(driver.pendingFrameCount).toBe(0);
+  });
+
   it("forwards the complete stamp context without interpreting dynamics", () => {
     const driver = new ManualFrameDriver();
     const raster = new Raster();

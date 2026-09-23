@@ -232,11 +232,25 @@ export class TileStore {
    * @param visitor - Synchronous reader receiving each Tile and owned coordinate.
    */
   forEach(visitor: (tile: Tile, coord: TileCoord) => void): void {
+    for (const { tile, coord } of this.entries()) {
+      visitor(tile, coord);
+    }
+  }
+
+  /**
+   * Iterates allocated Tiles without scanning absent coordinates or copying pixels.
+   *
+   * @returns Sparse entries in the store's deterministic insertion order.
+   */
+  *entries(): IterableIterator<{
+    readonly tile: Tile;
+    readonly coord: TileCoord;
+  }> {
     for (const [key, tile] of this.tiles) {
       const separatorIndex = key.indexOf(":");
       const x = Number(key.slice(0, separatorIndex));
       const y = Number(key.slice(separatorIndex + 1));
-      visitor(tile, { x, y });
+      yield { tile, coord: { x, y } };
     }
   }
 

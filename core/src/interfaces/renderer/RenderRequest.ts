@@ -1,5 +1,6 @@
 import type { WorldRect } from "../camera/WorldRect.js";
 import type { RenderContext } from "./RenderContext.js";
+import type { RenderRequestIdentity } from "./RenderRequestIdentity.js";
 import type { RenderSource } from "./RenderSource.js";
 
 /**
@@ -9,6 +10,14 @@ import type { RenderSource } from "./RenderSource.js";
  * without changing the RenderingCore method signature.
  */
 export interface RenderRequest {
+  /**
+   * Optional renderer-owned request metadata.
+   *
+   * RenderingCore supplies a generated identity when a caller does not need to
+   * coordinate presentation across progressive batches.
+   */
+  readonly identity?: RenderRequestIdentity;
+
   /** Raster or World whose visual state is being resolved. */
   readonly source: RenderSource;
 

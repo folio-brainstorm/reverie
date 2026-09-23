@@ -1,6 +1,7 @@
 import type { RasterTileSnapshot } from "../../../interfaces/history/RasterTileSnapshot.js";
 import type { RasterTileVersion } from "../../../interfaces/renderer/RasterTileVersion.js";
 import type { RasterTileView } from "../../../interfaces/renderer/RasterTileView.js";
+import type { RasterAllocatedTileView } from "../../../interfaces/renderer/RasterAllocatedTileView.js";
 import type { TileCoord } from "../../../interfaces/tile/TileCoord.js";
 import type { Raster } from "../../raster/Raster.js";
 import type { Tile } from "../../tile/Tile.js";
@@ -133,6 +134,34 @@ export function getRasterTileView(
   }
 
   return { tileId: tile.tileId, revision: tile.revision, pixels };
+}
+
+/**
+ * Iterates allocated Raster tiles without probing absent Tile coordinates.
+ *
+ * Returned views alias live Raster storage and must only be read during the
+ * synchronous render work that consumes them.
+ *
+ * @param raster - Raster whose sparse allocations should be visited.
+ * @returns Allocated Tile coordinates and read-only live pixel views.
+ */
+export function* getAllocatedRasterTileViews(
+  raster: Raster,
+): IterableIterator<RasterAllocatedTileView> {
+  const tileStore = RASTER_TILE_STORES.get(raster);
+  if (tileStore === undefined) {
+    return;
+  }
+
+  for (const { tile, coord } of tileStore.entries()) {
+    const pixels = TILE_PIXEL_BUFFERS.get(tile);
+    if (pixels !== undefined) {
+      yield {
+        coord,
+        tile: { tileId: tile.tileId, revision: tile.revision, pixels },
+      };
+    }
+  }
 }
 
 /**

@@ -1,10 +1,5 @@
 import type { Camera, WorldBounds } from "@reverie/core";
-import type {
-  RenderRegion,
-  RendererBackend,
-  RenderRegionSet,
-  RenderTarget,
-} from "@reverie/core/renderer";
+import type { RenderRegion, RenderTarget } from "@reverie/core/renderer";
 
 import { RendererErrorDefinitions } from "../errors/RendererErrorDefinitions.js";
 import {
@@ -13,11 +8,12 @@ import {
   RendererTypeError,
 } from "../errors/RendererErrors.js";
 import type { CanvasRegionSurface } from "../interfaces/CanvasRegionSurface.js";
+import type { PresentationFrame } from "../interfaces/presentation/PresentationFrame.js";
 
 const CONTEXT_IDENTIFIER = "2d";
 
 /** Presents final Core pixels through an HTML Canvas 2D target. */
-export default class CanvasBackend implements RendererBackend {
+export default class CanvasBackend {
   /** Canvas whose backing buffer receives each rendered frame. */
   readonly canvas: HTMLCanvasElement;
 
@@ -68,20 +64,15 @@ export default class CanvasBackend implements RendererBackend {
   /**
    * Uploads final RGBA8 regions and draws them to the Canvas target.
    *
-   * @param regions - Final Core output; this backend never reads Raster or World.
+   * @param frame - Validated complete frame; this backend never reads Raster or World.
    * @param target - Backend-owned output target for this presentation pass.
    */
-  present(regions: RenderRegionSet, _target: RenderTarget): void {
+  present(frame: PresentationFrame, _target: RenderTarget): void {
     const { width, height } = this.canvas;
-    const effectiveScale = this.camera.zoom * this.currentPixelRatio;
-    const shouldSmooth = effectiveScale < 1;
 
     this.context.clearRect(0, 0, width, height);
-    this.context.imageSmoothingEnabled = shouldSmooth;
-    if (shouldSmooth) {
-      this.context.imageSmoothingQuality = "high";
-    }
-    if (width === 0 || height === 0 || regions.regions.length === 0) {
+    this.configureSmoothing();
+    if (width === 0 || height === 0 || frame.regions.length === 0) {
       return;
     }
 
@@ -90,11 +81,52 @@ export default class CanvasBackend implements RendererBackend {
       this.context.globalAlpha = 1;
       this.context.globalCompositeOperation = "source-over";
       this.clipWorldBounds();
-      for (const region of regions.regions) {
+      for (const region of frame.regions) {
         this.presentRegion(region);
       }
     } finally {
       this.context.restore();
+    }
+  }
+
+  /** Replaces only regions supplied by a progressive Core batch. */
+  presentRegions(regions: readonly RenderRegion[]): void {
+    this.configureSmoothing();
+    if (this.canvas.width === 0 || this.canvas.height === 0) {
+      return;
+    }
+    this.context.save();
+    try {
+      this.context.globalAlpha = 1;
+      this.context.globalCompositeOperation = "source-over";
+      this.clipWorldBounds();
+      for (const region of regions) {
+        const point = this.camera.worldToScreen(region.bounds);
+        const scale = this.camera.zoom * this.currentPixelRatio;
+        this.context.clearRect(
+          point.x * this.currentPixelRatio,
+          point.y * this.currentPixelRatio,
+          region.bounds.width * scale,
+          region.bounds.height * scale,
+        );
+        this.presentRegion(region);
+      }
+    } finally {
+      this.context.restore();
+    }
+  }
+
+  /** Clears the output when an operation invalidates every cached region. */
+  clear(): void {
+    this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+  }
+
+  /** Keeps progressive and full-frame draws on the same sampling policy. */
+  private configureSmoothing(): void {
+    const shouldSmooth = this.camera.zoom * this.currentPixelRatio < 1;
+    this.context.imageSmoothingEnabled = shouldSmooth;
+    if (shouldSmooth) {
+      this.context.imageSmoothingQuality = "high";
     }
   }
 

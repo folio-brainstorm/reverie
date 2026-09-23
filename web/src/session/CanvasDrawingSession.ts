@@ -199,9 +199,22 @@ export class CanvasDrawingSession {
         ...(config.frameBudget === undefined
           ? {}
           : { frameBudget: config.frameBudget }),
-        onRender: () => this.renderer.render(),
+        onRender: (hasNewDrawingCommands) => {
+          if (hasNewDrawingCommands) {
+            this.renderer.markSourceChanged();
+          }
+          this.renderer.render();
+          return this.renderer.hasPendingRender;
+        },
         ...(config.onError === undefined ? {} : { onError: config.onError }),
       });
+  }
+
+  /** Schedules frames until the current progressive render has completed. */
+  requestRenderContinuation(): void {
+    if (this.renderer.hasPendingRender) {
+      this.scheduler.requestRender();
+    }
   }
 
   /**
@@ -280,14 +293,18 @@ export class CanvasDrawingSession {
   undo(): void {
     this.assertCanUseHistory();
     this.history.undo();
+    this.renderer.invalidate();
     this.renderer.render();
+    this.requestRenderContinuation();
   }
 
   /** Restores the most recently undone document edit and renders immediately. */
   redo(): void {
     this.assertCanUseHistory();
     this.history.redo();
+    this.renderer.invalidate();
     this.renderer.render();
+    this.requestRenderContinuation();
   }
 
   /** Discards retained Undo and Redo entries without changing the document. */
@@ -312,14 +329,18 @@ export class CanvasDrawingSession {
   cancelHistoryGroup(): void {
     this.assertCanUseHistory();
     this.history.cancelGroup();
+    this.renderer.invalidate();
     this.renderer.render();
+    this.requestRenderContinuation();
   }
 
   /** Clears the current Raster as one reversible document edit. */
   clearRaster(): void {
     this.assertCanUseHistory();
     this.history.performRasterMutation(this.raster, () => this.raster.clear());
+    this.renderer.invalidate();
     this.renderer.render();
+    this.requestRenderContinuation();
   }
 
   /**
@@ -644,7 +665,9 @@ export class CanvasDrawingSession {
     const height = Math.max(0, Math.round(bounds.height * effectiveDpr));
 
     this.renderer.resize(width, height, effectiveDpr);
+    this.renderer.invalidate();
     this.renderer.render();
+    this.requestRenderContinuation();
   }
 
   /** Runs one DOM callback without coupling failures to a UI framework. */

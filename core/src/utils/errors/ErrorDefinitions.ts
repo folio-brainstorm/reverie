@@ -83,6 +83,16 @@ export const ErrorDefinitions = {
       code: "EC_RENDERING_0004",
       template: "Render viewport width and height must be non-negative.",
     },
+    INVALID_RENDER_BUDGET: {
+      code: "EC_RENDERING_0005",
+      template:
+        "Render budget `$component` must be a positive finite value that can make progress.",
+    },
+    INVALID_LOD_STRATEGY_RESULT: {
+      code: "EC_RENDERING_0006",
+      template:
+        "Render LOD strategy returned invalid output tile size `$outputTileSize` for source tile size `$tileSize`.",
+    },
   },
   BRUSH: {
     INVALID_SIZE: {

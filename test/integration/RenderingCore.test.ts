@@ -112,6 +112,133 @@ describe("RenderingCore", () => {
     ]);
   });
 
+  it("traverses allocated sparse Tiles instead of the viewport Tile grid", () => {
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 1, g: 2, b: 3, a: 255 });
+    raster.setPixel(
+      { x: 2_000_000, y: 2_000_000 },
+      { r: 4, g: 5, b: 6, a: 255 },
+    );
+    const renderingCore = new RenderingCore({
+      budget: {
+        maxCandidateTiles: 8,
+        maxGeneratedPixelBytes: 1024,
+        maxRenderDurationMs: 1_000,
+      },
+    });
+
+    const result = renderingCore.render({
+      source: { raster },
+      context,
+      viewport: { x: 0, y: 0, width: 2_000_002, height: 2_000_002 },
+    });
+
+    expect(result.regions).toHaveLength(2);
+    expect(renderingCore.getLastDiagnostics()).toMatchObject({
+      candidateTileCount: 2,
+      renderedTileCount: 2,
+      generatedPixelBytes: 32,
+      processedRegionCount: 2,
+    });
+  });
+
+  it("keeps the requested Tile resolution across pixel-budget batches", () => {
+    const raster = new Raster({ tileSize: 8 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    raster.setPixel({ x: 8, y: 0 }, { r: 0, g: 255, b: 0, a: 255 });
+    const renderingCore = new RenderingCore({
+      budget: {
+        maxCandidateTiles: 2,
+        maxGeneratedPixelBytes: 256,
+        maxRenderDurationMs: 1_000,
+      },
+    });
+
+    const result = renderingCore.render({
+      source: { raster },
+      context,
+      viewport: { x: 0, y: 0, width: 16, height: 8 },
+    });
+
+    expect(result.continuation).toBeDefined();
+    expect(result.regions).toHaveLength(1);
+    expect(result.regions[0]?.pixels).toHaveLength(256);
+    expect(renderingCore.getLastDiagnostics().generatedPixelBytes).toBe(256);
+    const continuation = result.continuation;
+    if (continuation === undefined) {
+      throw new Error("Expected another full-resolution Tile batch.");
+    }
+    const next = renderingCore.continueRender(continuation);
+    expect(next.regions).toHaveLength(1);
+    expect(next.regions[0]?.pixels).toHaveLength(256);
+    expect(next.continuation).toBeUndefined();
+  });
+
+  it("returns all visible content through pull-based continuation batches", () => {
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 1, g: 0, b: 0, a: 255 });
+    raster.setPixel({ x: 2, y: 0 }, { r: 2, g: 0, b: 0, a: 255 });
+    raster.setPixel({ x: 4, y: 0 }, { r: 3, g: 0, b: 0, a: 255 });
+    const renderingCore = new RenderingCore({
+      budget: {
+        maxCandidateTiles: 2,
+        maxGeneratedPixelBytes: 4,
+        maxRenderDurationMs: 1_000,
+      },
+    });
+    let result = renderingCore.render({
+      source: { raster },
+      context,
+      viewport: { x: 0, y: 0, width: 6, height: 2 },
+    });
+    const regions = [...result.regions];
+
+    while (result.continuation !== undefined) {
+      result = renderingCore.continueRender(result.continuation);
+      regions.push(...result.regions);
+    }
+
+    expect([...new Set(regions.map((region) => region.bounds.x))]).toEqual([
+      0, 2, 4,
+    ]);
+  });
+
+  it("cancels an older continuation when a newer viewport request begins", () => {
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 1, g: 0, b: 0, a: 255 });
+    raster.setPixel({ x: 2, y: 0 }, { r: 2, g: 0, b: 0, a: 255 });
+    const renderingCore = new RenderingCore({
+      budget: {
+        maxCandidateTiles: 2,
+        maxGeneratedPixelBytes: 4,
+        maxRenderDurationMs: 1_000,
+      },
+    });
+    const oldResult = renderingCore.render({
+      source: { raster },
+      context,
+      viewport: { x: 0, y: 0, width: 4, height: 2 },
+    });
+    const continuation = oldResult.continuation;
+    if (continuation === undefined) {
+      throw new Error(
+        "Expected the first request to exceed its candidate budget.",
+      );
+    }
+
+    const latestResult = renderingCore.render({
+      source: { raster },
+      context,
+      viewport: { x: 2, y: 0, width: 2, height: 2 },
+    });
+
+    expect(latestResult.regions.map((region) => region.bounds.x)).toEqual([2]);
+    expect(renderingCore.continueRender(continuation)).toMatchObject({
+      identity: oldResult.identity,
+      regions: [],
+    });
+  });
+
   it.each([
     { x: 0, y: 0, width: 0, height: 2 },
     { x: 0, y: 0, width: 2, height: 0 },
@@ -121,7 +248,7 @@ describe("RenderingCore", () => {
 
     expect(
       new RenderingCore().render({ source: { raster }, context, viewport }),
-    ).toEqual({ regions: [] });
+    ).toMatchObject({ regions: [] });
   });
 
   it.each([
@@ -150,7 +277,14 @@ describe("RenderingCore", () => {
 
   it("allows a backend to receive only resolved regions and its target", () => {
     const target: RenderTarget = {};
-    const regions: RenderRegionSet = { regions: [] };
+    const regions: RenderRegionSet = {
+      identity: {
+        requestId: 1,
+        viewportKey: "test",
+        sourceRevision: "test",
+      },
+      regions: [],
+    };
     let presentedRegions: RenderRegionSet | undefined;
     let presentedTarget: RenderTarget | undefined;
     const backend: RendererBackend = {

@@ -310,6 +310,52 @@ describe("ReverieCanvas drawing and lifecycle", () => {
 });
 
 describe("CanvasDrawingSession pointer input mapping", () => {
+  it("advances a partial render continuation without clearing its first batch", () => {
+    const runtime = createCanvasRuntime(258, 2);
+    const reverie = new ReverieCanvas({
+      canvas: runtime.canvas,
+      width: 258,
+      height: 2,
+      tileSize: 2,
+    });
+    const context = runtime.canvas.getContext("2d");
+
+    if (context === null) {
+      throw new Error("Test canvas must provide a 2D context.");
+    }
+
+    const clearRect = vi.spyOn(context, "clearRect");
+    const countFullCanvasClears = (): number =>
+      clearRect.mock.calls.filter(
+        ([x, y, width, height]) =>
+          x === 0 && y === 0 && width === 258 && height === 2,
+      ).length;
+    for (let x = 0; x < 258; x += 2) {
+      reverie.activeLayer.raster.setPixel(
+        { x, y: 0 },
+        { r: 12, g: 34, b: 56, a: 255 },
+      );
+    }
+
+    runtime.canvas.dispatchPointer("pointerdown", {
+      button: 0,
+      pointerId: 1,
+      clientX: 0.5,
+      clientY: 0.5,
+      timeStamp: 0,
+    });
+    runtime.runNextFrame();
+
+    expect(reverie.renderer.hasPendingRender).toBe(true);
+    expect(countFullCanvasClears()).toBe(0);
+
+    runtime.runNextFrame();
+
+    expect(reverie.renderer.hasPendingRender).toBe(false);
+    expect(countFullCanvasClears()).toBe(0);
+    reverie.dispose();
+  });
+
   it("preserves pen pressure and tilt", () => {
     const runtime = createCanvasRuntime();
     const reverie = new ReverieCanvas({ canvas: runtime.canvas });
@@ -1550,7 +1596,11 @@ class TestCanvas {
   }
 
   /** Creates a canvas associated with the supplied fake document. */
-  constructor(ownerDocument: Document) {
+  constructor(
+    ownerDocument: Document,
+    private readonly cssWidth = 16,
+    private readonly cssHeight = 16,
+  ) {
     this.ownerDocument = ownerDocument;
   }
 
@@ -1566,10 +1616,10 @@ class TestCanvas {
       y: 0,
       left: 0,
       top: 0,
-      right: 16,
-      bottom: 16,
-      width: 16,
-      height: 16,
+      right: this.cssWidth,
+      bottom: this.cssHeight,
+      width: this.cssWidth,
+      height: this.cssHeight,
       toJSON(): object {
         return {};
       },
@@ -1642,7 +1692,10 @@ interface TestCanvasRuntime {
 }
 
 /** Creates deterministic Canvas, DOM lifecycle, and animation-frame primitives. */
-function createCanvasRuntime(): TestCanvasRuntime {
+function createCanvasRuntime(
+  cssWidth = 16,
+  cssHeight = 16,
+): TestCanvasRuntime {
   const frameCallbacks = new Map<number, FrameCallback>();
   let nextFrameHandle = 0;
   let currentObserver: TestResizeObserver | null = null;
@@ -1670,11 +1723,11 @@ function createCanvasRuntime(): TestCanvasRuntime {
         throw new Error(`Unexpected element request: ${tagName}`);
       }
 
-      return new TestCanvas(ownerDocument);
+      return new TestCanvas(ownerDocument, cssWidth, cssHeight);
     },
   } as unknown as Document;
 
-  const testCanvas = new TestCanvas(ownerDocument);
+  const testCanvas = new TestCanvas(ownerDocument, cssWidth, cssHeight);
   const downloads = new DownloadTestRuntime();
   downloads.install();
   vi.stubGlobal("requestAnimationFrame", (callback: FrameCallback): number => {

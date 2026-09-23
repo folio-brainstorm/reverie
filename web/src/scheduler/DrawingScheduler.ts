@@ -20,8 +20,9 @@ export class DrawingScheduler {
   /** Runtime-specific frame and timing primitives. */
   private readonly frameDriver: FrameDriver;
 
-  /** Optional presentation callback coalesced to at most once per frame. */
-  private readonly onRender: (() => void) | undefined;
+  /** Optional presentation callback that can request another progressive frame. */
+  private readonly onRender:
+    ((hasNewDrawingCommands: boolean) => boolean | void) | undefined;
 
   /** Optional observer for terminal execution and rendering failures. */
   private readonly onError: ((error: unknown) => void) | undefined;
@@ -43,6 +44,9 @@ export class DrawingScheduler {
 
   /** Whether lifecycle disposal permanently closed this scheduler. */
   private isDisposed = false;
+
+  /** Whether presentation requested another frame after drawing commands finish. */
+  private hasPendingRender = false;
 
   /**
    * Executes one budgeted frame without depending on a main-thread global.
@@ -89,14 +93,18 @@ export class DrawingScheduler {
         executingCommand = undefined;
       }
 
-      if (processedCommandCount > 0 && !this.isDisposed) {
-        this.onRender?.();
+      if (
+        (processedCommandCount > 0 || this.hasPendingRender) &&
+        !this.isDisposed
+      ) {
+        this.hasPendingRender =
+          this.onRender?.(processedCommandCount > 0) === true;
       }
     } catch (error) {
       const transaction = executingCommand?.historyTransaction;
       if (transaction?.cancelled === true && !this.isDisposed) {
         try {
-          this.onRender?.();
+          this.onRender?.(true);
         } catch (renderError) {
           this.fail(
             new AggregateError(
@@ -126,7 +134,8 @@ export class DrawingScheduler {
     return (
       this.pendingCommandCount === 0 &&
       this.frameHandle === null &&
-      !this.isRunningFrame
+      !this.isRunningFrame &&
+      !this.hasPendingRender
     );
   }
 
@@ -187,6 +196,15 @@ export class DrawingScheduler {
     this.scheduleFrame();
   }
 
+  /** Requests a render-only frame and continues while rendering remains pending. */
+  requestRender(): void {
+    if (this.isDisposed || this.hasFailed) {
+      return;
+    }
+    this.hasPendingRender = true;
+    this.scheduleFrame();
+  }
+
   /**
    * Cancels pending frame work, clears queued commands, and closes the scheduler.
    * Repeated calls have no additional effect.
@@ -204,6 +222,7 @@ export class DrawingScheduler {
     this.frameHandle = null;
     this.commands = [];
     this.readIndex = 0;
+    this.hasPendingRender = false;
 
     if (frameHandle !== null) {
       this.frameDriver.cancelFrame(frameHandle);
@@ -244,7 +263,7 @@ export class DrawingScheduler {
       this.isRunningFrame ||
       this.isDisposed ||
       this.hasFailed ||
-      this.pendingCommandCount === 0
+      (this.pendingCommandCount === 0 && !this.hasPendingRender)
     ) {
       return;
     }

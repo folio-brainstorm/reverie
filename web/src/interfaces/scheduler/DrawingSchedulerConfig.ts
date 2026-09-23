@@ -8,8 +8,13 @@ export interface DrawingSchedulerConfig {
   /** Runtime frame primitives; defaults to {@link WebFrameDriver}. */
   readonly frameDriver?: FrameDriver;
 
-  /** Called at most once after a frame executes one or more commands. */
-  readonly onRender?: () => void;
+  /**
+   * Called after drawing work or while a prior render requests another batch.
+   * @param hasNewDrawingCommands - Whether this frame executed one or more
+   * drawing commands that changed the document since the previous presentation.
+   * Return `true` to request one more frame for progressive presentation.
+   */
+  readonly onRender?: (hasNewDrawingCommands: boolean) => boolean | void;
 
   /** Receives an execution or render error after scheduling has stopped. */
   readonly onError?: (error: unknown) => void;

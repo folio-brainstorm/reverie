@@ -5,6 +5,8 @@ import {
   resolveRenderSource,
 } from "@reverie/core/renderer";
 import type {
+  RenderContinuation,
+  RenderRequestIdentity,
   Renderer,
   RenderSource,
   RenderSourceSnapshot,
@@ -14,6 +16,7 @@ import { RendererErrorDefinitions } from "../errors/RendererErrorDefinitions.js"
 import { RendererTypeError } from "../errors/RendererErrors.js";
 import type { CanvasRendererConfig } from "../interfaces/CanvasRendererConfig.js";
 import CanvasBackend from "./CanvasBackend.js";
+import PresentationState from "./PresentationState.js";
 
 /**
  * Coordinates Canvas renderer lifecycle with Rendering Core and its private
@@ -45,10 +48,24 @@ export class CanvasRenderer<
   private readonly renderSource: RenderSource;
   private readonly renderingCore = new RenderingCore();
   private readonly backend: CanvasBackend;
+  private readonly presentationState = new PresentationState();
+  private pendingContinuation: RenderContinuation | null = null;
+  private nextRequestId = 1;
+  private lastPresentedViewportKey: string | null = null;
+  private sourceVersion = 0;
+  private requestSourceVersion = 0;
+  private needsFreshRender = false;
 
   /** Backing pixels used for each CSS pixel in the current viewport. */
   get pixelRatio(): number {
     return this.backend.pixelRatio;
+  }
+
+  /** Whether this viewport has pending Core batches or a required refresh. */
+  get hasPendingRender(): boolean {
+    return (
+      this.presentationState.pendingIdentity !== null || this.needsFreshRender
+    );
   }
 
   /**
@@ -74,23 +91,89 @@ export class CanvasRenderer<
   }
 
   /**
-   * Resolves the current viewport through Rendering Core and presents the
-   * resulting region set through the Canvas backend.
+   * Resolves or advances the current viewport through Rendering Core.
+   *
+   * Repeated calls for an unchanged source and viewport pull the next partial
+   * batch. Each returned batch patches the visible Canvas immediately.
    */
   render(): void {
     const viewport = this.resolveViewport();
-    const regions =
-      viewport === null
-        ? { regions: [] }
-        : this.renderingCore.render({
-            source: this.renderSource,
-            context: {
-              scale: this.camera.zoom * this.pixelRatio,
-            },
-            viewport,
-          });
+    if (viewport === null) {
+      this.invalidate();
+      const identity = this.createRequestIdentity("empty", "empty");
+      this.presentationState.begin(identity);
+      this.presentationState.append({ identity, regions: [] });
+      return;
+    }
 
-    this.backend.present(regions, this.backend.target);
+    const scale = this.camera.zoom * this.pixelRatio;
+    const viewportKey = CanvasRenderer.createViewportKey(
+      viewport,
+      scale,
+      this.camera.panX,
+      this.camera.panY,
+    );
+    const sourceRevision = String(this.sourceVersion);
+    if (this.lastPresentedViewportKey !== viewportKey) {
+      this.presentationState.retainNear(viewport);
+    }
+    const visibleFrame = this.presentationState.visibleFrame;
+    if (this.lastPresentedViewportKey !== viewportKey) {
+      if (visibleFrame !== null) {
+        this.backend.present(visibleFrame, this.backend.target);
+      } else {
+        this.backend.clear();
+      }
+      this.lastPresentedViewportKey = viewportKey;
+    }
+    const continuation = this.pendingContinuation;
+    const pendingIdentity = this.presentationState.pendingIdentity;
+    const isContinuation =
+      continuation !== null &&
+      pendingIdentity !== null &&
+      pendingIdentity.viewportKey === viewportKey;
+    const identity = isContinuation
+      ? pendingIdentity
+      : this.createRequestIdentity(viewportKey, sourceRevision);
+    const regions = isContinuation
+      ? this.renderingCore.continueRender(continuation)
+      : this.renderingCore.render({
+          source: this.renderSource,
+          context: { scale },
+          viewport,
+          identity,
+        });
+
+    if (!isContinuation) {
+      this.requestSourceVersion = this.sourceVersion;
+      this.needsFreshRender = false;
+      this.presentationState.begin(identity);
+    }
+    this.pendingContinuation = regions.continuation ?? null;
+    if (
+      this.pendingContinuation === null &&
+      this.requestSourceVersion !== this.sourceVersion
+    ) {
+      this.needsFreshRender = true;
+    }
+    const isAcceptedBatch = this.presentationState.append(regions);
+    if (isAcceptedBatch) {
+      this.backend.presentRegions(regions.regions);
+    }
+  }
+
+  /** Marks live source edits while allowing the current batch sequence to finish. */
+  markSourceChanged(): void {
+    this.sourceVersion += 1;
+    this.needsFreshRender = true;
+  }
+
+  /** Cancels a partial render so the next {@link render} starts from current data. */
+  invalidate(): void {
+    this.pendingContinuation = null;
+    this.presentationState.invalidate();
+    this.backend.clear();
+    this.lastPresentedViewportKey = null;
   }
 
   /**
@@ -108,6 +191,7 @@ export class CanvasRenderer<
 
   /** Releases cached Canvas surfaces retained by the presentation backend. */
   dispose(): void {
+    this.invalidate();
     this.backend.dispose();
   }
 
@@ -135,6 +219,26 @@ export class CanvasRenderer<
   /** Prevents invalid camera projections from crossing the Core boundary. */
   private static isFiniteViewport(viewport: WorldRect): boolean {
     return Object.values(viewport).every(Number.isFinite);
+  }
+
+  /** Captures both source coverage and the projection used to draw it. */
+  private static createViewportKey(
+    viewport: WorldRect,
+    scale: number,
+    panX: number,
+    panY: number,
+  ): string {
+    return `${viewport.x}:${viewport.y}:${viewport.width}:${viewport.height}:${scale}:${panX}:${panY}`;
+  }
+
+  /** Allocates one renderer-local identity for a fresh presentation request. */
+  private createRequestIdentity(
+    viewportKey: string,
+    sourceRevision: string,
+  ): RenderRequestIdentity {
+    const requestId = this.nextRequestId;
+    this.nextRequestId += 1;
+    return { requestId, viewportKey, sourceRevision };
   }
 
   /** Converts a validated snapshot into Rendering Core's source contract. */

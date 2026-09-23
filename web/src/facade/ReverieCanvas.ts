@@ -221,7 +221,9 @@ export class ReverieCanvas {
     const layer = this.world.addLayer();
     this.session.setLayer(layer);
     this.currentActiveLayer = layer;
+    this.renderer.invalidate();
     this.renderer.render();
+    this.session.requestRenderContinuation();
     return layer;
   }
 
@@ -238,7 +240,9 @@ export class ReverieCanvas {
     this.assertUsable();
     this.session.assertCanChangeLayer();
     this.world.moveLayer(layer, index);
+    this.renderer.invalidate();
     this.renderer.render();
+    this.session.requestRenderContinuation();
   }
 
   /**
@@ -265,7 +269,9 @@ export class ReverieCanvas {
     this.assertUsable();
     this.session.assertCanChangeLayer();
     this.world.getLayer(layer).visible = visible;
+    this.renderer.invalidate();
     this.renderer.render();
+    this.session.requestRenderContinuation();
   }
 
   /**
@@ -280,7 +286,9 @@ export class ReverieCanvas {
     this.assertUsable();
     this.session.assertCanChangeLayer();
     this.world.getLayer(layer).opacity = opacity;
+    this.renderer.invalidate();
     this.renderer.render();
+    this.session.requestRenderContinuation();
   }
 
   /**
@@ -298,7 +306,9 @@ export class ReverieCanvas {
     this.assertUsable();
     this.session.assertCanChangeLayer();
     this.world.getLayer(layer).blendMode = blendMode;
+    this.renderer.invalidate();
     this.renderer.render();
+    this.session.requestRenderContinuation();
   }
 
   /**
@@ -313,7 +323,9 @@ export class ReverieCanvas {
     this.assertUsable();
     this.session.assertCanChangeLayer();
     const removed = this.world.removeLayer(layer);
+    this.renderer.invalidate();
     this.renderer.render();
+    this.session.requestRenderContinuation();
     return removed;
   }
 
@@ -371,6 +383,7 @@ export class ReverieCanvas {
   render(): void {
     this.assertUsable();
     this.renderer.render();
+    this.session.requestRenderContinuation();
   }
 
   /**
