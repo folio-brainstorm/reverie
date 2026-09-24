@@ -199,9 +199,9 @@ export class CanvasDrawingSession {
         ...(config.frameBudget === undefined
           ? {}
           : { frameBudget: config.frameBudget }),
-        onRender: (hasNewDrawingCommands) => {
+        onRender: (hasNewDrawingCommands, changedTiles) => {
           if (hasNewDrawingCommands) {
-            this.renderer.markSourceChanged();
+            this.renderer.markSourceChanged(changedTiles);
           }
           this.renderer.render();
           return this.renderer.hasPendingRender;

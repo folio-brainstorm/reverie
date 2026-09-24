@@ -10,6 +10,7 @@ import type {
   Renderer,
   RenderSource,
   RenderSourceSnapshot,
+  TileCoord,
 } from "@reverie/core/renderer";
 
 import { RendererErrorDefinitions } from "../errors/RendererErrorDefinitions.js";
@@ -53,8 +54,8 @@ export class CanvasRenderer<
   private nextRequestId = 1;
   private lastPresentedViewportKey: string | null = null;
   private sourceVersion = 0;
-  private requestSourceVersion = 0;
   private needsFreshRender = false;
+  private interactiveTiles: readonly TileCoord[] = [];
 
   /** Backing pixels used for each CSS pixel in the current viewport. */
   get pixelRatio(): number {
@@ -94,15 +95,13 @@ export class CanvasRenderer<
    * Resolves or advances the current viewport through Rendering Core.
    *
    * Repeated calls for an unchanged source and viewport pull the next partial
-   * batch. Each returned batch patches the visible Canvas immediately.
+   * batch. Explicit changed Tiles may patch visible coverage early; only a
+   * completed request reconciles the full viewport and removals.
    */
   render(): void {
     const viewport = this.resolveViewport();
     if (viewport === null) {
-      this.invalidate();
-      const identity = this.createRequestIdentity("empty", "empty");
-      this.presentationState.begin(identity);
-      this.presentationState.append({ identity, regions: [] });
+      this.discardPresentation();
       return;
     }
 
@@ -131,10 +130,12 @@ export class CanvasRenderer<
     const isContinuation =
       continuation !== null &&
       pendingIdentity !== null &&
-      pendingIdentity.viewportKey === viewportKey;
+      pendingIdentity.viewportKey === viewportKey &&
+      pendingIdentity.sourceRevision === sourceRevision;
     const identity = isContinuation
       ? pendingIdentity
       : this.createRequestIdentity(viewportKey, sourceRevision);
+    const interactiveTiles = isContinuation ? [] : this.interactiveTiles;
     const regions = isContinuation
       ? this.renderingCore.continueRender(continuation)
       : this.renderingCore.render({
@@ -142,38 +143,57 @@ export class CanvasRenderer<
           context: { scale },
           viewport,
           identity,
+          interactiveTiles,
         });
 
     if (!isContinuation) {
-      this.requestSourceVersion = this.sourceVersion;
       this.needsFreshRender = false;
-      this.presentationState.begin(identity);
+      const tileSize =
+        "raster" in this.renderSource
+          ? this.renderSource.raster.tileSize
+          : this.renderSource.world.tileSize;
+      this.presentationState.begin(
+        identity,
+        new Set(
+          interactiveTiles.map(
+            ({ x, y }) =>
+              `${x * tileSize}:${y * tileSize}:${tileSize}:${tileSize}`,
+          ),
+        ),
+      );
+      this.interactiveTiles = [];
     }
     this.pendingContinuation = regions.continuation ?? null;
-    if (
-      this.pendingContinuation === null &&
-      this.requestSourceVersion !== this.sourceVersion
-    ) {
-      this.needsFreshRender = true;
-    }
-    const isAcceptedBatch = this.presentationState.append(regions);
-    if (isAcceptedBatch) {
-      this.backend.presentRegions(regions.regions);
+    const commit = this.presentationState.append(regions);
+    if (commit !== null) {
+      this.backend.clearRegions(commit.removedBounds);
+      this.backend.presentRegions(commit.frame.regions);
+    } else if (regions.identity.sourceRevision === sourceRevision) {
+      const interactiveRegions =
+        this.presentationState.applyInteractive(regions);
+      if (interactiveRegions.length > 0) {
+        this.backend.presentRegions(interactiveRegions);
+      }
     }
   }
 
-  /** Marks live source edits while allowing the current batch sequence to finish. */
-  markSourceChanged(): void {
+  /**
+   * Marks live source edits and cancels obsolete partial output immediately.
+   * @param interactiveTiles - Tiles touched by the latest drawing frame only.
+   */
+  markSourceChanged(interactiveTiles: readonly TileCoord[] = []): void {
     this.sourceVersion += 1;
+    this.cancelPending();
+    this.interactiveTiles = interactiveTiles.map(({ x, y }) => ({ x, y }));
     this.needsFreshRender = true;
   }
 
-  /** Cancels a partial render so the next {@link render} starts from current data. */
+  /** Cancels partial work while retaining the last complete visible frame. */
   invalidate(): void {
-    this.pendingContinuation = null;
-    this.presentationState.invalidate();
-    this.backend.clear();
-    this.lastPresentedViewportKey = null;
+    this.sourceVersion += 1;
+    this.cancelPending();
+    this.interactiveTiles = [];
+    this.needsFreshRender = true;
   }
 
   /**
@@ -187,12 +207,32 @@ export class CanvasRenderer<
    */
   resize(width: number, height: number, pixelRatio = 1): void {
     this.backend.resize(width, height, pixelRatio);
+    this.cancelPending();
+    this.interactiveTiles = [];
+    this.lastPresentedViewportKey = null;
+    this.needsFreshRender = true;
   }
 
   /** Releases cached Canvas surfaces retained by the presentation backend. */
   dispose(): void {
-    this.invalidate();
+    this.discardPresentation();
     this.backend.dispose();
+  }
+
+  /** Drops an obsolete continuation without deleting valid presentation. */
+  private cancelPending(): void {
+    this.pendingContinuation = null;
+    this.presentationState.cancelPending();
+  }
+
+  /** Clears output when its current viewport cannot present a valid frame. */
+  private discardPresentation(): void {
+    this.cancelPending();
+    this.interactiveTiles = [];
+    this.presentationState.discard();
+    this.backend.clear();
+    this.lastPresentedViewportKey = null;
+    this.needsFreshRender = false;
   }
 
   /** Resolves the bounded source viewport requested for the next frame. */

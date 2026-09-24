@@ -1,4 +1,5 @@
 import type { WorldRect } from "../camera/WorldRect.js";
+import type { TileCoord } from "../tile/TileCoord.js";
 import type { RenderContext } from "./RenderContext.js";
 import type { RenderRequestIdentity } from "./RenderRequestIdentity.js";
 import type { RenderSource } from "./RenderSource.js";
@@ -26,4 +27,7 @@ export interface RenderRequest {
 
   /** Complete world-space area requested for this rendering pass. */
   readonly viewport: WorldRect;
+
+  /** Synchronous drawing Tiles to resolve before normal viewport traversal. */
+  readonly interactiveTiles?: readonly TileCoord[];
 }

@@ -5,9 +5,10 @@ import type {
 import type { WorldRect } from "@reverie/core";
 
 import type { PendingFrame } from "../interfaces/presentation/PendingFrame.js";
+import type { PresentationCommit } from "../interfaces/presentation/PresentationCommit.js";
 import type { PresentationFrame } from "../interfaces/presentation/PresentationFrame.js";
 
-/** Tracks progressive render batches and the reusable visible tile cache. */
+/** Accumulates full requests while admitting explicitly validated brush regions. */
 export default class PresentationState {
   private currentVisibleIdentity: RenderRequestIdentity | null = null;
   private currentVisibleRegions = new Map<
@@ -21,7 +22,7 @@ export default class PresentationState {
     return this.currentPendingFrame?.identity ?? null;
   }
 
-  /** Last complete frame that is safe to display, if one has been produced. */
+  /** Retained visible regions, including validated interactive replacements. */
   get visibleFrame(): PresentationFrame | null {
     return this.currentVisibleIdentity === null
       ? null
@@ -31,9 +32,14 @@ export default class PresentationState {
         };
   }
 
-  /** Discards unfinished work and cached pixels after a full invalidation. */
-  invalidate(): void {
+  /** Cancels an incomplete request without changing the visible frame. */
+  cancelPending(): void {
     this.currentPendingFrame = null;
+  }
+
+  /** Discards both an incomplete request and the visible frame. */
+  discard(): void {
+    this.cancelPending();
     this.currentVisibleIdentity = null;
     this.currentVisibleRegions.clear();
   }
@@ -60,39 +66,88 @@ export default class PresentationState {
     );
   }
 
-  /** Starts a new isolated pending frame while retaining the visible frame. */
-  begin(identity: RenderRequestIdentity): void {
+  /**
+   * Starts a new isolated pending frame while retaining visible coverage.
+   * @param identity - Request and source revision accepted by this frame.
+   * @param interactiveKeys - Exact Tile-region keys allowed to appear early.
+   */
+  begin(
+    identity: RenderRequestIdentity,
+    interactiveKeys: ReadonlySet<string> = new Set(),
+  ): void {
     this.currentPendingFrame = {
       identity,
+      regions: new Map(),
+      interactiveKeys,
     };
   }
 
   /**
-   * Merges one matching Core batch into the visible tile cache immediately.
-   *
-   * @param result - Result belonging to the request being accumulated.
-   * @returns Whether the batch matched the active request.
+   * Applies only explicitly hinted regions from the matching current request.
+   * @param result - Incomplete Core batch to inspect for changed Tiles.
+   * @returns Regions safe to patch onto the Canvas immediately.
    */
-  append(result: RenderRegionSet): boolean {
+  applyInteractive(result: RenderRegionSet): RenderRegionSet["regions"] {
     const pendingFrame = this.currentPendingFrame;
     if (
       pendingFrame === null ||
       !PresentationState.hasSameIdentity(pendingFrame.identity, result.identity)
     ) {
-      return false;
+      return [];
+    }
+    const regions: RenderRegionSet["regions"][number][] = [];
+    for (const region of result.regions) {
+      const key = PresentationState.getRegionKey(region);
+      if (!pendingFrame.interactiveKeys.has(key)) {
+        continue;
+      }
+      if (PresentationState.isVisuallyEmpty(region)) {
+        continue;
+      }
+      this.currentVisibleRegions.set(key, region);
+      regions.push(region);
+    }
+    if (regions.length > 0) {
+      this.currentVisibleIdentity = pendingFrame.identity;
+    }
+    return regions;
+  }
+
+  /**
+   * Accumulates a matching batch and replaces visible coverage only on completion.
+   *
+   * @param result - Result belonging to the request being accumulated.
+   * @returns Completed replacement, or null for an incomplete or stale batch.
+   */
+  append(result: RenderRegionSet): PresentationCommit | null {
+    const pendingFrame = this.currentPendingFrame;
+    if (
+      pendingFrame === null ||
+      !PresentationState.hasSameIdentity(pendingFrame.identity, result.identity)
+    ) {
+      return null;
     }
 
     for (const region of result.regions) {
-      this.currentVisibleRegions.set(
-        PresentationState.getRegionKey(region),
-        region,
-      );
+      pendingFrame.regions.set(PresentationState.getRegionKey(region), region);
     }
+    if (result.continuation !== undefined) {
+      return null;
+    }
+
+    const removedBounds = [...this.currentVisibleRegions]
+      .filter(([key]) => !pendingFrame.regions.has(key))
+      .map(([, region]) => region.bounds);
+    this.currentVisibleRegions = pendingFrame.regions;
     this.currentVisibleIdentity = pendingFrame.identity;
-    if (result.continuation === undefined) {
-      this.currentPendingFrame = null;
-    }
-    return true;
+    this.currentPendingFrame = null;
+    return {
+      frame: {
+        identity: pendingFrame.identity,
+        regions: [...pendingFrame.regions.values()],
+      },
+      removedBounds,
+    };
   }
 
   /** Uses geometry because later LOD passes intentionally replace prior regions. */
@@ -106,6 +161,18 @@ export default class PresentationState {
   }): string {
     const { x, y, width, height } = region.bounds;
     return `${x}:${y}:${width}:${height}`;
+  }
+
+  /** Defers transparent output until full coverage reconciliation. */
+  private static isVisuallyEmpty(
+    region: RenderRegionSet["regions"][number],
+  ): boolean {
+    for (let index = 3; index < region.pixels.length; index += 4) {
+      if (region.pixels[index] !== 0) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /** Compares all values that make one request safe to present. */

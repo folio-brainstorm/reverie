@@ -192,6 +192,67 @@ describe("DrawingScheduler frame execution", () => {
     expect(raster.getPixel({ x: 0, y: 0 }).a).toBe(0);
   });
 
+  it("reports Tile bounds actually touched by stamps in one frame", () => {
+    const driver = new ManualFrameDriver();
+    const raster = new Raster({ tileSize: 2 });
+    const brush = new PixelBrush({
+      size: 1,
+      color: { r: 255, g: 0, b: 0, a: 255 },
+    });
+    const onRender = vi.fn();
+    const scheduler = new DrawingScheduler({ frameDriver: driver, onRender });
+    scheduler.enqueue({ raster, brush, stamp: { position: { x: 0, y: 0 } } });
+    scheduler.enqueue({ raster, brush, stamp: { position: { x: 3, y: 0 } } });
+
+    driver.runNextFrame();
+
+    expect(onRender).toHaveBeenCalledOnce();
+    expect(onRender).toHaveBeenCalledWith(true, [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+    ]);
+  });
+
+  it("captures edits to an already allocated Tile", () => {
+    const driver = new ManualFrameDriver();
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 2, y: 0 }, { r: 0, g: 0, b: 0, a: 255 });
+    const brush: Brush = {
+      size: 1,
+      spacing: 1,
+      stamp(target): void {
+        target.blendPixel({ x: 2, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+      },
+    };
+    const onRender = vi.fn();
+    const scheduler = new DrawingScheduler({ frameDriver: driver, onRender });
+    scheduler.enqueue({ raster, brush, stamp: { position: { x: 2, y: 0 } } });
+
+    driver.runNextFrame();
+
+    expect(onRender).toHaveBeenCalledWith(true, [{ x: 1, y: 0 }]);
+  });
+
+  it("does not prioritize a Tile that a stamp only reads", () => {
+    const driver = new ManualFrameDriver();
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 2, y: 0 }, { r: 1, g: 0, b: 0, a: 255 });
+    const brush: Brush = {
+      size: 1,
+      spacing: 1,
+      stamp(target): void {
+        target.getPixel({ x: 2, y: 0 });
+      },
+    };
+    const onRender = vi.fn();
+    const scheduler = new DrawingScheduler({ frameDriver: driver, onRender });
+    scheduler.enqueue({ raster, brush, stamp: { position: { x: 2, y: 0 } } });
+
+    driver.runNextFrame();
+
+    expect(onRender).toHaveBeenCalledWith(true);
+  });
+
   it("splits work across frames when the soft budget is exhausted", () => {
     const driver = new ManualFrameDriver();
     const executed: number[] = [];

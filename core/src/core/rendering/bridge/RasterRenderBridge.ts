@@ -165,6 +165,25 @@ export function* getAllocatedRasterTileViews(
 }
 
 /**
+ * Captures conservative Tile coordinates touched by one synchronous brush stamp.
+ * This temporary drawing bridge does not retain or consume Raster dirty state.
+ *
+ * @param raster - Raster receiving the stamp.
+ * @param operation - Synchronous stamp mutation to execute.
+ * @returns Tile coordinates that may have changed during the operation.
+ */
+export function captureRasterStampTiles(
+  raster: Raster,
+  operation: () => void,
+): readonly TileCoord[] {
+  const tileStore = RASTER_TILE_STORES.get(raster);
+  if (tileStore === undefined) {
+    throw new Error("Raster internal tile storage is not registered.");
+  }
+  return tileStore.captureStampWrites(operation);
+}
+
+/**
  * Copies every allocated tile for transaction capture without exposing storage.
  *
  * @param raster - Raster whose current sparse allocation should be captured.

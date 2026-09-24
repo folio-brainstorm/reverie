@@ -23,6 +23,7 @@ export {
   getRasterTileVersion,
   getRasterTileView,
   getAllocatedRasterTileViews,
+  captureRasterStampTiles,
 } from "./bridge/RasterRenderBridge.js";
 export { compositeRgbaSourceOverInPlace } from "./composition/CompositeRgbaSourceOverInPlace.js";
 export { getWorldCompositionLayers } from "./composition/GetWorldCompositionLayers.js";

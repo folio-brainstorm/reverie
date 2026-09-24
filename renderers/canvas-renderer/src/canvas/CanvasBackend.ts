@@ -1,4 +1,4 @@
-import type { Camera, WorldBounds } from "@reverie/core";
+import type { Camera, WorldBounds, WorldRect } from "@reverie/core";
 import type { RenderRegion, RenderTarget } from "@reverie/core/renderer";
 
 import { RendererErrorDefinitions } from "../errors/RendererErrorDefinitions.js";
@@ -109,7 +109,36 @@ export default class CanvasBackend {
           region.bounds.width * scale,
           region.bounds.height * scale,
         );
+      }
+      for (const region of regions) {
         this.presentRegion(region);
+      }
+    } finally {
+      this.context.restore();
+    }
+  }
+
+  /** Clears coverage omitted by a completed replacement without uploading pixels. */
+  clearRegions(bounds: readonly WorldRect[]): void {
+    if (
+      bounds.length === 0 ||
+      this.canvas.width === 0 ||
+      this.canvas.height === 0
+    ) {
+      return;
+    }
+    this.context.save();
+    try {
+      this.clipWorldBounds();
+      const scale = this.camera.zoom * this.currentPixelRatio;
+      for (const region of bounds) {
+        const point = this.camera.worldToScreen(region);
+        this.context.clearRect(
+          point.x * this.currentPixelRatio,
+          point.y * this.currentPixelRatio,
+          region.width * scale,
+          region.height * scale,
+        );
       }
     } finally {
       this.context.restore();

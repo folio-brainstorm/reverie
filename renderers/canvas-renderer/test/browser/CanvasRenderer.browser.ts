@@ -35,6 +35,71 @@ function readPixel(
 }
 
 describe("CanvasRenderer browser minification", () => {
+  it("keeps the old pixels until a multi-batch replacement is complete", () => {
+    const canvas = createCanvas(258, 2);
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    const renderer = new CanvasRenderer({
+      canvas,
+      raster,
+      camera: new Camera(),
+    });
+    renderer.render();
+
+    raster.setPixel({ x: 0, y: 0 }, { r: 0, g: 0, b: 255, a: 255 });
+    for (let x = 2; x < 258; x += 2) {
+      raster.setPixel({ x, y: 0 }, { r: 0, g: 0, b: 255, a: 255 });
+    }
+    renderer.markSourceChanged();
+    renderer.render();
+
+    expect(renderer.hasPendingRender).toBe(true);
+    expect(readPixel(readPixels(canvas), canvas.width, 0, 0)).toEqual([
+      255, 0, 0, 255,
+    ]);
+    expect(readPixel(readPixels(canvas), canvas.width, 256, 0)).toEqual([
+      0, 0, 0, 0,
+    ]);
+
+    renderer.render();
+
+    expect(renderer.hasPendingRender).toBe(false);
+    expect(readPixel(readPixels(canvas), canvas.width, 0, 0)).toEqual([
+      0, 0, 255, 255,
+    ]);
+    expect(readPixel(readPixels(canvas), canvas.width, 256, 0)).toEqual([
+      0, 0, 255, 255,
+    ]);
+  });
+
+  it("removes pixels omitted by a completed sparse replacement", () => {
+    const canvas = createCanvas(4, 2);
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    raster.setPixel({ x: 2, y: 0 }, { r: 0, g: 255, b: 0, a: 255 });
+    const renderer = new CanvasRenderer({
+      canvas,
+      raster,
+      camera: new Camera(),
+    });
+    renderer.render();
+
+    raster.clear();
+    raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    renderer.invalidate();
+    expect(readPixel(readPixels(canvas), canvas.width, 2, 0)).toEqual([
+      0, 255, 0, 255,
+    ]);
+    renderer.render();
+
+    expect(readPixel(readPixels(canvas), canvas.width, 0, 0)).toEqual([
+      255, 0, 0, 255,
+    ]);
+    expect(readPixel(readPixels(canvas), canvas.width, 2, 0)).toEqual([
+      0, 0, 0, 0,
+    ]);
+  });
+
   it("area-filters a diagonal line instead of preserving nearest-neighbor pixels", () => {
     const canvas = createCanvas(4, 4);
     const raster = new Raster({ tileSize: 16 });

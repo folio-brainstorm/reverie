@@ -151,6 +151,16 @@ export class RenderingCore {
       scale: request.context.scale,
     });
     this.assertValidOutputTileSize(outputTileSize, tileSize);
+    const interactiveTiles = RenderingCore.resolveInteractiveTiles(
+      request.interactiveTiles,
+      tileSize,
+      viewport,
+    );
+    const interactiveState = {
+      interactiveTiles,
+      interactiveIndex: 0,
+      interactiveKeys: new Set(interactiveTiles.map(({ x, y }) => `${x}:${y}`)),
+    };
 
     if ("raster" in source) {
       return {
@@ -165,6 +175,7 @@ export class RenderingCore {
         pendingCoords: [],
         isTraversalComplete: false,
         visitedWorldCoords: new Set<string>(),
+        ...interactiveState,
       };
     }
 
@@ -183,6 +194,7 @@ export class RenderingCore {
       pendingCoords: [],
       isTraversalComplete: false,
       visitedWorldCoords: new Set<string>(),
+      ...interactiveState,
     };
   }
 
@@ -195,10 +207,35 @@ export class RenderingCore {
     const regions: RenderRegion[] = [];
     let candidateTileCount = 0;
     let generatedPixelBytes = 0;
+    const pixelByteLength = work.outputTileSize ** 2 * 4;
+    while (work.interactiveIndex < work.interactiveTiles.length) {
+      if (
+        regions.length > 0 &&
+        (generatedPixelBytes + pixelByteLength >
+          this.budget.maxGeneratedPixelBytes ||
+          Date.now() - startedAt >= this.budget.maxRenderDurationMs)
+      ) {
+        break;
+      }
+      const coord = work.interactiveTiles[work.interactiveIndex];
+      work.interactiveIndex += 1;
+      if (coord === undefined) {
+        continue;
+      }
+      const pixels = this.resolvePixels(work, coord);
+      if (pixels !== undefined) {
+        regions.push({
+          bounds: RenderingCore.tileBounds(coord, work.tileSize),
+          pixels,
+        });
+        generatedPixelBytes += pixels.byteLength;
+      }
+    }
     const coords = [...work.pendingCoords];
     work.pendingCoords.length = 0;
 
     while (
+      work.interactiveIndex === work.interactiveTiles.length &&
       !work.isTraversalComplete &&
       candidateTileCount < this.budget.maxCandidateTiles
     ) {
@@ -213,6 +250,9 @@ export class RenderingCore {
       if (coord === undefined) {
         work.isTraversalComplete = true;
         break;
+      }
+      if (work.interactiveKeys.has(`${coord.x}:${coord.y}`)) {
+        continue;
       }
       candidateTileCount += 1;
       if (!RenderingCore.isTileVisible(coord, work.tileSize, work.viewport)) {
@@ -240,7 +280,6 @@ export class RenderingCore {
       if (coord === undefined) {
         continue;
       }
-      const pixelByteLength = work.outputTileSize ** 2 * 4;
       const exceedsPixelBudget =
         generatedPixelBytes + pixelByteLength >
         this.budget.maxGeneratedPixelBytes;
@@ -268,7 +307,11 @@ export class RenderingCore {
       processedRegionCount: regions.length,
     };
 
-    if (work.isTraversalComplete && work.pendingCoords.length === 0) {
+    if (
+      work.interactiveIndex === work.interactiveTiles.length &&
+      work.isTraversalComplete &&
+      work.pendingCoords.length === 0
+    ) {
       this.continuationWork.delete(continuation);
       if (this.activeContinuation === continuation) {
         this.activeContinuation = null;
@@ -276,6 +319,38 @@ export class RenderingCore {
       return { identity: work.identity, regions };
     }
     return { identity: work.identity, regions, continuation };
+  }
+
+  /** Validates, deduplicates, and clips explicit drawing hints to the viewport. */
+  private static resolveInteractiveTiles(
+    tiles: readonly TileCoord[] | undefined,
+    tileSize: number,
+    viewport: WorldRect,
+  ): readonly TileCoord[] {
+    if (tiles === undefined) {
+      return [];
+    }
+    if (!Array.isArray(tiles)) {
+      throw ReverieTypeError.from(ErrorDefinitions.RENDERING.INVALID_REQUEST);
+    }
+    const unique = new Map<string, TileCoord>();
+    for (const coord of tiles) {
+      if (
+        typeof coord !== "object" ||
+        coord === null ||
+        !Number.isSafeInteger(coord.x) ||
+        !Number.isSafeInteger(coord.y)
+      ) {
+        throw ReverieRangeError.from(
+          ErrorDefinitions.COMMON.UNSAFE_COORDINATE_VALUE,
+          coord,
+        );
+      }
+      if (RenderingCore.isTileVisible(coord, tileSize, viewport)) {
+        unique.set(`${coord.x}:${coord.y}`, { x: coord.x, y: coord.y });
+      }
+    }
+    return [...unique.values()];
   }
 
   /** Uses caller metadata when present, otherwise creates a local safe default. */

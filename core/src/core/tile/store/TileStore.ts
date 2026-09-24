@@ -26,6 +26,9 @@ export class TileStore {
   /** Sparse tile storage keyed by an internal, unambiguous coordinate string. */
   private readonly tiles = new Map<string, Tile>();
 
+  /** Conservative Tile write accesses captured during a drawing command. */
+  private capturedWriteCoords: Map<string, TileCoord> | null = null;
+
   /** Incrementally maintained structure metrics for the owned sparse storage. */
   private storageStatistics: RasterStatistics = {
     tileCount: 0,
@@ -108,6 +111,7 @@ export class TileStore {
    */
   getOrCreate(coord: TileCoord): Tile {
     const key = this.tileCoordToKey(coord);
+    this.capturedWriteCoords?.set(key, coord);
     const existingTile = this.tiles.get(key);
 
     if (existingTile !== undefined) {
@@ -128,6 +132,7 @@ export class TileStore {
    */
   getOrCreateTrusted(x: number, y: number): Tile {
     const key = `${x}:${y}`;
+    this.capturedWriteCoords?.set(key, { x, y });
     const existingTile = this.tiles.get(key);
 
     if (existingTile !== undefined) {
@@ -182,7 +187,39 @@ export class TileStore {
    * @returns The stored tile, or `undefined` when none exists.
    */
   getTrusted(x: number, y: number): Tile | undefined {
+    this.capturedWriteCoords?.set(`${x}:${y}`, { x, y });
     return this.tiles.get(`${x}:${y}`);
+  }
+
+  /**
+   * Records a write to an existing Tile during a scoped stamp capture.
+   * @param coord - Tile whose pixels are about to change.
+   */
+  noteStampWrite(coord: TileCoord): void {
+    this.capturedWriteCoords?.set(`${coord.x}:${coord.y}`, coord);
+  }
+
+  /**
+   * Captures conservative Tile write coordinates during one synchronous stamp.
+   * Nested captures also contribute to their enclosing capture.
+   * @param operation - Stamp operation to execute before returning coordinates.
+   * @returns Distinct Tiles that may have been changed by the stamp.
+   */
+  captureStampWrites(operation: () => void): readonly TileCoord[] {
+    const previousCapture = this.capturedWriteCoords;
+    const captured = new Map<string, TileCoord>();
+    this.capturedWriteCoords = captured;
+    try {
+      operation();
+    } finally {
+      this.capturedWriteCoords = previousCapture;
+      if (previousCapture !== null) {
+        for (const [key, coord] of captured) {
+          previousCapture.set(key, coord);
+        }
+      }
+    }
+    return [...captured.values()];
   }
 
   /**

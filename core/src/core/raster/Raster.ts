@@ -154,6 +154,7 @@ export class Raster {
     const result = blendSourceOver(color, destination);
     captureRasterTileBeforeWrite(this, tileCoord.x, tileCoord.y);
     const destinationTile = tile ?? this.tileStore.getOrCreate(tileCoord);
+    this.tileStore.noteStampWrite(tileCoord);
 
     destinationTile.setPixel(localPixel, result);
   }
@@ -292,5 +293,4 @@ export class Raster {
   private locateValidPixel(pixel: PixelCoord): PixelLocation {
     return CoordCoverter.World.locateWorldPixel(pixel, this.tileSize);
   }
-
 }

@@ -1,3 +1,6 @@
+import { captureRasterStampTiles } from "@reverie/core/renderer";
+import type { TileCoord } from "@reverie/core/renderer";
+
 import type { DrawingCommand } from "../interfaces/scheduler/DrawingCommand.js";
 import type { DrawingSchedulerConfig } from "../interfaces/scheduler/DrawingSchedulerConfig.js";
 import type {
@@ -22,7 +25,11 @@ export class DrawingScheduler {
 
   /** Optional presentation callback that can request another progressive frame. */
   private readonly onRender:
-    ((hasNewDrawingCommands: boolean) => boolean | void) | undefined;
+    | ((
+        hasNewDrawingCommands: boolean,
+        changedTiles?: readonly TileCoord[],
+      ) => boolean | void)
+    | undefined;
 
   /** Optional observer for terminal execution and rendering failures. */
   private readonly onError: ((error: unknown) => void) | undefined;
@@ -63,6 +70,7 @@ export class DrawingScheduler {
     this.isRunningFrame = true;
     let processedCommandCount = 0;
     let executingCommand: DrawingCommand | undefined;
+    const changedTiles = new Map<string, TileCoord>();
 
     try {
       const startTime = this.frameDriver.now();
@@ -83,13 +91,21 @@ export class DrawingScheduler {
         }
 
         executingCommand = command;
-        const execute = (): void => this.executeCommand(command);
+        let commandChangedTiles: readonly TileCoord[] = [];
+        const execute = (): void => {
+          commandChangedTiles = captureRasterStampTiles(command.raster, () =>
+            this.executeCommand(command),
+          );
+        };
         if (command.historyTransaction === undefined) {
           execute();
         } else {
           command.historyTransaction.executeMutation(execute);
         }
         processedCommandCount += 1;
+        for (const coord of commandChangedTiles) {
+          changedTiles.set(`${coord.x}:${coord.y}`, coord);
+        }
         executingCommand = undefined;
       }
 
@@ -98,7 +114,11 @@ export class DrawingScheduler {
         !this.isDisposed
       ) {
         this.hasPendingRender =
-          this.onRender?.(processedCommandCount > 0) === true;
+          (changedTiles.size > 0
+            ? this.onRender?.(processedCommandCount > 0, [
+                ...changedTiles.values(),
+              ])
+            : this.onRender?.(processedCommandCount > 0)) === true;
       }
     } catch (error) {
       const transaction = executingCommand?.historyTransaction;

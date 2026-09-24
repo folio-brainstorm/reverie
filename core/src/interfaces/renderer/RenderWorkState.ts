@@ -3,6 +3,7 @@ import type { Raster } from "../../core/raster/Raster.js";
 import type { RasterLayer } from "../../core/world/RasterLayer.js";
 import type { RasterAllocatedTileView } from "./RasterAllocatedTileView.js";
 import type { RenderRequestIdentity } from "./RenderRequestIdentity.js";
+import type { TileCoord } from "../tile/TileCoord.js";
 
 /** Internal mutable state retained while a render request is progressively pulled. */
 export interface RenderWorkState {
@@ -17,4 +18,7 @@ export interface RenderWorkState {
   readonly pendingCoords: RasterAllocatedTileView["coord"][];
   isTraversalComplete: boolean;
   readonly visitedWorldCoords: Set<string>;
+  readonly interactiveTiles: readonly TileCoord[];
+  interactiveIndex: number;
+  readonly interactiveKeys: Set<string>;
 }

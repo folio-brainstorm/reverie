@@ -239,6 +239,37 @@ describe("RenderingCore", () => {
     });
   });
 
+  it("resolves hinted late Tiles before unrelated allocated candidates", () => {
+    const raster = new Raster({ tileSize: 2 });
+    for (let x = 0; x < 8; x += 2) {
+      raster.setPixel({ x, y: 0 }, { r: x, g: 0, b: 0, a: 255 });
+    }
+    const renderingCore = new RenderingCore({
+      budget: {
+        maxCandidateTiles: 1,
+        maxGeneratedPixelBytes: 1024,
+        maxRenderDurationMs: 1_000,
+      },
+    });
+
+    const first = renderingCore.render({
+      source: { raster },
+      context,
+      viewport: { x: 0, y: 0, width: 8, height: 2 },
+      interactiveTiles: [{ x: 3, y: 0 }],
+    });
+
+    expect(first.regions[0]?.bounds.x).toBe(6);
+    expect(first.continuation).toBeDefined();
+    const bounds = [...first.regions.map((region) => region.bounds.x)];
+    let next = first;
+    while (next.continuation !== undefined) {
+      next = renderingCore.continueRender(next.continuation);
+      bounds.push(...next.regions.map((region) => region.bounds.x));
+    }
+    expect(bounds).toEqual([6, 0, 2, 4]);
+  });
+
   it.each([
     { x: 0, y: 0, width: 0, height: 2 },
     { x: 0, y: 0, width: 2, height: 0 },
