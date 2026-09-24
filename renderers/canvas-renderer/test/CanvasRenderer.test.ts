@@ -332,7 +332,7 @@ describe("CanvasRenderer World composition", () => {
   it("clears negative world bounds through the camera and pixel ratio", () => {
     const { canvas, context } = createCanvasFixture(8, 8);
     const raster = new Raster({ tileSize: 2 });
-    raster.setPixel({ x: -1, y: -1 }, { r: 255, g: 0, b: 0, a: 255 });
+    raster.setPixel({ x: -2, y: -2 }, { r: 255, g: 0, b: 0, a: 255 });
     const renderer = new CanvasRenderer({
       canvas,
       raster,
@@ -349,7 +349,7 @@ describe("CanvasRenderer World composition", () => {
     expect(context.clearRect).toHaveBeenCalledWith(4, 4, 8, 8);
   });
 
-  it("replaces fully erased tile pixels with transparent output", () => {
+  it("removes fully erased tile pixels without uploading transparent output", () => {
     const { canvas, context, tileContexts } = createCanvasFixture(2, 2);
     const raster = new Raster({ tileSize: 2 });
     raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
@@ -366,10 +366,35 @@ describe("CanvasRenderer World composition", () => {
     renderer.render();
 
     expect(context.clearRect).toHaveBeenCalledWith(0, 0, 2, 2);
-    expect(tileContexts[0]?.putImageData).toHaveBeenCalledTimes(2);
-    const uploaded = vi.mocked(tileContexts[0]?.putImageData).mock
-      .calls[1]?.[0];
-    expect(uploaded?.data[3]).toBe(0);
+    expect(tileContexts[0]?.putImageData).toHaveBeenCalledOnce();
+    expect(context.drawImage).toHaveBeenCalledOnce();
+  });
+
+  it("removes render-empty presentation while retaining hidden RGB in its Raster", () => {
+    const { canvas, context, tileContexts } = createCanvasFixture(2, 2);
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    const renderer = new CanvasRenderer({
+      canvas,
+      raster,
+      camera: new Camera(),
+    });
+    renderer.render();
+    vi.mocked(context.clearRect).mockClear();
+
+    raster.setPixel({ x: 0, y: 0 }, { r: 25, g: 50, b: 75, a: 0 });
+    renderer.invalidate();
+    renderer.render();
+
+    expect(context.clearRect).toHaveBeenCalledWith(0, 0, 2, 2);
+    expect(context.drawImage).toHaveBeenCalledOnce();
+    expect(tileContexts[0]?.putImageData).toHaveBeenCalledOnce();
+    expect(raster.getPixel({ x: 0, y: 0 })).toEqual({
+      r: 25,
+      g: 50,
+      b: 75,
+      a: 0,
+    });
   });
 
   it.each(["hidden", "removed"] as const)(

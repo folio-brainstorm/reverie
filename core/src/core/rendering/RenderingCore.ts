@@ -10,6 +10,7 @@ import type { RenderRegionSet } from "../../interfaces/renderer/RenderRegionSet.
 import type { RenderRequest } from "../../interfaces/renderer/RenderRequest.js";
 import type { RenderRequestIdentity } from "../../interfaces/renderer/RenderRequestIdentity.js";
 import type { RenderWorkState } from "../../interfaces/renderer/RenderWorkState.js";
+import type { RasterTileView } from "../../interfaces/renderer/RasterTileView.js";
 import type { RenderingCoreConfig } from "../../interfaces/renderer/RenderingCoreConfig.js";
 import type { TileCoord } from "../../interfaces/tile/TileCoord.js";
 
@@ -25,6 +26,7 @@ import {
 import { compositeRgbaSourceOverInPlace } from "./composition/CompositeRgbaSourceOverInPlace.js";
 import { getWorldCompositionLayers } from "./composition/GetWorldCompositionLayers.js";
 import { downsampleRgbaTile } from "./region/DownsampleRgbaTile.js";
+import TileRenderSummaryCache from "./summary/TileRenderSummaryCache.js";
 
 const DEFAULT_RENDER_BUDGET: RenderBudget = {
   maxCandidateTiles: 128,
@@ -64,6 +66,7 @@ export class RenderingCore {
   private activeContinuation: RenderContinuationToken | null = null;
   private lastDiagnostics: RenderDiagnostics = EMPTY_DIAGNOSTICS;
   private nextRequestId = 1;
+  private readonly tileRenderSummaries = new TileRenderSummaryCache();
 
   /**
    * Creates a core with conservative configurable internal render limits.
@@ -403,36 +406,72 @@ export class RenderingCore {
   ): Uint8Array | undefined {
     if (work.raster !== null) {
       const tile = getRasterTileView(work.raster, coord);
-      return tile === undefined
-        ? undefined
-        : RenderingCore.downsamplePixels(
-            tile.pixels,
-            work.tileSize,
-            work.outputTileSize,
-          );
+      if (
+        tile === undefined ||
+        !this.hasVisibleAlpha(tile, coord, work.tileSize, work.viewport)
+      ) {
+        return undefined;
+      }
+      return RenderingCore.downsamplePixels(
+        tile.pixels,
+        work.tileSize,
+        work.outputTileSize,
+      );
     }
-    return RenderingCore.composeWorldTile(
+    return this.composeWorldTile(
       work.layers ?? [],
       coord,
       work.tileSize,
       work.outputTileSize,
+      work.viewport,
+    );
+  }
+
+  /** Checks cached alpha coverage against the requested world area. */
+  private hasVisibleAlpha(
+    tile: RasterTileView,
+    coord: TileCoord,
+    tileSize: number,
+    viewport: WorldRect,
+  ): boolean {
+    const bounds = this.tileRenderSummaries.get(tile, tileSize).alphaBounds;
+    if (bounds === null) {
+      return false;
+    }
+    const left = coord.x * tileSize + bounds.x;
+    const top = coord.y * tileSize + bounds.y;
+    return (
+      left < viewport.x + viewport.width &&
+      left + bounds.width > viewport.x &&
+      top < viewport.y + viewport.height &&
+      top + bounds.height > viewport.y
     );
   }
 
   /** Produces final straight-alpha RGBA8 pixels for one World tile. */
-  private static composeWorldTile(
+  private composeWorldTile(
     layers: readonly RasterLayer[],
     coord: TileCoord,
     tileSize: number,
     outputTileSize: number,
+    viewport: WorldRect,
   ): Uint8Array | undefined {
-    let composedPixels: Uint8ClampedArray | undefined;
-    for (const layer of layers) {
+    const contributors = layers.flatMap((layer) => {
       const tile = getRasterTileView(layer.raster, coord);
-      if (tile === undefined) {
-        continue;
+      if (
+        tile === undefined ||
+        !this.hasVisibleAlpha(tile, coord, tileSize, viewport)
+      ) {
+        return [];
       }
-      composedPixels ??= new Uint8ClampedArray(tileSize * tileSize * 4);
+      return [{ layer, tile }];
+    });
+    if (contributors.length === 0) {
+      return undefined;
+    }
+
+    const composedPixels = new Uint8ClampedArray(tileSize * tileSize * 4);
+    for (const { layer, tile } of contributors) {
       for (let offset = 0; offset < tile.pixels.length; offset += 4) {
         compositeRgbaSourceOverInPlace(
           tile.pixels,
@@ -444,13 +483,11 @@ export class RenderingCore {
         );
       }
     }
-    return composedPixels === undefined
-      ? undefined
-      : RenderingCore.downsamplePixels(
-          composedPixels,
-          tileSize,
-          outputTileSize,
-        );
+    return RenderingCore.downsamplePixels(
+      composedPixels,
+      tileSize,
+      outputTileSize,
+    );
   }
 
   /** Converts source pixels to the exact output resolution requested for this pass. */

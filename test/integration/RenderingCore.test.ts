@@ -13,11 +13,130 @@ import {
   type RenderRegionSet,
   type RenderTarget,
 } from "@reverie/core/renderer";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 const context: RenderContext = {};
 
 describe("RenderingCore", () => {
+  it("omits missing, byte-zero, and hidden-RGB Raster tiles without changing source bytes", () => {
+    const raster = new Raster({ tileSize: 2 });
+    const core = new RenderingCore();
+    const request = {
+      source: { raster },
+      context,
+      viewport: { x: 0, y: 0, width: 2, height: 2 },
+    };
+
+    expect(core.render(request).regions).toEqual([]);
+    raster.setPixel({ x: 0, y: 0 }, { r: 0, g: 0, b: 0, a: 0 });
+    expect(core.render(request).regions).toEqual([]);
+    raster.setPixel({ x: 1, y: 1 }, { r: 255, g: 20, b: 30, a: 0 });
+    expect(core.render(request).regions).toEqual([]);
+    expect(
+      Array.from(getRasterTileView(raster, { x: 0, y: 0 })?.pixels ?? []).slice(
+        12,
+      ),
+    ).toEqual([255, 20, 30, 0]);
+
+    raster.setPixel({ x: 0, y: 0 }, { r: 1, g: 2, b: 3, a: 1 });
+    expect(core.render(request).regions).toHaveLength(1);
+  });
+
+  it("uses the smallest alpha bounds when testing viewport contribution", () => {
+    const raster = new Raster({ tileSize: 4 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 0 });
+    raster.setPixel({ x: 1, y: 1 }, { r: 0, g: 255, b: 0, a: 1 });
+    raster.setPixel({ x: 2, y: 2 }, { r: 0, g: 0, b: 255, a: 1 });
+    const core = new RenderingCore();
+    const render = (viewport: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }) => core.render({ source: { raster }, context, viewport }).regions;
+
+    expect(render({ x: 0, y: 0, width: 1, height: 4 })).toEqual([]);
+    expect(render({ x: 0, y: 0, width: 4, height: 1 })).toEqual([]);
+    expect(render({ x: 1, y: 1, width: 1, height: 1 })).toHaveLength(1);
+    expect(render({ x: 2, y: 2, width: 1, height: 1 })).toHaveLength(1);
+    expect(render({ x: 3, y: 3, width: 1, height: 1 })).toEqual([]);
+    expect(render({ x: 1, y: 1, width: 1, height: 1 })[0]?.bounds).toEqual({
+      x: 0,
+      y: 0,
+      width: 4,
+      height: 4,
+    });
+  });
+
+  it("reuses an unchanged Tile summary and recomputes it after revision changes", () => {
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 10, g: 20, b: 30, a: 0 });
+    const core = new RenderingCore();
+    const request = {
+      source: { raster },
+      context,
+      viewport: { x: 0, y: 0, width: 2, height: 2 },
+    };
+    expect(core.render(request).regions).toEqual([]);
+
+    // Bypass the read-only live-view contract only to prove unchanged revisions reuse coverage.
+    const view = getRasterTileView(raster, { x: 0, y: 0 });
+    if (view === undefined) {
+      throw new Error("Expected an allocated Tile view.");
+    }
+    view.pixels[3] = 255;
+    expect(core.render(request).regions).toEqual([]);
+    raster.setPixel({ x: 0, y: 0 }, { r: 10, g: 20, b: 30, a: 255 });
+    expect(core.render(request).regions).toHaveLength(1);
+
+    raster.setPixel({ x: 0, y: 0 }, { r: 10, g: 20, b: 30, a: 0 });
+    expect(core.render(request).regions).toEqual([]);
+  });
+
+  it("avoids World composite allocation when layers have no visible contributor", () => {
+    const world = new World({ tileSize: 2 });
+    const bottom = world.getLayer(0);
+    bottom.raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 0 });
+    const hidden = world.addLayer();
+    hidden.raster.setPixel({ x: 0, y: 0 }, { r: 0, g: 255, b: 0, a: 255 });
+    hidden.visible = false;
+    const transparent = world.addLayer();
+    transparent.raster.setPixel({ x: 0, y: 0 }, { r: 0, g: 0, b: 255, a: 255 });
+    transparent.opacity = 0;
+    const core = new RenderingCore();
+    const allocation = vi.spyOn(globalThis, "Uint8ClampedArray");
+    try {
+      const result = core.render({
+        source: { world },
+        context,
+        viewport: { x: 0, y: 0, width: 2, height: 2 },
+      });
+      expect(result.regions).toEqual([]);
+      expect(core.getLastDiagnostics().generatedPixelBytes).toBe(0);
+      expect(allocation).not.toHaveBeenCalled();
+    } finally {
+      allocation.mockRestore();
+    }
+  });
+
+  it("composes a visible World contributor after rejecting render-empty layers", () => {
+    const world = new World({ tileSize: 2 });
+    world
+      .getLayer(0)
+      .raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 0 });
+    const top = world.addLayer();
+    top.raster.setPixel({ x: 1, y: 1 }, { r: 12, g: 34, b: 56, a: 255 });
+    const result = new RenderingCore().render({
+      source: { world },
+      context,
+      viewport: { x: 0, y: 0, width: 2, height: 2 },
+    });
+    expect(result.regions).toHaveLength(1);
+    expect(Array.from(result.regions[0]?.pixels ?? [])).toEqual([
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 34, 56, 255,
+    ]);
+  });
+
   it("returns independent RGBA8 pixels for a visible Raster tile", () => {
     const raster = new Raster({ tileSize: 2 });
     raster.setPixel({ x: 0, y: 0 }, { r: 12, g: 34, b: 56, a: 255 });
