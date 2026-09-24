@@ -52,3 +52,4 @@ coverage/
 *.log
 .DS_Store
 ocr-scan.**.txt
+.vitest
