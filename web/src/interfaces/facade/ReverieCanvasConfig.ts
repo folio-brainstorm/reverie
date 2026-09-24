@@ -1,4 +1,5 @@
 import type { Brush, PaintMode, SelectionMask, World } from "@reverie/core";
+import type { CanvasRendererConfig } from "@reverie/canvas-renderer";
 
 /** Configuration for a complete browser drawing surface. */
 export interface ReverieCanvasConfig {
@@ -34,6 +35,9 @@ export interface ReverieCanvasConfig {
 
   /** Maximum backing pixels per CSS pixel; defaults to `2`. */
   readonly maxDevicePixelRatio?: number;
+
+  /** Optional renderer timing diagnostics; counters remain available by default. */
+  readonly diagnostics?: CanvasRendererConfig["diagnostics"];
 
   /** Receives pointer, resize, scheduling, or rendering failures. */
   readonly onError?: (error: unknown) => void;

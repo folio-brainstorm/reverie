@@ -4,6 +4,7 @@ import type { WorldRect } from "../../interfaces/camera/WorldRect.js";
 import type { RenderBudget } from "../../interfaces/renderer/RenderBudget.js";
 import type { RenderContinuation } from "../../interfaces/renderer/RenderContinuation.js";
 import type { RenderDiagnostics } from "../../interfaces/renderer/RenderDiagnostics.js";
+import type { RenderingCoreDiagnosticsSnapshot } from "../../interfaces/renderer/RenderingCoreDiagnosticsSnapshot.js";
 import type { RenderLodStrategy } from "../../interfaces/renderer/RenderLodStrategy.js";
 import type { RenderRegion } from "../../interfaces/renderer/RenderRegion.js";
 import type { RenderRegionSet } from "../../interfaces/renderer/RenderRegionSet.js";
@@ -27,6 +28,7 @@ import { compositeRgbaSourceOverInPlace } from "./composition/CompositeRgbaSourc
 import { getWorldCompositionLayers } from "./composition/GetWorldCompositionLayers.js";
 import { downsampleRgbaTile } from "./region/DownsampleRgbaTile.js";
 import TileRenderSummaryCache from "./summary/TileRenderSummaryCache.js";
+import RollingTiming from "./diagnostics/RollingTiming.js";
 
 const DEFAULT_RENDER_BUDGET: RenderBudget = {
   maxCandidateTiles: 128,
@@ -67,6 +69,23 @@ export class RenderingCore {
   private lastDiagnostics: RenderDiagnostics = EMPTY_DIAGNOSTICS;
   private nextRequestId = 1;
   private readonly tileRenderSummaries = new TileRenderSummaryCache();
+  private readonly timingsEnabled: boolean;
+  private readonly coreTiming = new RollingTiming();
+  private readonly rasterTiming = new RollingTiming();
+  private readonly compositionTiming = new RollingTiming();
+  private readonly lodTiming = new RollingTiming();
+  private requestCount = 0;
+  private completedRequestCount = 0;
+  private cancelledRequestCount = 0;
+  private continuationCount = 0;
+  private batchCount = 0;
+  private visibleTileCount = 0;
+  private renderEmptyTileCount = 0;
+  private outputTileSize: number | undefined;
+  private sourceTileSize: number | undefined;
+  private rasterDurationMs = 0;
+  private compositionDurationMs = 0;
+  private lodDurationMs = 0;
 
   /**
    * Creates a core with conservative configurable internal render limits.
@@ -77,6 +96,7 @@ export class RenderingCore {
   constructor(config: RenderingCoreConfig = {}) {
     this.budget = RenderingCore.resolveBudget(config.budget);
     this.lodStrategy = config.lodStrategy ?? new ScaleRenderLodStrategy();
+    this.timingsEnabled = config.diagnostics?.timings === true;
   }
 
   /**
@@ -96,9 +116,15 @@ export class RenderingCore {
     this.cancelActiveContinuation();
     const viewport = RenderingCore.resolveViewport(request);
     const identity = this.resolveRequestIdentity(request, viewport);
+    this.requestCount += 1;
 
     if (viewport.width === 0 || viewport.height === 0) {
       this.lastDiagnostics = EMPTY_DIAGNOSTICS;
+      this.visibleTileCount = 0;
+      this.renderEmptyTileCount = 0;
+      this.outputTileSize = undefined;
+      this.sourceTileSize = undefined;
+      this.completedRequestCount += 1;
       return { identity, regions: [] };
     }
 
@@ -128,6 +154,7 @@ export class RenderingCore {
     if (work === undefined || continuation !== this.activeContinuation) {
       return { identity: continuation.identity, regions: [] };
     }
+    this.continuationCount += 1;
     return this.resolveBatch(continuation, work);
   }
 
@@ -138,6 +165,70 @@ export class RenderingCore {
    */
   getLastDiagnostics(): RenderDiagnostics {
     return { ...this.lastDiagnostics };
+  }
+
+  /** Cancels an unfinished request when its owner discards the continuation. */
+  cancelPendingRender(): void {
+    this.cancelActiveContinuation();
+  }
+
+  /** Returns detached counters and optional rolling timings for this core. */
+  getDiagnosticsSnapshot(): RenderingCoreDiagnosticsSnapshot {
+    const coreDurationMs = this.coreTiming.getSnapshot();
+    const rasterDurationMs = this.rasterTiming.getSnapshot();
+    const compositionDurationMs = this.compositionTiming.getSnapshot();
+    const lodDurationMs = this.lodTiming.getSnapshot();
+    const snapshot: RenderingCoreDiagnosticsSnapshot = {
+      ...(coreDurationMs !== undefined &&
+      rasterDurationMs !== undefined &&
+      compositionDurationMs !== undefined &&
+      lodDurationMs !== undefined
+        ? {
+            rendering: {
+              coreDurationMs,
+              rasterDurationMs,
+              compositionDurationMs,
+              lodDurationMs,
+            },
+          }
+        : {}),
+      tiles: {
+        candidateCount: this.lastDiagnostics.candidateTileCount,
+        visibleCount: this.visibleTileCount,
+        renderedCount: this.lastDiagnostics.renderedTileCount,
+        renderEmptyCount: this.renderEmptyTileCount,
+        generatedPixelBytes: this.lastDiagnostics.generatedPixelBytes,
+      },
+      regions: { generatedCount: this.lastDiagnostics.processedRegionCount },
+      progressive: {
+        requestCount: this.requestCount,
+        completedRequestCount: this.completedRequestCount,
+        cancelledRequestCount: this.cancelledRequestCount,
+        continuationCount: this.continuationCount,
+        batchCount: this.batchCount,
+        hasPendingRequest: this.activeContinuation !== null,
+      },
+      ...(this.outputTileSize !== undefined && this.sourceTileSize !== undefined
+        ? {
+            quality: {
+              outputTileSize: this.outputTileSize,
+              effectiveRenderScale: this.outputTileSize / this.sourceTileSize,
+            },
+          }
+        : {}),
+    };
+    return Object.freeze({
+      ...snapshot,
+      ...(snapshot.rendering === undefined
+        ? {}
+        : { rendering: Object.freeze(snapshot.rendering) }),
+      tiles: Object.freeze(snapshot.tiles),
+      regions: Object.freeze(snapshot.regions),
+      progressive: Object.freeze(snapshot.progressive),
+      ...(snapshot.quality === undefined
+        ? {}
+        : { quality: Object.freeze(snapshot.quality) }),
+    });
   }
 
   /** Creates lazy sparse traversal state without enumerating a viewport grid. */
@@ -206,9 +297,17 @@ export class RenderingCore {
     continuation: RenderContinuationToken,
     work: RenderWorkState,
   ): RenderRegionSet {
+    this.outputTileSize = work.outputTileSize;
+    this.sourceTileSize = work.tileSize;
     const startedAt = Date.now();
+    const timingStartedAt = this.timingsEnabled ? performance.now() : 0;
+    this.rasterDurationMs = 0;
+    this.compositionDurationMs = 0;
+    this.lodDurationMs = 0;
     const regions: RenderRegion[] = [];
     let candidateTileCount = 0;
+    let visibleTileCount = 0;
+    let renderEmptyTileCount = 0;
     let generatedPixelBytes = 0;
     const pixelByteLength = work.outputTileSize ** 2 * 4;
     while (work.interactiveIndex < work.interactiveTiles.length) {
@@ -226,12 +325,15 @@ export class RenderingCore {
         continue;
       }
       const pixels = this.resolvePixels(work, coord);
+      visibleTileCount += 1;
       if (pixels !== undefined) {
         regions.push({
           bounds: RenderingCore.tileBounds(coord, work.tileSize),
           pixels,
         });
         generatedPixelBytes += pixels.byteLength;
+      } else {
+        renderEmptyTileCount += 1;
       }
     }
     const coords = [...work.pendingCoords];
@@ -268,6 +370,7 @@ export class RenderingCore {
         }
         work.visitedWorldCoords.add(key);
       }
+      visibleTileCount += 1;
       coords.push(coord);
     }
 
@@ -292,6 +395,7 @@ export class RenderingCore {
       }
       const pixels = this.resolvePixels(work, coord);
       if (pixels === undefined) {
+        renderEmptyTileCount += 1;
         continue;
       }
       regions.push({
@@ -309,6 +413,15 @@ export class RenderingCore {
       renderDurationMs,
       processedRegionCount: regions.length,
     };
+    this.visibleTileCount = visibleTileCount;
+    this.renderEmptyTileCount = renderEmptyTileCount;
+    this.batchCount += 1;
+    if (this.timingsEnabled) {
+      this.coreTiming.record(Math.max(0, performance.now() - timingStartedAt));
+      this.rasterTiming.record(this.rasterDurationMs);
+      this.compositionTiming.record(this.compositionDurationMs);
+      this.lodTiming.record(this.lodDurationMs);
+    }
 
     if (
       work.interactiveIndex === work.interactiveTiles.length &&
@@ -319,6 +432,7 @@ export class RenderingCore {
       if (this.activeContinuation === continuation) {
         this.activeContinuation = null;
       }
+      this.completedRequestCount += 1;
       return { identity: work.identity, regions };
     }
     return { identity: work.identity, regions, continuation };
@@ -405,26 +519,39 @@ export class RenderingCore {
     coord: TileCoord,
   ): Uint8Array | undefined {
     if (work.raster !== null) {
+      const startedAt = this.timingsEnabled ? performance.now() : 0;
       const tile = getRasterTileView(work.raster, coord);
       if (
         tile === undefined ||
         !this.hasVisibleAlpha(tile, coord, work.tileSize, work.viewport)
       ) {
+        if (this.timingsEnabled) {
+          this.rasterDurationMs += performance.now() - startedAt;
+        }
         return undefined;
       }
-      return RenderingCore.downsamplePixels(
+      const pixels = this.downsamplePixels(
         tile.pixels,
         work.tileSize,
         work.outputTileSize,
       );
+      if (this.timingsEnabled) {
+        this.rasterDurationMs += performance.now() - startedAt;
+      }
+      return pixels;
     }
-    return this.composeWorldTile(
+    const startedAt = this.timingsEnabled ? performance.now() : 0;
+    const pixels = this.composeWorldTile(
       work.layers ?? [],
       coord,
       work.tileSize,
       work.outputTileSize,
       work.viewport,
     );
+    if (this.timingsEnabled) {
+      this.compositionDurationMs += performance.now() - startedAt;
+    }
+    return pixels;
   }
 
   /** Checks cached alpha coverage against the requested world area. */
@@ -483,20 +610,26 @@ export class RenderingCore {
         );
       }
     }
-    return RenderingCore.downsamplePixels(
-      composedPixels,
-      tileSize,
-      outputTileSize,
-    );
+    return this.downsamplePixels(composedPixels, tileSize, outputTileSize);
   }
 
   /** Converts source pixels to the exact output resolution requested for this pass. */
-  private static downsamplePixels(
+  private downsamplePixels(
     pixels: Uint8ClampedArray,
     tileSize: number,
     outputTileSize: number,
   ): Uint8Array {
-    return new Uint8Array(downsampleRgbaTile(pixels, tileSize, outputTileSize));
+    if (!this.timingsEnabled || tileSize === outputTileSize) {
+      return new Uint8Array(
+        downsampleRgbaTile(pixels, tileSize, outputTileSize),
+      );
+    }
+    const startedAt = performance.now();
+    const output = new Uint8Array(
+      downsampleRgbaTile(pixels, tileSize, outputTileSize),
+    );
+    this.lodDurationMs += performance.now() - startedAt;
+    return output;
   }
 
   /** Rejects a strategy result that could create invalid or unbounded output. */
@@ -519,6 +652,7 @@ export class RenderingCore {
   /** Cancels retained state for the previous request without touching document data. */
   private cancelActiveContinuation(): void {
     if (this.activeContinuation !== null) {
+      this.cancelledRequestCount += 1;
       this.continuationWork.delete(this.activeContinuation);
       this.activeContinuation = null;
     }

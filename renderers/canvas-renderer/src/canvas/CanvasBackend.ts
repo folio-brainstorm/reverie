@@ -9,6 +9,7 @@ import {
 } from "../errors/RendererErrors.js";
 import type { CanvasRegionSurface } from "../interfaces/CanvasRegionSurface.js";
 import type { PresentationFrame } from "../interfaces/presentation/PresentationFrame.js";
+import CanvasDiagnostics from "./CanvasDiagnostics.js";
 
 const CONTEXT_IDENTIFIER = "2d";
 
@@ -23,6 +24,7 @@ export default class CanvasBackend {
   private readonly renderTarget: RenderTarget = {};
   private readonly context: CanvasRenderingContext2D;
   private readonly worldBounds: WorldBounds | null;
+  private readonly diagnostics: CanvasDiagnostics;
   private readonly regionSurfaces = new Map<string, CanvasRegionSurface>();
   private currentPixelRatio = 1;
 
@@ -48,6 +50,7 @@ export default class CanvasBackend {
     canvas: HTMLCanvasElement,
     camera: Camera,
     worldBounds: WorldBounds | null,
+    diagnostics: CanvasDiagnostics,
   ) {
     const context = canvas.getContext(CONTEXT_IDENTIFIER);
     if (context === null) {
@@ -59,6 +62,7 @@ export default class CanvasBackend {
     this.camera = camera;
     this.context = context;
     this.worldBounds = worldBounds === null ? null : { ...worldBounds };
+    this.diagnostics = diagnostics;
   }
 
   /**
@@ -68,11 +72,15 @@ export default class CanvasBackend {
    * @param target - Backend-owned output target for this presentation pass.
    */
   present(frame: PresentationFrame, _target: RenderTarget): void {
+    const startedAt = this.diagnostics.hasTimings ? performance.now() : 0;
     const { width, height } = this.canvas;
 
     this.context.clearRect(0, 0, width, height);
     this.configureSmoothing();
     if (width === 0 || height === 0 || frame.regions.length === 0) {
+      if (this.diagnostics.hasTimings) {
+        this.diagnostics.recordPresentation(performance.now() - startedAt);
+      }
       return;
     }
 
@@ -86,13 +94,20 @@ export default class CanvasBackend {
       }
     } finally {
       this.context.restore();
+      if (this.diagnostics.hasTimings) {
+        this.diagnostics.recordPresentation(performance.now() - startedAt);
+      }
     }
   }
 
   /** Replaces only regions supplied by a progressive Core batch. */
   presentRegions(regions: readonly RenderRegion[]): void {
+    const startedAt = this.diagnostics.hasTimings ? performance.now() : 0;
     this.configureSmoothing();
     if (this.canvas.width === 0 || this.canvas.height === 0) {
+      if (this.diagnostics.hasTimings) {
+        this.diagnostics.recordPresentation(performance.now() - startedAt);
+      }
       return;
     }
     this.context.save();
@@ -115,6 +130,9 @@ export default class CanvasBackend {
       }
     } finally {
       this.context.restore();
+      if (this.diagnostics.hasTimings) {
+        this.diagnostics.recordPresentation(performance.now() - startedAt);
+      }
     }
   }
 
@@ -127,6 +145,7 @@ export default class CanvasBackend {
     ) {
       return;
     }
+    const startedAt = this.diagnostics.hasTimings ? performance.now() : 0;
     this.context.save();
     try {
       this.clipWorldBounds();
@@ -142,12 +161,19 @@ export default class CanvasBackend {
       }
     } finally {
       this.context.restore();
+      if (this.diagnostics.hasTimings) {
+        this.diagnostics.recordPresentation(performance.now() - startedAt);
+      }
     }
   }
 
   /** Clears the output when an operation invalidates every cached region. */
   clear(): void {
+    const startedAt = this.diagnostics.hasTimings ? performance.now() : 0;
     this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    if (this.diagnostics.hasTimings) {
+      this.diagnostics.recordPresentation(performance.now() - startedAt);
+    }
   }
 
   /** Keeps progressive and full-frame draws on the same sampling policy. */
@@ -204,12 +230,19 @@ export default class CanvasBackend {
     if (
       !CanvasBackend.hasCurrentPixels(surface.imageData.data, region.pixels)
     ) {
+      const uploadStartedAt = this.diagnostics.hasTimings
+        ? performance.now()
+        : 0;
       surface.imageData.data.set(region.pixels);
       surface.context.putImageData(surface.imageData, 0, 0);
+      this.diagnostics.recordUpload(
+        this.diagnostics.hasTimings ? performance.now() - uploadStartedAt : 0,
+      );
     }
 
     const point = this.camera.worldToScreen(region.bounds);
     const scale = this.camera.zoom * this.currentPixelRatio;
+    const drawStartedAt = this.diagnostics.hasTimings ? performance.now() : 0;
     this.context.drawImage(
       surface.canvas,
       point.x * this.currentPixelRatio,
@@ -217,6 +250,10 @@ export default class CanvasBackend {
       region.bounds.width * scale,
       region.bounds.height * scale,
     );
+    this.diagnostics.recordPresented(1);
+    if (this.diagnostics.hasTimings) {
+      this.diagnostics.recordDraw(performance.now() - drawStartedAt);
+    }
   }
 
   /** Returns a reusable Canvas upload surface matching one region's geometry. */

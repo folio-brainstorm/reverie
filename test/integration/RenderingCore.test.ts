@@ -261,6 +261,120 @@ describe("RenderingCore", () => {
     });
   });
 
+  it("publishes grouped counters without optional timing and detaches each snapshot", () => {
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 1, g: 2, b: 3, a: 255 });
+    const core = new RenderingCore();
+    const request = {
+      source: { raster },
+      context,
+      viewport: { x: 0, y: 0, width: 2, height: 2 },
+    };
+
+    core.render(request);
+    const first = core.getDiagnosticsSnapshot();
+    expect(first.rendering).toBeUndefined();
+    expect(first.tiles).toEqual({
+      candidateCount: 1,
+      visibleCount: 1,
+      renderedCount: 1,
+      renderEmptyCount: 0,
+      generatedPixelBytes: 16,
+    });
+    expect(first.regions.generatedCount).toBe(1);
+    expect(first.quality).toEqual({
+      outputTileSize: 2,
+      effectiveRenderScale: 1,
+    });
+    expect(first.progressive).toMatchObject({
+      requestCount: 1,
+      completedRequestCount: 1,
+      cancelledRequestCount: 0,
+      continuationCount: 0,
+      batchCount: 1,
+      hasPendingRequest: false,
+    });
+    expect(Object.isFrozen(first.tiles)).toBe(true);
+    core.render(request);
+    expect(first.progressive.requestCount).toBe(1);
+    expect(core.getDiagnosticsSnapshot().progressive.requestCount).toBe(2);
+  });
+
+  it("counts cancelled and continued requests while recording opted-in stage timing", () => {
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 1, g: 2, b: 3, a: 255 });
+    raster.setPixel({ x: 2, y: 0 }, { r: 1, g: 2, b: 3, a: 255 });
+    const core = new RenderingCore({
+      budget: { maxCandidateTiles: 1, maxRenderDurationMs: 1_000 },
+      diagnostics: { timings: true },
+    });
+    const request = {
+      source: { raster },
+      context: { scale: 0.5 },
+      viewport: { x: 0, y: 0, width: 4, height: 2 },
+    };
+    const first = core.render(request);
+    expect(first.continuation).toBeDefined();
+    expect(core.getDiagnosticsSnapshot().progressive.hasPendingRequest).toBe(
+      true,
+    );
+    if (first.continuation === undefined) {
+      throw new Error("Expected a continuation.");
+    }
+    let next = core.continueRender(first.continuation);
+    while (next.continuation !== undefined) {
+      next = core.continueRender(next.continuation);
+    }
+    const completed = core.getDiagnosticsSnapshot();
+    expect(completed.progressive).toMatchObject({
+      requestCount: 1,
+      completedRequestCount: 1,
+      hasPendingRequest: false,
+    });
+    expect(completed.progressive.continuationCount).toBeGreaterThanOrEqual(1);
+    expect(completed.progressive.batchCount).toBeGreaterThanOrEqual(2);
+    expect(completed.rendering?.coreDurationMs.current).toBeGreaterThanOrEqual(
+      0,
+    );
+    expect(
+      completed.rendering?.rasterDurationMs.current,
+    ).toBeGreaterThanOrEqual(0);
+    expect(completed.rendering?.lodDurationMs.current).toBeGreaterThanOrEqual(
+      0,
+    );
+    expect(Object.isFrozen(completed.rendering?.coreDurationMs)).toBe(true);
+    core.render(request);
+    core.render(request);
+    expect(
+      core.getDiagnosticsSnapshot().progressive.cancelledRequestCount,
+    ).toBe(1);
+  });
+
+  it("clears pending diagnostics when a caller discards a continuation", () => {
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 1, g: 2, b: 3, a: 255 });
+    raster.setPixel({ x: 2, y: 0 }, { r: 1, g: 2, b: 3, a: 255 });
+    const core = new RenderingCore({
+      budget: { maxCandidateTiles: 1, maxRenderDurationMs: 1_000 },
+    });
+    const result = core.render({
+      source: { raster },
+      context,
+      viewport: { x: 0, y: 0, width: 4, height: 2 },
+    });
+    if (result.continuation === undefined) {
+      throw new Error("Expected a continuation.");
+    }
+
+    core.cancelPendingRender();
+    expect(core.getDiagnosticsSnapshot().progressive).toMatchObject({
+      cancelledRequestCount: 1,
+      hasPendingRequest: false,
+    });
+    expect(core.continueRender(result.continuation).regions).toEqual([]);
+    expect(core.getDiagnosticsSnapshot().progressive.continuationCount).toBe(0);
+  });
+
   it("keeps the requested Tile resolution across pixel-budget batches", () => {
     const raster = new Raster({ tileSize: 8 });
     raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });

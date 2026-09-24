@@ -7,6 +7,8 @@ export type { RenderRegionSet } from "../../interfaces/renderer/RenderRegionSet.
 export type { RenderBudget } from "../../interfaces/renderer/RenderBudget.js";
 export type { RenderContinuation } from "../../interfaces/renderer/RenderContinuation.js";
 export type { RenderDiagnostics } from "../../interfaces/renderer/RenderDiagnostics.js";
+export type { RenderingCoreDiagnosticsSnapshot } from "../../interfaces/renderer/RenderingCoreDiagnosticsSnapshot.js";
+export type { TimingMetric } from "../../interfaces/renderer/TimingMetric.js";
 export type {
   RenderLodRequest,
   RenderLodStrategy,

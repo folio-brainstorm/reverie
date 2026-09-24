@@ -8,6 +8,9 @@ interface CanvasRendererDependencies {
 
   /** Camera that projects world coordinates into screen coordinates. */
   camera: Camera;
+
+  /** Enables optional stage timing and 60-call rolling statistics. */
+  readonly diagnostics?: { readonly timings?: boolean };
 }
 
 /** Exactly one rendering source: an independent Raster or a composed World. */

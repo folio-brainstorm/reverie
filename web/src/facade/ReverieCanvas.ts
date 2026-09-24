@@ -98,6 +98,9 @@ export class ReverieCanvas {
       canvas: config.canvas,
       world: this.world,
       camera: this.camera,
+      ...(config.diagnostics === undefined
+        ? {}
+        : { diagnostics: config.diagnostics }),
     });
     this.session = new CanvasDrawingSession({
       canvas: config.canvas,

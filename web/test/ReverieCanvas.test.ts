@@ -37,6 +37,29 @@ afterEach(() => {
 });
 
 describe("ReverieCanvas construction", () => {
+  it("forwards optional renderer timing diagnostics to its public renderer", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({
+      canvas: runtime.canvas,
+      diagnostics: { timings: true },
+    });
+
+    const requestCountBeforeRender =
+      reverie.renderer.diagnostics.getSnapshot().progressive.requestCount;
+    reverie.render();
+    const snapshot = reverie.renderer.diagnostics.getSnapshot();
+    expect(snapshot.progressive.requestCount).toBe(
+      requestCountBeforeRender + 1,
+    );
+    expect(snapshot.rendering?.coreDurationMs.current).toBeGreaterThanOrEqual(
+      0,
+    );
+    expect(
+      snapshot.presentation.presentationDurationMs?.current,
+    ).toBeGreaterThanOrEqual(0);
+    reverie.dispose();
+  });
+
   it("adopts an existing World without changing its document state", () => {
     const runtime = createCanvasRuntime();
     const world = new World({ id: "adopted-world", tileSize: 2 });
@@ -689,6 +712,7 @@ describe("CanvasDrawingSession deterministic stroke seeds", () => {
       const reverie = new ReverieCanvas({
         canvas: runtime.canvas,
         brush,
+        frameBudget: 1_000,
       });
       const first = {
         button: 0,
@@ -1692,10 +1716,7 @@ interface TestCanvasRuntime {
 }
 
 /** Creates deterministic Canvas, DOM lifecycle, and animation-frame primitives. */
-function createCanvasRuntime(
-  cssWidth = 16,
-  cssHeight = 16,
-): TestCanvasRuntime {
+function createCanvasRuntime(cssWidth = 16, cssHeight = 16): TestCanvasRuntime {
   const frameCallbacks = new Map<number, FrameCallback>();
   let nextFrameHandle = 0;
   let currentObserver: TestResizeObserver | null = null;

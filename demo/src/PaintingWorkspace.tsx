@@ -40,6 +40,8 @@ import type { ReverieDownloadOptions } from "@reverie/web";
 import { createBrushOutlinePath } from "./CreateBrushOutlinePath";
 import { createSelectionRect } from "./CreateSelectionRect";
 import { decodeBrushImageFile } from "./DecodeBrushImageFile";
+import DemoDiagnosticsRecorder from "./DemoDiagnosticsRecorder";
+import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { exportRasterToConsole } from "./ExportRasterToConsole";
 import { resolveHistoryShortcut } from "./ResolveHistoryShortcut";
 import type { BrushMode } from "./interfaces/brush/BrushMode";
@@ -104,6 +106,7 @@ export function PaintingWorkspace({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasFrameRef = useRef<HTMLDivElement | null>(null);
   const reverieRef = useRef<ReverieCanvas | null>(null);
+  const diagnosticsRecorderRef = useRef<DemoDiagnosticsRecorder | null>(null);
   const brushIndicatorRef = useRef<SVGGElement | null>(null);
   const brushOutlineRef = useRef<SVGPathElement | null>(null);
   const selectionInputRef = useRef<HTMLDivElement | null>(null);
@@ -150,6 +153,7 @@ export function PaintingWorkspace({
   const [drawingError, setDrawingError] = useState<string | null>(null);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
   const [isLayersPanelOpen, setIsLayersPanelOpen] = useState(false);
+  const [isDiagnosticsPanelOpen, setIsDiagnosticsPanelOpen] = useState(false);
   const [, setLayersRevision] = useState(0);
   const worldRasterStatistics =
     reverieRef.current?.world.getRasterStatistics() ?? null;
@@ -252,6 +256,7 @@ export function PaintingWorkspace({
     if (canvas === null || frame === null) return;
 
     let reverie: ReverieCanvas | null = null;
+    let diagnosticsRecorder: DemoDiagnosticsRecorder | null = null;
     let readyFrame = 0;
     let resizeObserver: ResizeObserver | null = null;
     let hasInitializationError = false;
@@ -326,6 +331,7 @@ export function PaintingWorkspace({
           "smooth",
         ),
         frameBudget: 8,
+        diagnostics: { timings: true },
         onError: (error) => {
           hasInitializationError = true;
           setDrawingError(formatDrawingError(error));
@@ -344,6 +350,9 @@ export function PaintingWorkspace({
       }
 
       reverieRef.current = reverie;
+      diagnosticsRecorder = new DemoDiagnosticsRecorder(reverie.renderer);
+      diagnosticsRecorder.installOnRenderer();
+      diagnosticsRecorderRef.current = diagnosticsRecorder;
       const bounds = frame.getBoundingClientRect();
       const fitZoom = getFitCameraZoom(bounds.width, bounds.height, canvasSize);
       const centeredPan = getCenteredPan(
@@ -387,6 +396,8 @@ export function PaintingWorkspace({
       frame.removeEventListener("wheel", handleWheel);
       window.removeEventListener("pointerdown", handleWindowPointerDown, true);
       window.removeEventListener("keydown", handleKeyDown);
+      diagnosticsRecorder?.dispose();
+      diagnosticsRecorderRef.current = null;
       reverie?.dispose();
       reverieRef.current = null;
       activeHistoryGroupRef.current = null;
@@ -1204,9 +1215,24 @@ export function PaintingWorkspace({
           type="button"
           aria-label="Toggle layers panel"
           aria-pressed={isLayersPanelOpen}
-          onClick={() => setIsLayersPanelOpen((isOpen) => !isOpen)}
+          onClick={() => {
+            setIsDiagnosticsPanelOpen(false);
+            setIsLayersPanelOpen((isOpen) => !isOpen);
+          }}
         >
           Layers
+        </button>
+        <button
+          className={`layers-toggle${isDiagnosticsPanelOpen ? " is-active" : ""}`}
+          type="button"
+          aria-label="Toggle renderer diagnostics"
+          aria-pressed={isDiagnosticsPanelOpen}
+          onClick={() => {
+            setIsLayersPanelOpen(false);
+            setIsDiagnosticsPanelOpen((isOpen) => !isOpen);
+          }}
+        >
+          Diagnostics
         </button>
         <div className="canvas-metrics" aria-label="Canvas data">
           <span>
@@ -1265,6 +1291,10 @@ export function PaintingWorkspace({
           />
         </label>
       </aside>
+
+      {isDiagnosticsPanelOpen && diagnosticsRecorderRef.current !== null && (
+        <DiagnosticsPanel recorder={diagnosticsRecorderRef.current} />
+      )}
 
       {isLayersPanelOpen && (
         <aside className="layers-panel" aria-label="Layers">

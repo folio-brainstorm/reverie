@@ -22,6 +22,16 @@ export default class PresentationState {
     return this.currentPendingFrame?.identity ?? null;
   }
 
+  /** Number of regions accumulated by the incomplete request. */
+  get pendingRegionCount(): number {
+    return this.currentPendingFrame?.regions.size ?? 0;
+  }
+
+  /** Number of regions currently retained for presentation. */
+  get visibleRegionCount(): number {
+    return this.currentVisibleRegions.size;
+  }
+
   /** Retained visible regions, including validated interactive replacements. */
   get visibleFrame(): PresentationFrame | null {
     return this.currentVisibleIdentity === null

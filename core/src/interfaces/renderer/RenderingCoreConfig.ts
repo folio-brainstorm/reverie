@@ -8,4 +8,7 @@ export interface RenderingCoreConfig {
 
   /** Strategy used to select Tile output resolution for the request. */
   readonly lodStrategy?: RenderLodStrategy;
+
+  /** Enables optional per-stage timing and rolling statistics. */
+  readonly diagnostics?: { readonly timings?: boolean };
 }

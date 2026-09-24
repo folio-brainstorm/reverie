@@ -68,6 +68,65 @@ function createCanvasFixture(width = 4, height = 4) {
 }
 
 describe("CanvasRenderer World composition", () => {
+  it("exposes Canvas and Core counters and keeps old snapshots stable", () => {
+    const { canvas } = createCanvasFixture(2, 2);
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    const renderer = new CanvasRenderer({
+      canvas,
+      camera: new Camera(),
+      raster,
+    });
+
+    expect(renderer.diagnostics.getSnapshot().rendering).toBeUndefined();
+    renderer.render();
+    const first = renderer.diagnostics.getSnapshot();
+    expect(first.tiles.renderedCount).toBe(1);
+    expect(first.regions).toMatchObject({
+      generatedCount: 1,
+      presentedCount: 1,
+      removedCount: 0,
+      visibleCount: 1,
+      pendingCount: 0,
+    });
+    expect(first.presentation).toMatchObject({
+      uploadedRegionCount: 1,
+      drawnRegionCount: 1,
+    });
+    expect(Object.isFrozen(first.presentation)).toBe(true);
+    renderer.render();
+    expect(first.presentation.uploadedRegionCount).toBe(1);
+    expect(
+      renderer.diagnostics.getSnapshot().presentation.uploadedRegionCount,
+    ).toBe(0);
+  });
+
+  it("records opted-in Canvas presentation, upload, and draw timings", () => {
+    const { canvas } = createCanvasFixture(2, 2);
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    const renderer = new CanvasRenderer({
+      canvas,
+      camera: new Camera(),
+      raster,
+      diagnostics: { timings: true },
+    });
+
+    renderer.render();
+    const snapshot = renderer.diagnostics.getSnapshot();
+    expect(snapshot.rendering?.coreDurationMs.current).toBeGreaterThanOrEqual(
+      0,
+    );
+    expect(
+      snapshot.presentation.presentationDurationMs?.current,
+    ).toBeGreaterThanOrEqual(0);
+    expect(
+      snapshot.presentation.uploadDurationMs?.current,
+    ).toBeGreaterThanOrEqual(0);
+    expect(
+      snapshot.presentation.drawDurationMs?.current,
+    ).toBeGreaterThanOrEqual(0);
+  });
   it("resolves rendering demand through Rendering Core before presentation", () => {
     const { canvas } = createCanvasFixture(2, 2);
     const raster = new Raster({ tileSize: 2 });

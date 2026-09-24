@@ -16,7 +16,9 @@ import type {
 import { RendererErrorDefinitions } from "../errors/RendererErrorDefinitions.js";
 import { RendererTypeError } from "../errors/RendererErrors.js";
 import type { CanvasRendererConfig } from "../interfaces/CanvasRendererConfig.js";
+import type { CanvasRendererDiagnostics } from "../interfaces/diagnostics/CanvasRendererDiagnostics.js";
 import CanvasBackend from "./CanvasBackend.js";
+import CanvasDiagnostics from "./CanvasDiagnostics.js";
 import PresentationState from "./PresentationState.js";
 
 /**
@@ -47,7 +49,10 @@ export class CanvasRenderer<
 
   private readonly source: RenderSourceSnapshot<Config>;
   private readonly renderSource: RenderSource;
-  private readonly renderingCore = new RenderingCore();
+  private readonly renderingCore: RenderingCore;
+  /** Read-only grouped measurements for this renderer and its Core. */
+  readonly diagnostics: CanvasRendererDiagnostics;
+  private readonly diagnosticCollector: CanvasDiagnostics;
   private readonly backend: CanvasBackend;
   private readonly presentationState = new PresentationState();
   private pendingContinuation: RenderContinuation | null = null;
@@ -84,10 +89,21 @@ export class CanvasRenderer<
     this.renderSource = CanvasRenderer.toRenderSource(this.source);
     this.canvas = config.canvas;
     this.camera = config.camera;
+    this.renderingCore = new RenderingCore(
+      config.diagnostics === undefined
+        ? {}
+        : { diagnostics: config.diagnostics },
+    );
+    this.diagnosticCollector = new CanvasDiagnostics(
+      this.renderingCore,
+      config.diagnostics?.timings === true,
+    );
+    this.diagnostics = this.diagnosticCollector;
     this.backend = new CanvasBackend(
       config.canvas,
       config.camera,
       this.world?.bounds ?? null,
+      this.diagnosticCollector,
     );
   }
 
@@ -99,9 +115,17 @@ export class CanvasRenderer<
    * completed request reconciles the full viewport and removals.
    */
   render(): void {
+    this.diagnosticCollector.beginRender();
+    this.renderPass();
+    this.diagnosticCollector.endRender();
+  }
+
+  /** Executes one explicit Core and Canvas presentation pass. */
+  private renderPass(): void {
     const viewport = this.resolveViewport();
     if (viewport === null) {
       this.discardPresentation();
+      this.diagnosticCollector.setRegionState(0, 0);
       return;
     }
 
@@ -166,6 +190,7 @@ export class CanvasRenderer<
     this.pendingContinuation = regions.continuation ?? null;
     const commit = this.presentationState.append(regions);
     if (commit !== null) {
+      this.diagnosticCollector.recordRemoved(commit.removedBounds.length);
       this.backend.clearRegions(commit.removedBounds);
       this.backend.presentRegions(commit.frame.regions);
     } else if (regions.identity.sourceRevision === sourceRevision) {
@@ -175,6 +200,10 @@ export class CanvasRenderer<
         this.backend.presentRegions(interactiveRegions);
       }
     }
+    this.diagnosticCollector.setRegionState(
+      this.presentationState.visibleRegionCount,
+      this.presentationState.pendingRegionCount,
+    );
   }
 
   /**
@@ -222,7 +251,12 @@ export class CanvasRenderer<
   /** Drops an obsolete continuation without deleting valid presentation. */
   private cancelPending(): void {
     this.pendingContinuation = null;
+    this.renderingCore.cancelPendingRender();
     this.presentationState.cancelPending();
+    this.diagnosticCollector.setRegionState(
+      this.presentationState.visibleRegionCount,
+      0,
+    );
   }
 
   /** Clears output when its current viewport cannot present a valid frame. */
@@ -233,6 +267,7 @@ export class CanvasRenderer<
     this.backend.clear();
     this.lastPresentedViewportKey = null;
     this.needsFreshRender = false;
+    this.diagnosticCollector.setRegionState(0, 0);
   }
 
   /** Resolves the bounded source viewport requested for the next frame. */
