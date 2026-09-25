@@ -3,12 +3,15 @@ import type {
   RenderRequestIdentity,
 } from "@reverie/core/renderer";
 import type { WorldRect } from "@reverie/core";
+import type { TileCoord } from "@reverie/core/renderer";
 
+import type { CachedPresentationRegion } from "../interfaces/presentation/CachedPresentationRegion.js";
 import type { PendingFrame } from "../interfaces/presentation/PendingFrame.js";
+import type { PresentationCacheContext } from "../interfaces/presentation/PresentationCacheContext.js";
 import type { PresentationCommit } from "../interfaces/presentation/PresentationCommit.js";
 import type { PresentationFrame } from "../interfaces/presentation/PresentationFrame.js";
 
-/** Accumulates full requests while admitting explicitly validated brush regions. */
+/** Accumulates requests while admitting safe completed regions provisionally. */
 export default class PresentationState {
   private currentVisibleIdentity: RenderRequestIdentity | null = null;
   private currentVisibleRegions = new Map<
@@ -16,10 +19,16 @@ export default class PresentationState {
     RenderRegionSet["regions"][number]
   >();
   private currentPendingFrame: PendingFrame | null = null;
+  private readonly cachedRegions = new Map<string, CachedPresentationRegion>();
 
   /** Identity of the request currently accumulating output, if any. */
   get pendingIdentity(): RenderRequestIdentity | null {
     return this.currentPendingFrame?.identity ?? null;
+  }
+
+  /** Effective output resolution required by the unfinished request. */
+  get pendingOutputTileSize(): number | null {
+    return this.currentPendingFrame?.cacheContext?.outputTileSize ?? null;
   }
 
   /** Number of regions accumulated by the incomplete request. */
@@ -32,7 +41,13 @@ export default class PresentationState {
     return this.currentVisibleRegions.size;
   }
 
-  /** Retained visible regions, including validated interactive replacements. */
+
+  /** Number of final pixel results held inside the current retention boundary. */
+  get retainedRegionCount(): number {
+    return this.cachedRegions.size;
+  }
+
+  /** Retained visible regions, including safe provisional replacements. */
   get visibleFrame(): PresentationFrame | null {
     return this.currentVisibleIdentity === null
       ? null
@@ -52,52 +67,190 @@ export default class PresentationState {
     this.cancelPending();
     this.currentVisibleIdentity = null;
     this.currentVisibleRegions.clear();
+    this.cachedRegions.clear();
   }
 
-  /** Retains cached tiles near a camera viewport to bound panning memory. */
-  retainNear(viewport: WorldRect): void {
-    if (this.currentVisibleIdentity === null) {
+  /** Invalidates reusable pixels while leaving the last visible frame as fallback. */
+  clearRetained(): void {
+    this.cachedRegions.clear();
+  }
+
+  /** Clears the display frame while preserving nearby reusable results. */
+  clearVisible(): void {
+    this.cancelPending();
+    this.currentVisibleIdentity = null;
+    this.currentVisibleRegions.clear();
+  }
+
+  /**
+   * Retains renderer results in a larger boundary than the warm margin.
+   * @param viewport - Current camera area in world pixels.
+   * @param margin - Retention distance in world pixels on each side.
+   */
+  retainNear(viewport: WorldRect, margin: number): void {
+    for (const [key, cached] of this.cachedRegions) {
+      if (
+        !PresentationState.intersects(cached.region.bounds, viewport, margin)
+      ) {
+        this.cachedRegions.delete(key);
+      }
+    }
+    this.currentVisibleRegions = new Map(
+      [...this.currentVisibleRegions].filter(([, region]) =>
+        PresentationState.intersects(region.bounds, viewport, margin),
+      ),
+    );
+  }
+
+  /**
+   * Returns only previously generated pixels matching the requested output.
+   * @param context - Source, viewport, and output size required for reuse.
+   * @returns Final pixels that the next Core request may skip.
+   */
+  getReusableRegions(
+    context: PresentationCacheContext,
+  ): RenderRegionSet["regions"] {
+    return [...this.cachedRegions.values()]
+      .filter(
+        (cached) =>
+          cached.sourceRevision === context.sourceRevision &&
+          cached.outputTileSize === context.outputTileSize &&
+          PresentationState.intersects(
+            cached.region.bounds,
+            context.viewport,
+            0,
+          ),
+      )
+      .map((cached) => cached.region);
+  }
+
+  /** Returns same-source pixels that can be projected as temporary coverage. */
+  getProvisionalRegions(
+    context: PresentationCacheContext,
+  ): RenderRegionSet["regions"] {
+    return [...this.cachedRegions.values()]
+      .filter(
+        (cached) =>
+          cached.sourceRevision === context.sourceRevision &&
+          PresentationState.intersects(
+            cached.region.bounds,
+            context.viewport,
+            0,
+          ),
+      )
+      .map((cached) => cached.region);
+  }
+
+  /**
+   * Adds lower-priority results without presenting them outside the viewport.
+   * @param regions - Completed warm-zone pixel results.
+   * @param context - Validity metadata attached to those results.
+   */
+  addWarmRegions(
+    regions: RenderRegionSet["regions"],
+    context: PresentationCacheContext,
+  ): void {
+    for (const region of regions) {
+      const key = PresentationState.getRegionKey(region);
+      const cached = this.cachedRegions.get(key);
+      if (
+        cached?.sourceRevision === context.sourceRevision &&
+        cached.outputTileSize > context.outputTileSize
+      ) {
+        continue;
+      }
+      this.cachedRegions.set(key, {
+        region,
+        sourceRevision: context.sourceRevision,
+        outputTileSize: context.outputTileSize,
+      });
+    }
+  }
+
+  /**
+   * Keeps unaffected results after a precisely located source edit.
+   * @param sourceRevision - New renderer source revision.
+   * @param changedTiles - All source Tiles touched by the edit.
+   * @param tileSize - Source Tile edge length in world pixels.
+   */
+  retainSourceChanges(
+    sourceRevision: string,
+    changedTiles: readonly TileCoord[],
+    tileSize: number,
+  ): void {
+    if (changedTiles.length === 0) {
+      this.cachedRegions.clear();
       return;
     }
-    const regions = [...this.currentVisibleRegions.values()].filter(
-      (region) => {
-        const marginX = region.bounds.width;
-        const marginY = region.bounds.height;
-        return (
-          region.bounds.x < viewport.x + viewport.width + marginX &&
-          region.bounds.x + region.bounds.width > viewport.x - marginX &&
-          region.bounds.y < viewport.y + viewport.height + marginY &&
-          region.bounds.y + region.bounds.height > viewport.y - marginY
-        );
-      },
+    const changedKeys = new Set(
+      changedTiles.map(
+        ({ x, y }) => `${x * tileSize}:${y * tileSize}:${tileSize}:${tileSize}`,
+      ),
     );
-    this.currentVisibleRegions = new Map(
-      regions.map((region) => [PresentationState.getRegionKey(region), region]),
-    );
+    for (const [key, cached] of this.cachedRegions) {
+      if (changedKeys.has(key)) {
+        this.cachedRegions.delete(key);
+      } else {
+        this.cachedRegions.set(key, { ...cached, sourceRevision });
+      }
+    }
+  }
+
+  /**
+   * Counts cached nonempty results in the actual visible, warm, and retained zones.
+   * @param viewport - Current visible area in world pixels.
+   * @param warmViewport - Visible area expanded to the render margin.
+   * @returns Counts of retained renderer results by zone.
+   */
+  getZoneCounts(
+    viewport: WorldRect,
+    warmViewport: WorldRect,
+  ): { visible: number; warm: number; retained: number } {
+    let visible = 0;
+    let warm = 0;
+    let retained = 0;
+    for (const { region } of this.cachedRegions.values()) {
+      if (PresentationState.intersects(region.bounds, viewport, 0)) {
+        visible += 1;
+      } else if (PresentationState.intersects(region.bounds, warmViewport, 0)) {
+        warm += 1;
+      } else {
+        retained += 1;
+      }
+    }
+    return { visible, warm, retained };
   }
 
   /**
    * Starts a new isolated pending frame while retaining visible coverage.
    * @param identity - Request and source revision accepted by this frame.
-   * @param interactiveKeys - Exact Tile-region keys allowed to appear early.
+   * @param cacheContext - Validity metadata for completed pixels, when retained.
+   * @param reusableRegions - Renderer pixels already valid for this request.
    */
   begin(
     identity: RenderRequestIdentity,
-    interactiveKeys: ReadonlySet<string> = new Set(),
+    cacheContext?: PresentationCacheContext,
+    reusableRegions: RenderRegionSet["regions"] = [],
   ): void {
     this.currentPendingFrame = {
       identity,
-      regions: new Map(),
-      interactiveKeys,
+      regions: new Map(
+        reusableRegions.map((region) => [
+          PresentationState.getRegionKey(region),
+          region,
+        ]),
+      ),
+      ...(cacheContext === undefined ? {} : { cacheContext }),
     };
   }
 
   /**
-   * Applies only explicitly hinted regions from the matching current request.
-   * @param result - Incomplete Core batch to inspect for changed Tiles.
+   * Patches completed nonempty regions from the current incomplete request.
+   * Removal remains deferred until full request reconciliation.
+   * @param result - Incomplete Core batch belonging to the current request.
    * @returns Regions safe to patch onto the Canvas immediately.
    */
-  applyInteractive(result: RenderRegionSet): RenderRegionSet["regions"] {
+  applyProvisional(result: RenderRegionSet): RenderRegionSet["regions"] {
     const pendingFrame = this.currentPendingFrame;
     if (
       pendingFrame === null ||
@@ -108,13 +261,22 @@ export default class PresentationState {
     const regions: RenderRegionSet["regions"][number][] = [];
     for (const region of result.regions) {
       const key = PresentationState.getRegionKey(region);
-      if (!pendingFrame.interactiveKeys.has(key)) {
+      const context = pendingFrame.cacheContext;
+      if (
+        context === undefined ||
+        !PresentationState.intersects(region.bounds, context.viewport, 0) ||
+        !Object.values(region.bounds).every(Number.isFinite) ||
+        region.bounds.width <= 0 ||
+        region.bounds.height <= 0 ||
+        region.pixels.length !== context.outputTileSize ** 2 * 4
+      ) {
         continue;
       }
       if (PresentationState.isVisuallyEmpty(region)) {
         continue;
       }
       this.currentVisibleRegions.set(key, region);
+      this.addWarmRegions([region], context);
       regions.push(region);
     }
     if (regions.length > 0) {
@@ -124,7 +286,7 @@ export default class PresentationState {
   }
 
   /**
-   * Accumulates a matching batch and replaces visible coverage only on completion.
+   * Accumulates a matching batch and reconciles visible coverage on completion.
    *
    * @param result - Result belonging to the request being accumulated.
    * @returns Completed replacement, or null for an incomplete or stale batch.
@@ -148,6 +310,22 @@ export default class PresentationState {
     const removedBounds = [...this.currentVisibleRegions]
       .filter(([key]) => !pendingFrame.regions.has(key))
       .map(([, region]) => region.bounds);
+    const cacheContext = pendingFrame.cacheContext;
+    if (cacheContext !== undefined) {
+      for (const [key, cached] of this.cachedRegions) {
+        if (
+          PresentationState.intersects(
+            cached.region.bounds,
+            cacheContext.viewport,
+            0,
+          ) &&
+          !pendingFrame.regions.has(key)
+        ) {
+          this.cachedRegions.delete(key);
+        }
+      }
+      this.addWarmRegions([...pendingFrame.regions.values()], cacheContext);
+    }
     this.currentVisibleRegions = pendingFrame.regions;
     this.currentVisibleIdentity = pendingFrame.identity;
     this.currentPendingFrame = null;
@@ -158,6 +336,20 @@ export default class PresentationState {
       },
       removedBounds,
     };
+  }
+
+  /** Uses half-open intersections so a Tile touching an edge is outside it. */
+  private static intersects(
+    bounds: WorldRect,
+    viewport: WorldRect,
+    margin: number,
+  ): boolean {
+    return (
+      bounds.x < viewport.x + viewport.width + margin &&
+      bounds.x + bounds.width > viewport.x - margin &&
+      bounds.y < viewport.y + viewport.height + margin &&
+      bounds.y + bounds.height > viewport.y - margin
+    );
   }
 
   /** Uses geometry because later LOD passes intentionally replace prior regions. */

@@ -37,6 +37,98 @@ afterEach(() => {
 });
 
 describe("ReverieCanvas construction", () => {
+  it("coalesces camera requests into one latest-state frame without changing source", () => {
+    const runtime = createCanvasRuntime(2, 2);
+    const world = new World({ tileSize: 2 });
+    world
+      .getLayer(0)
+      .raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas, world });
+    const render = vi.spyOn(reverie.renderer, "render");
+    const markSourceChanged = vi.spyOn(reverie.renderer, "markSourceChanged");
+    const before =
+      reverie.renderer.diagnostics.getSnapshot().progressive.requestCount;
+
+    reverie.camera.setPan(1, 0);
+    reverie.requestViewRender("interactive");
+    reverie.camera.setPan(2, 0);
+    reverie.requestViewRender("interactive");
+    reverie.camera.setPan(3, 0);
+    reverie.requestViewRender("interactive");
+
+    expect(render).not.toHaveBeenCalled();
+    expect(reverie.renderer.diagnostics.getSnapshot().scheduling).toEqual({
+      requestedCount: 3,
+      executedCount: 0,
+      coalescedCount: 2,
+    });
+    runtime.runNextFrame();
+    expect(render).toHaveBeenCalledOnce();
+    expect(render).toHaveBeenCalledWith(
+      expect.objectContaining({
+        quality: "interactive",
+        prefetch: true,
+        remainingFrameBudgetMs: expect.any(Number),
+      }),
+    );
+    expect(markSourceChanged).not.toHaveBeenCalled();
+    expect(reverie.camera.panX).toBe(3);
+    expect(
+      reverie.renderer.diagnostics.getSnapshot().progressive.requestCount,
+    ).toBe(before + 1);
+    expect(reverie.renderer.diagnostics.getSnapshot().interaction.mode).toBe(
+      "interactive",
+    );
+
+    reverie.requestViewRender("full");
+    runtime.runNextFrame();
+    expect(reverie.renderer.diagnostics.getSnapshot().interaction.mode).toBe(
+      "full",
+    );
+    expect(reverie.renderer.diagnostics.getSnapshot().scheduling).toEqual({
+      requestedCount: 4,
+      executedCount: 2,
+      coalescedCount: 3,
+    });
+    reverie.dispose();
+  });
+
+  it("rejects unsupported camera quality before scheduling", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+
+    expect(() =>
+      reverie.requestViewRender(
+        // @ts-expect-error Runtime validation protects JavaScript callers.
+        "preview",
+      ),
+    ).toThrow(`[${WebErrorDefinitions.INVALID_VIEW_QUALITY.code}]`);
+    expect(
+      reverie.renderer.diagnostics.getSnapshot().scheduling.requestedCount,
+    ).toBe(0);
+    reverie.dispose();
+  });
+
+  it("does not block document controls while only warm rendering remains", () => {
+    const runtime = createCanvasRuntime(2, 2);
+    const world = new World({ tileSize: 2 });
+    world
+      .getLayer(0)
+      .raster.setPixel({ x: 0, y: 0 }, { r: 1, g: 0, b: 0, a: 255 });
+    world
+      .getLayer(0)
+      .raster.setPixel({ x: 4, y: 0 }, { r: 2, g: 0, b: 0, a: 255 });
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas, world });
+
+    reverie.requestViewRender("full");
+    runtime.runNextFrame();
+    expect(reverie.renderer.hasPendingRender).toBe(true);
+    expect(() => reverie.setSelection(null)).not.toThrow();
+    runtime.runNextFrame();
+    expect(reverie.renderer.diagnostics.getSnapshot().zones.warmCount).toBe(1);
+    reverie.dispose();
+  });
+
   it("forwards optional renderer timing diagnostics to its public renderer", () => {
     const runtime = createCanvasRuntime();
     const reverie = new ReverieCanvas({

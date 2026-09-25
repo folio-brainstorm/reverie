@@ -2,6 +2,7 @@ import type { Raster } from "../raster/Raster.js";
 import type { RasterLayer } from "../world/RasterLayer.js";
 import type { WorldRect } from "../../interfaces/camera/WorldRect.js";
 import type { RenderBudget } from "../../interfaces/renderer/RenderBudget.js";
+import type { RenderContext } from "../../interfaces/renderer/RenderContext.js";
 import type { RenderContinuation } from "../../interfaces/renderer/RenderContinuation.js";
 import type { RenderDiagnostics } from "../../interfaces/renderer/RenderDiagnostics.js";
 import type { RenderingCoreDiagnosticsSnapshot } from "../../interfaces/renderer/RenderingCoreDiagnosticsSnapshot.js";
@@ -69,7 +70,7 @@ export class RenderingCore {
   private lastDiagnostics: RenderDiagnostics = EMPTY_DIAGNOSTICS;
   private nextRequestId = 1;
   private readonly tileRenderSummaries = new TileRenderSummaryCache();
-  private readonly timingsEnabled: boolean;
+  private timingsEnabled: boolean;
   private readonly coreTiming = new RollingTiming();
   private readonly rasterTiming = new RollingTiming();
   private readonly compositionTiming = new RollingTiming();
@@ -100,6 +101,65 @@ export class RenderingCore {
   }
 
   /**
+   * Enables or disables stage timings without changing render counters or work.
+   * Switching modes starts a fresh rolling timing window.
+   * @param enabled - Whether later render batches collect stage durations.
+   * @throws {ReverieTypeError} The value is not a boolean at runtime.
+   */
+  setTimingDiagnosticsEnabled(enabled: boolean): void {
+    if (typeof enabled !== "boolean") {
+      throw ReverieTypeError.from(
+        ErrorDefinitions.RENDERING.INVALID_DIAGNOSTICS_TIMINGS,
+      );
+    }
+    if (this.timingsEnabled === enabled) {
+      return;
+    }
+    this.timingsEnabled = enabled;
+    this.coreTiming.clear();
+    this.rasterTiming.clear();
+    this.compositionTiming.clear();
+    this.lodTiming.clear();
+  }
+
+  /**
+   * Resolves the actual square pixel size requested for each output Tile.
+   * Equal sizes represent the same generation requirement even when raw camera
+   * scales or quality labels differ.
+   * @param tileSize - Source Tile edge length in pixels.
+   * @param context - Scale and quality used for this render request.
+   * @returns Effective output Tile edge length in pixels.
+   * @throws {ReverieRangeError} The LOD strategy returns an invalid size.
+   */
+  resolveOutputTileSize(tileSize: number, context: RenderContext): number {
+    if (!Number.isSafeInteger(tileSize) || tileSize <= 0) {
+      throw ReverieRangeError.from(
+        ErrorDefinitions.RENDERING.INVALID_LOD_STRATEGY_RESULT,
+        { tileSize, outputTileSize: tileSize },
+      );
+    }
+    if (
+      context.quality !== undefined &&
+      context.quality !== "full" &&
+      context.quality !== "interactive"
+    ) {
+      throw ReverieTypeError.from(
+        ErrorDefinitions.RENDERING.INVALID_RENDER_QUALITY,
+      );
+    }
+    const requestedScale = context.scale;
+    const outputTileSize = this.lodStrategy.resolveInitialOutputTileSize({
+      tileSize,
+      scale:
+        context.quality === "interactive" && requestedScale !== undefined
+          ? requestedScale / 2
+          : requestedScale,
+    });
+    this.assertValidOutputTileSize(outputTileSize, tileSize);
+    return outputTileSize;
+  }
+
+  /**
    * Begins a fresh bounded render request, cancelling any prior continuation.
    *
    * A zero-area viewport requires no presentation and returns an empty set.
@@ -109,12 +169,21 @@ export class RenderingCore {
    *
    * @param request - Source, runtime context, and complete requested viewport.
    * @returns One complete render result or the next partial batch with a handle.
-   * @throws {ReverieTypeError} The viewport is missing or has a non-number component.
+   * @throws {ReverieTypeError} The viewport is missing, has a non-number component, or quality is unsupported.
    * @throws {ReverieRangeError} A viewport or budget component is invalid.
    */
   render(request: RenderRequest): RenderRegionSet {
     this.cancelActiveContinuation();
     const viewport = RenderingCore.resolveViewport(request);
+    if (
+      request.context.quality !== undefined &&
+      request.context.quality !== "full" &&
+      request.context.quality !== "interactive"
+    ) {
+      throw ReverieTypeError.from(
+        ErrorDefinitions.RENDERING.INVALID_RENDER_QUALITY,
+      );
+    }
     const identity = this.resolveRequestIdentity(request, viewport);
     this.requestCount += 1;
 
@@ -240,11 +309,10 @@ export class RenderingCore {
     const source = request.source;
     const tileSize =
       "raster" in source ? source.raster.tileSize : source.world.tileSize;
-    const outputTileSize = this.lodStrategy.resolveInitialOutputTileSize({
+    const outputTileSize = this.resolveOutputTileSize(
       tileSize,
-      scale: request.context.scale,
-    });
-    this.assertValidOutputTileSize(outputTileSize, tileSize);
+      request.context,
+    );
     const interactiveTiles = RenderingCore.resolveInteractiveTiles(
       request.interactiveTiles,
       tileSize,
@@ -255,11 +323,23 @@ export class RenderingCore {
       interactiveIndex: 0,
       interactiveKeys: new Set(interactiveTiles.map(({ x, y }) => `${x}:${y}`)),
     };
+    const skipKeys = new Set(
+      RenderingCore.resolveInteractiveTiles(
+        request.skipTiles,
+        tileSize,
+        viewport,
+      ).map(({ x, y }) => `${x}:${y}`),
+    );
+    const excludedViewport =
+      request.excludeViewport === undefined
+        ? null
+        : RenderingCore.resolveViewport({ viewport: request.excludeViewport });
 
     if ("raster" in source) {
       return {
         identity,
         viewport,
+        excludedViewport,
         tileSize,
         outputTileSize,
         layers: null,
@@ -270,6 +350,7 @@ export class RenderingCore {
         isTraversalComplete: false,
         visitedWorldCoords: new Set<string>(),
         ...interactiveState,
+        skipKeys,
       };
     }
 
@@ -277,6 +358,7 @@ export class RenderingCore {
     return {
       identity,
       viewport,
+      excludedViewport,
       tileSize,
       outputTileSize,
       layers,
@@ -289,6 +371,7 @@ export class RenderingCore {
       isTraversalComplete: false,
       visitedWorldCoords: new Set<string>(),
       ...interactiveState,
+      skipKeys,
     };
   }
 
@@ -306,6 +389,7 @@ export class RenderingCore {
     this.lodDurationMs = 0;
     const regions: RenderRegion[] = [];
     let candidateTileCount = 0;
+    let inspectedTileCount = 0;
     let visibleTileCount = 0;
     let renderEmptyTileCount = 0;
     let generatedPixelBytes = 0;
@@ -345,7 +429,8 @@ export class RenderingCore {
       candidateTileCount < this.budget.maxCandidateTiles
     ) {
       if (
-        candidateTileCount > 0 &&
+        inspectedTileCount > 0 &&
+        inspectedTileCount % this.budget.maxCandidateTiles === 0 &&
         Date.now() - startedAt >= this.budget.maxRenderDurationMs
       ) {
         break;
@@ -356,10 +441,21 @@ export class RenderingCore {
         work.isTraversalComplete = true;
         break;
       }
+      inspectedTileCount += 1;
       if (work.interactiveKeys.has(`${coord.x}:${coord.y}`)) {
         continue;
       }
-      candidateTileCount += 1;
+      if (
+        work.skipKeys.has(`${coord.x}:${coord.y}`) ||
+        (work.excludedViewport !== null &&
+          RenderingCore.isTileVisible(
+            coord,
+            work.tileSize,
+            work.excludedViewport,
+          ))
+      ) {
+        continue;
+      }
       if (!RenderingCore.isTileVisible(coord, work.tileSize, work.viewport)) {
         continue;
       }
@@ -370,6 +466,7 @@ export class RenderingCore {
         }
         work.visitedWorldCoords.add(key);
       }
+      candidateTileCount += 1;
       visibleTileCount += 1;
       coords.push(coord);
     }

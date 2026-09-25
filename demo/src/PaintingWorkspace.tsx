@@ -55,6 +55,7 @@ import type { SelectionDrag } from "./interfaces/selection/SelectionDrag";
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 64;
 const WHEEL_ZOOM_SENSITIVITY = 0.0015;
+const WHEEL_SETTLE_MS = 150;
 const INITIAL_BRUSH_SIZE = 16;
 const INITIAL_BRUSH_OPACITY = 0.75;
 const INITIAL_BRUSH_SPACING = 0.2;
@@ -115,6 +116,8 @@ export function PaintingWorkspace({
   const panPointerIdRef = useRef<number | null>(null);
   const lastPanPositionRef = useRef<ScreenPoint | null>(null);
   const lastPointerPositionRef = useRef<ScreenPoint | null>(null);
+  const cameraPublishFrameRef = useRef<number | null>(null);
+  const wheelSettleTimerRef = useRef<number | null>(null);
   const imageLoadRequestIdRef = useRef(0);
   const projectImportRequestIdRef = useRef(0);
   const activeHistoryGroupRef = useRef<ActiveHistoryGroup | null>(null);
@@ -213,14 +216,18 @@ export function PaintingWorkspace({
     indicator.setAttribute("visibility", "visible");
   };
 
-  /** Commits the checkerboard and clipping geometry in the canvas render frame. */
+  /** Publishes the latest Camera projection once per browser frame. */
   const publishCameraView = (): void => {
-    const camera = reverieRef.current?.camera;
-    if (camera === undefined) return;
-    flushSync(() => {
-      setPanX(camera.panX);
-      setPanY(camera.panY);
-      setCameraZoom(camera.zoom);
+    if (cameraPublishFrameRef.current !== null) return;
+    cameraPublishFrameRef.current = window.requestAnimationFrame(() => {
+      cameraPublishFrameRef.current = null;
+      const camera = reverieRef.current?.camera;
+      if (camera === undefined) return;
+      flushSync(() => {
+        setPanX(camera.panX);
+        setPanY(camera.panY);
+        setCameraZoom(camera.zoom);
+      });
     });
   };
 
@@ -245,7 +252,14 @@ export function PaintingWorkspace({
       MAX_ZOOM * fitZoom,
     );
     reverie.camera.zoomAt(anchor, nextZoom);
-    reverie.render();
+    reverie.requestViewRender("interactive");
+    if (wheelSettleTimerRef.current !== null) {
+      window.clearTimeout(wheelSettleTimerRef.current);
+    }
+    wheelSettleTimerRef.current = window.setTimeout(() => {
+      wheelSettleTimerRef.current = null;
+      reverieRef.current?.requestViewRender("full");
+    }, WHEEL_SETTLE_MS);
     publishCameraView();
     updateBrushIndicator(anchor);
   };
@@ -331,7 +345,6 @@ export function PaintingWorkspace({
           "smooth",
         ),
         frameBudget: 8,
-        diagnostics: { timings: true },
         onError: (error) => {
           hasInitializationError = true;
           setDrawingError(formatDrawingError(error));
@@ -351,7 +364,6 @@ export function PaintingWorkspace({
 
       reverieRef.current = reverie;
       diagnosticsRecorder = new DemoDiagnosticsRecorder(reverie.renderer);
-      diagnosticsRecorder.installOnRenderer();
       diagnosticsRecorderRef.current = diagnosticsRecorder;
       const bounds = frame.getBoundingClientRect();
       const fitZoom = getFitCameraZoom(bounds.width, bounds.height, canvasSize);
@@ -390,6 +402,14 @@ export function PaintingWorkspace({
 
     return () => {
       window.cancelAnimationFrame(readyFrame);
+      if (cameraPublishFrameRef.current !== null) {
+        window.cancelAnimationFrame(cameraPublishFrameRef.current);
+        cameraPublishFrameRef.current = null;
+      }
+      if (wheelSettleTimerRef.current !== null) {
+        window.clearTimeout(wheelSettleTimerRef.current);
+        wheelSettleTimerRef.current = null;
+      }
       imageLoadRequestIdRef.current += 1;
       projectImportRequestIdRef.current += 1;
       resizeObserver?.disconnect();
@@ -403,6 +423,19 @@ export function PaintingWorkspace({
       activeHistoryGroupRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const renderer = reverieRef.current?.renderer;
+    const recorder = diagnosticsRecorderRef.current;
+    if (renderer === undefined || recorder === null) return;
+
+    renderer.configureDiagnostics({ timings: isDiagnosticsPanelOpen });
+    if (isDiagnosticsPanelOpen) {
+      recorder.installOnRenderer();
+    } else {
+      recorder.stopRecording();
+    }
+  }, [isDiagnosticsPanelOpen]);
 
   useEffect(() => {
     brushSettingsRef.current = {
@@ -896,6 +929,10 @@ export function PaintingWorkspace({
   const handlePanStart = (event: ReactPointerEvent<HTMLDivElement>): void => {
     if (event.button !== 1 || panPointerIdRef.current !== null) return;
     event.preventDefault();
+    if (wheelSettleTimerRef.current !== null) {
+      window.clearTimeout(wheelSettleTimerRef.current);
+      wheelSettleTimerRef.current = null;
+    }
     event.currentTarget.setPointerCapture(event.pointerId);
     panPointerIdRef.current = event.pointerId;
     lastPanPositionRef.current = { x: event.clientX, y: event.clientY };
@@ -924,7 +961,7 @@ export function PaintingWorkspace({
       -(event.clientY - previousPosition.y) / camera.zoom,
     );
     lastPanPositionRef.current = { x: event.clientX, y: event.clientY };
-    reverie.render();
+    reverie.requestViewRender("interactive");
     publishCameraView();
   };
 
@@ -936,6 +973,7 @@ export function PaintingWorkspace({
       event.currentTarget.releasePointerCapture(event.pointerId);
     hideBrushIndicator();
     setIsPanning(false);
+    reverieRef.current?.requestViewRender("full");
   };
 
   const drawingLeft = -panX * cameraZoom;

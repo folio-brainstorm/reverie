@@ -154,9 +154,49 @@ export function DiagnosticsPanel({
             <dt>Output tile</dt>
             <dd>{snapshot.quality?.outputTileSize ?? "—"} px</dd>
           </div>
+          <div>
+            <dt>Render scale</dt>
+            <dd>{snapshot.quality?.effectiveRenderScale ?? "—"}</dd>
+          </div>
+          <div>
+            <dt>Interaction quality</dt>
+            <dd>{snapshot.interaction.mode}</dd>
+          </div>
+          <div>
+            <dt>Visible results</dt>
+            <dd>{snapshot.zones.visibleCount}</dd>
+          </div>
+          <div>
+            <dt>Warm results</dt>
+            <dd>{snapshot.zones.warmCount}</dd>
+          </div>
+          <div>
+            <dt>Retained results</dt>
+            <dd>{snapshot.zones.retainedCount}</dd>
+          </div>
         </dl>
         <p className="diagnostics-note">Since renderer creation</p>
         <dl>
+          <div>
+            <dt>View requests</dt>
+            <dd>{snapshot.scheduling.requestedCount}</dd>
+          </div>
+          <div>
+            <dt>View renders</dt>
+            <dd>{snapshot.scheduling.executedCount}</dd>
+          </div>
+          <div>
+            <dt>Coalesced requests</dt>
+            <dd>{snapshot.scheduling.coalescedCount}</dd>
+          </div>
+          <div>
+            <dt>Interactive renders</dt>
+            <dd>{snapshot.interaction.interactiveRenderCount}</dd>
+          </div>
+          <div>
+            <dt>Full renders</dt>
+            <dd>{snapshot.interaction.fullRenderCount}</dd>
+          </div>
           <div>
             <dt>Requests</dt>
             <dd>{snapshot.progressive.requestCount}</dd>

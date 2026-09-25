@@ -171,6 +171,7 @@ export default class CanvasBackend {
   clear(): void {
     const startedAt = this.diagnostics.hasTimings ? performance.now() : 0;
     this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.configureSmoothing();
     if (this.diagnostics.hasTimings) {
       this.diagnostics.recordPresentation(performance.now() - startedAt);
     }
@@ -207,6 +208,25 @@ export default class CanvasBackend {
     this.regionSurfaces.clear();
   }
 
+  /**
+   * Releases upload surfaces after their Tile leaves the retention boundary.
+   * @param viewport - Current camera area in world pixels.
+   * @param margin - Retention distance in world pixels on each side.
+   */
+  retainNear(viewport: WorldRect, margin: number): void {
+    for (const [key, surface] of this.regionSurfaces) {
+      const bounds = surface.bounds;
+      if (
+        bounds.x >= viewport.x + viewport.width + margin ||
+        bounds.x + bounds.width <= viewport.x - margin ||
+        bounds.y >= viewport.y + viewport.height + margin ||
+        bounds.y + bounds.height <= viewport.y - margin
+      ) {
+        this.regionSurfaces.delete(key);
+      }
+    }
+  }
+
   /** Clips presentation to the immutable output bounds supplied by a World. */
   private clipWorldBounds(): void {
     if (this.worldBounds === null) {
@@ -227,17 +247,25 @@ export default class CanvasBackend {
   /** Uploads and projects one already-composited pixel region. */
   private presentRegion(region: RenderRegion): void {
     const surface = this.getRegionSurface(region);
-    if (
-      !CanvasBackend.hasCurrentPixels(surface.imageData.data, region.pixels)
-    ) {
-      const uploadStartedAt = this.diagnostics.hasTimings
-        ? performance.now()
-        : 0;
-      surface.imageData.data.set(region.pixels);
-      surface.context.putImageData(surface.imageData, 0, 0);
-      this.diagnostics.recordUpload(
-        this.diagnostics.hasTimings ? performance.now() - uploadStartedAt : 0,
+    if (surface.lastValidatedPixels === region.pixels) {
+      this.diagnostics.recordIdentityReuse();
+    } else {
+      const hasSamePixels = CanvasBackend.hasCurrentPixels(
+        surface.imageData.data,
+        region.pixels,
+        this.diagnostics,
       );
+      if (!hasSamePixels) {
+        const uploadStartedAt = this.diagnostics.hasTimings
+          ? performance.now()
+          : 0;
+        surface.imageData.data.set(region.pixels);
+        surface.context.putImageData(surface.imageData, 0, 0);
+        this.diagnostics.recordUpload(
+          this.diagnostics.hasTimings ? performance.now() - uploadStartedAt : 0,
+        );
+      }
+      surface.lastValidatedPixels = region.pixels;
     }
 
     const point = this.camera.worldToScreen(region.bounds);
@@ -274,6 +302,7 @@ export default class CanvasBackend {
       );
     }
     const surface = {
+      bounds: region.bounds,
       canvas,
       context,
       imageData: context.createImageData(size, size),
@@ -291,15 +320,19 @@ export default class CanvasBackend {
   private static hasCurrentPixels(
     current: Uint8ClampedArray,
     next: Uint8Array,
+    diagnostics: CanvasDiagnostics,
   ): boolean {
     if (current.length !== next.length) {
+      diagnostics.recordPixelComparison(0);
       return false;
     }
     for (let index = 0; index < current.length; index += 1) {
       if (current[index] !== next[index]) {
+        diagnostics.recordPixelComparison(index + 1);
         return false;
       }
     }
+    diagnostics.recordPixelComparison(current.length);
     return true;
   }
 

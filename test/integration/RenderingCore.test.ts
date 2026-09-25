@@ -18,6 +18,141 @@ import { describe, expect, it, vi } from "vitest";
 const context: RenderContext = {};
 
 describe("RenderingCore", () => {
+  it("uses the existing coarser LOD for interaction and restores full output", () => {
+    const raster = new Raster({ tileSize: 4 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    const core = new RenderingCore();
+    const viewport = { x: 0, y: 0, width: 4, height: 4 };
+    const source = { raster };
+
+    const full = core.render({
+      source,
+      context: { scale: 1, quality: "full" },
+      viewport,
+    });
+    const interactive = core.render({
+      source,
+      context: { scale: 1, quality: "interactive" },
+      viewport,
+    });
+    const settled = core.render({
+      source,
+      context: { scale: 1, quality: "full" },
+      viewport,
+    });
+
+    expect(full.regions[0]?.pixels).toHaveLength(4 * 4 * 4);
+    expect(interactive.regions[0]?.pixels).toHaveLength(2 * 2 * 4);
+    expect(settled.regions).toEqual(full.regions);
+  });
+
+  it("skips excluded tiles before spending candidate budget and skips retained tiles", () => {
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 1, g: 0, b: 0, a: 255 });
+    raster.setPixel({ x: 2, y: 0 }, { r: 2, g: 0, b: 0, a: 255 });
+    const core = new RenderingCore({ budget: { maxCandidateTiles: 1 } });
+    const first = core.render({
+      source: { raster },
+      context,
+      viewport: { x: 0, y: 0, width: 4, height: 2 },
+      excludeViewport: { x: 0, y: 0, width: 2, height: 2 },
+    });
+
+    expect(first.regions.map((region) => region.bounds.x)).toEqual([2]);
+
+    const reused = core.render({
+      source: { raster },
+      context,
+      viewport: { x: 0, y: 0, width: 4, height: 2 },
+      skipTiles: [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+      ],
+    });
+    expect(reused.regions).toEqual([]);
+  });
+
+  it("uses effective output Tile size as the generation compatibility identity", () => {
+    const core = new RenderingCore();
+    expect(core.resolveOutputTileSize(128, { scale: 1, quality: "full" })).toBe(
+      128,
+    );
+    expect(
+      core.resolveOutputTileSize(128, { scale: 0.99, quality: "full" }),
+    ).toBe(128);
+    expect(
+      core.resolveOutputTileSize(128, { scale: 0.5, quality: "full" }),
+    ).toBe(64);
+    expect(
+      core.resolveOutputTileSize(128, { scale: 1, quality: "interactive" }),
+    ).toBe(64);
+  });
+
+  it.each([0, -1, Number.NaN, 1.5])(
+    "rejects invalid source Tile size %s at the output requirement boundary",
+    (tileSize) => {
+      expect(() =>
+        new RenderingCore().resolveOutputTileSize(tileSize, {}),
+      ).toThrow(ReverieRangeError);
+    },
+  );
+
+  it("reaches a newly visible Tile despite earlier offscreen allocations", () => {
+    const raster = new Raster({ tileSize: 2 });
+    for (let x = 0; x < 260; x += 2) {
+      raster.setPixel({ x, y: 0 }, { r: 1, g: 0, b: 0, a: 255 });
+    }
+    const core = new RenderingCore({
+      budget: {
+        maxCandidateTiles: 1,
+        maxGeneratedPixelBytes: 1024,
+        maxRenderDurationMs: 1_000,
+      },
+    });
+    const result = core.render({
+      source: { raster },
+      context,
+      viewport: { x: 258, y: 0, width: 2, height: 2 },
+    });
+    expect(result.regions.map((region) => region.bounds.x)).toEqual([258]);
+  });
+
+  it("accepts negative Tile coordinates and rejects invalid reuse and exclusion inputs", () => {
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: -2, y: 0 }, { r: 1, g: 0, b: 0, a: 255 });
+    const core = new RenderingCore();
+    const request = {
+      source: { raster },
+      context,
+      viewport: { x: -2, y: 0, width: 2, height: 2 },
+    };
+
+    expect(
+      core.render({ ...request, skipTiles: [{ x: -1, y: 0 }] }).regions,
+    ).toEqual([]);
+    expect(() =>
+      core.render({
+        ...request,
+        skipTiles: [{ x: Number.NaN, y: 0 }],
+      }),
+    ).toThrow(ReverieRangeError);
+    expect(() =>
+      core.render({
+        ...request,
+        excludeViewport: { x: 0, y: 0, width: -1, height: 2 },
+      }),
+    ).toThrow(ReverieRangeError);
+    expect(() =>
+      core.render({
+        ...request,
+        context: {
+          // @ts-expect-error Runtime validation protects JavaScript callers.
+          quality: "preview",
+        },
+      }),
+    ).toThrow(ReverieTypeError);
+  });
+
   it("omits missing, byte-zero, and hidden-RGB Raster tiles without changing source bytes", () => {
     const raster = new Raster({ tileSize: 2 });
     const core = new RenderingCore();
@@ -348,6 +483,50 @@ describe("RenderingCore", () => {
     expect(
       core.getDiagnosticsSnapshot().progressive.cancelledRequestCount,
     ).toBe(1);
+  });
+
+  it("collects timing only while enabled and starts a fresh window when reenabled", () => {
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 1, g: 2, b: 3, a: 255 });
+    const core = new RenderingCore();
+    const request = {
+      source: { raster },
+      context,
+      viewport: { x: 0, y: 0, width: 2, height: 2 },
+    };
+
+    core.render(request);
+    expect(core.getDiagnosticsSnapshot().rendering).toBeUndefined();
+
+    core.setTimingDiagnosticsEnabled(true);
+    expect(core.getDiagnosticsSnapshot().rendering).toBeUndefined();
+    core.render(request);
+    expect(
+      core.getDiagnosticsSnapshot().rendering?.coreDurationMs.current,
+    ).toBeGreaterThanOrEqual(0);
+
+    core.setTimingDiagnosticsEnabled(false);
+    expect(core.getDiagnosticsSnapshot().rendering).toBeUndefined();
+    core.render(request);
+    expect(core.getDiagnosticsSnapshot().rendering).toBeUndefined();
+
+    core.setTimingDiagnosticsEnabled(true);
+    expect(core.getDiagnosticsSnapshot().rendering).toBeUndefined();
+    expect(core.getDiagnosticsSnapshot().progressive.requestCount).toBe(3);
+    core.render(request);
+    expect(
+      core.getDiagnosticsSnapshot().rendering?.coreDurationMs.current,
+    ).toBeGreaterThanOrEqual(0);
+    expect(core.getDiagnosticsSnapshot().progressive.requestCount).toBe(4);
+  });
+
+  it("rejects a non-boolean timing setting from a JavaScript caller", () => {
+    const core = new RenderingCore();
+
+    expect(() =>
+      // @ts-expect-error Runtime validation protects JavaScript callers.
+      core.setTimingDiagnosticsEnabled("on"),
+    ).toThrow("EC_RENDERING_0008");
   });
 
   it("clears pending diagnostics when a caller discards a continuation", () => {

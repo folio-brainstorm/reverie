@@ -9,6 +9,7 @@ import type { TileCoord } from "../tile/TileCoord.js";
 export interface RenderWorkState {
   readonly identity: RenderRequestIdentity;
   readonly viewport: WorldRect;
+  readonly excludedViewport: WorldRect | null;
   readonly tileSize: number;
   readonly outputTileSize: number;
   readonly layers: readonly RasterLayer[] | null;
@@ -21,4 +22,5 @@ export interface RenderWorkState {
   readonly interactiveTiles: readonly TileCoord[];
   interactiveIndex: number;
   readonly interactiveKeys: Set<string>;
+  readonly skipKeys: ReadonlySet<string>;
 }

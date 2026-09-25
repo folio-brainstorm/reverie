@@ -93,6 +93,14 @@ export const ErrorDefinitions = {
       template:
         "Render LOD strategy returned invalid output tile size `$outputTileSize` for source tile size `$tileSize`.",
     },
+    INVALID_RENDER_QUALITY: {
+      code: "EC_RENDERING_0007",
+      template: "Render quality must be `full` or `interactive`.",
+    },
+    INVALID_DIAGNOSTICS_TIMINGS: {
+      code: "EC_RENDERING_0008",
+      template: "Render timing diagnostics setting must be a boolean.",
+    },
   },
   BRUSH: {
     INVALID_SIZE: {

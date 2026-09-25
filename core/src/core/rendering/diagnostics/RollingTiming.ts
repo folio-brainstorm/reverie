@@ -17,6 +17,12 @@ export default class RollingTiming {
     this.nextIndex = (this.nextIndex + 1) % WINDOW_SIZE;
   }
 
+  /** Drops samples so a newly enabled timing session starts from an empty window. */
+  clear(): void {
+    this.samples.length = 0;
+    this.nextIndex = 0;
+  }
+
   /** Returns an independent view of the latest 60 samples, if any. */
   getSnapshot(): TimingMetric | undefined {
     if (this.samples.length === 0) {

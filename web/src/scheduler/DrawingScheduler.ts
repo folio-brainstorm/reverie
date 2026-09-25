@@ -45,6 +45,7 @@ export class DrawingScheduler {
 
   /** Whether a frame callback is currently executing drawing work. */
   private isRunningFrame = false;
+  private currentFrameStartTime: number | null = null;
 
   /** Whether a runtime callback failure permanently stopped scheduling. */
   private hasFailed = false;
@@ -74,6 +75,7 @@ export class DrawingScheduler {
 
     try {
       const startTime = this.frameDriver.now();
+      this.currentFrameStartTime = startTime;
 
       while (this.pendingCommandCount > 0 && !this.isDisposed) {
         const hasExhaustedBudget =
@@ -138,6 +140,7 @@ export class DrawingScheduler {
       this.fail(error);
       return;
     } finally {
+      this.currentFrameStartTime = null;
       this.isRunningFrame = false;
     }
 
@@ -162,6 +165,20 @@ export class DrawingScheduler {
   /** Returns whether {@link dispose} permanently closed this scheduler. */
   get disposed(): boolean {
     return this.isDisposed;
+  }
+
+  /** Advisory time left before this scheduler's soft frame budget is exhausted. */
+  get remainingFrameBudgetMs(): number {
+    if (this.currentFrameStartTime === null) {
+      return this.frameBudget;
+    }
+    return Math.min(
+      this.frameBudget,
+      Math.max(
+        0,
+        this.frameBudget - (this.frameDriver.now() - this.currentFrameStartTime),
+      ),
+    );
   }
 
   /**

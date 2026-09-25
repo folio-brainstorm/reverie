@@ -124,6 +124,47 @@ const reverie = new ReverieCanvas({
 // Pointer input is attached automatically. Dispose when the owning view unmounts.
 ```
 
+For high-frequency camera input, update the public Camera and request one
+animation-frame render. Request full quality when the gesture ends:
+
+```ts
+reverie.camera.panBy(2, 0);
+reverie.requestViewRender("interactive");
+
+// On pointer release or after wheel input becomes idle:
+reverie.requestViewRender("full");
+```
+
+`reverie.render()` remains synchronous. `renderer.diagnostics.getSnapshot()`
+reports coalesced view requests, interaction quality, and visible, warm, and
+retained renderer results. Its `reuse` counters report provisional presentations,
+presentation and generation reuse hits, and visible and warm misses. Camera
+changes do not change document data.
+
+Camera prefetch uses a bounded screen-space margin that grows in Tile count as
+zoom decreases. During interactive panning, recent Camera movement prioritizes
+a forward warm strip after visible rendering; settled `full` renders refine the
+visible area at full quality. The diagnostic snapshot's `coverage` section
+reports the current margins, velocity, lookahead, pressure, interactive output
+size, and cumulative prefetch work. These tuning values are internal and may
+change between releases.
+
+The Web scheduler passes `remainingFrameBudgetMs` to Canvas renders as an
+advisory warm-work admission hint. A deferred warm continuation remains pending
+for a later frame. Canvas diagnostics also report RGBA identity hits, fallback
+comparison calls and bytes, completion drawing deltas, and warm executions and
+deferrals. Published `RenderRegion.pixels` buffers must not be modified in place.
+
+Stage timings can be collected only while a diagnostics view is open:
+
+```ts
+reverie.renderer.configureDiagnostics({ timings: true });
+// When the diagnostics view closes:
+reverie.renderer.configureDiagnostics({ timings: false });
+```
+
+Each change starts a fresh timing window; render counters remain available.
+
 需要 Node.js `^22.12.0`、`^24.0.0` 或 `>=26.0.0`，以及 pnpm `11.18.0`。
 
 ## Examples
@@ -136,14 +177,14 @@ const reverie = new ReverieCanvas({
 
 ## Packages
 
-| Package                           | Responsibility                                                 |
-| --------------------------------- | -------------------------------------------------------------- |
-| [`@reverie/core`](./core)         | 平台无关的世界、图层、稀疏像素、笔刷、笔触、选区与文档模型。   |
+| Package                                                   | Responsibility                                                 |
+| --------------------------------------------------------- | -------------------------------------------------------------- |
+| [`@reverie/core`](./core)                                 | 平台无关的世界、图层、稀疏像素、笔刷、笔触、选区与文档模型。   |
 | [`@reverie/canvas-renderer`](./renderers/canvas-renderer) | 以 HTML Canvas 呈现当前 Camera 视图，并维护缩小时的 LOD 缓存。 |
-| [`@reverie/web`](./web)           | 浏览器输入、绘制调度、历史记录、画布门面和下载能力。           |
-| [`@reverie/exporter`](./exporter) | 世界区域合成，以及 PNG、JPEG、WebP 编码。                      |
-| [`@reverie/demo`](./demo)         | 使用 React + Vite 构建的浏览器示例应用。                       |
-| [`@reverie/test`](./test)         | 核心行为的 Vitest 集成测试。                                   |
+| [`@reverie/web`](./web)                                   | 浏览器输入、绘制调度、历史记录、画布门面和下载能力。           |
+| [`@reverie/exporter`](./exporter)                         | 世界区域合成，以及 PNG、JPEG、WebP 编码。                      |
+| [`@reverie/demo`](./demo)                                 | 使用 React + Vite 构建的浏览器示例应用。                       |
+| [`@reverie/test`](./test)                                 | 核心行为的 Vitest 集成测试。                                   |
 
 ## Built with
 

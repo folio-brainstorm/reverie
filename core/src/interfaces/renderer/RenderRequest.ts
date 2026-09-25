@@ -30,4 +30,10 @@ export interface RenderRequest {
 
   /** Synchronous drawing Tiles to resolve before normal viewport traversal. */
   readonly interactiveTiles?: readonly TileCoord[];
+
+  /** Renderer-owned Tiles whose final pixels are already available for this request. */
+  readonly skipTiles?: readonly TileCoord[];
+
+  /** Area excluded from a lower-priority warm-zone request. */
+  readonly excludeViewport?: WorldRect;
 }

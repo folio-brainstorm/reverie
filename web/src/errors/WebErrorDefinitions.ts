@@ -151,4 +151,8 @@ export const WebErrorDefinitions = {
     template:
       "ReverieCanvas initial World must be a World instance and cannot be combined with width, height, or tileSize.",
   },
+  INVALID_VIEW_QUALITY: {
+    code: "EC_WEB_0033",
+    template: "Camera render quality must be `full` or `interactive`.",
+  },
 } as const satisfies Record<string, ErrorDefinition>;

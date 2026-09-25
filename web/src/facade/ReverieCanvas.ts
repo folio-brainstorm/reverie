@@ -7,6 +7,7 @@ import type {
   SelectionMask,
   WorldBounds,
 } from "@reverie/core";
+import type { RenderQualityMode } from "@reverie/core/renderer";
 import type { ExportRegion } from "@reverie/exporter";
 import { CanvasRenderer } from "@reverie/canvas-renderer";
 
@@ -387,6 +388,23 @@ export class ReverieCanvas {
     this.assertUsable();
     this.renderer.render();
     this.session.requestRenderContinuation();
+  }
+
+  /**
+   * Schedules the latest Camera view for one coalesced animation-frame render.
+   * Call again with `full` when an interactive gesture settles.
+   * @param quality - Interactive or full resolution; defaults to full.
+   * @throws {WebError} This facade has been disposed.
+   * @throws {WebTypeError} The quality is unsupported at runtime.
+   * @example
+   * reverie.camera.panBy(2, 0);
+   * reverie.requestViewRender("interactive");
+   * // On pointer release:
+   * reverie.requestViewRender("full");
+   */
+  requestViewRender(quality: RenderQualityMode = "full"): void {
+    this.assertUsable();
+    this.session.requestViewRender(quality);
   }
 
   /**

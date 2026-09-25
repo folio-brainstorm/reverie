@@ -20,4 +20,18 @@ export const RendererErrorDefinitions = {
     template:
       "Canvas pixel ratio must be a positive finite number, but received `$pixelRatio`.",
   },
+  INVALID_RENDER_QUALITY: {
+    code: "EC_RENDERER_0005",
+    template: "Canvas render quality must be `full` or `interactive`.",
+  },
+  INVALID_DIAGNOSTICS_OPTIONS: {
+    code: "EC_RENDERER_0006",
+    template:
+      "Canvas timing diagnostics must be configured with a boolean `timings` value.",
+  },
+  INVALID_FRAME_BUDGET_HINT: {
+    code: "EC_RENDERER_0007",
+    template:
+      "Remaining frame budget must be a non-negative finite number of milliseconds.",
+  },
 } as const satisfies Record<string, ErrorDefinition>;

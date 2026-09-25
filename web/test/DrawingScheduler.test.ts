@@ -286,6 +286,29 @@ describe("DrawingScheduler frame execution", () => {
     expect(onRender).toHaveBeenCalledTimes(2);
   });
 
+  it("exposes remaining soft frame time to the render callback", () => {
+    const driver = new ManualFrameDriver();
+    const remaining: number[] = [];
+    let scheduler: DrawingScheduler;
+    scheduler = new DrawingScheduler({
+      frameBudget: 4,
+      frameDriver: driver,
+      onRender: () => {
+        remaining.push(scheduler.remainingFrameBudgetMs);
+      },
+    });
+    scheduler.enqueue(
+      createCommand(1, () => {
+        driver.advanceTime(3);
+      }),
+    );
+
+    driver.runNextFrame();
+
+    expect(remaining).toEqual([1]);
+    expect(scheduler.remainingFrameBudgetMs).toBe(4);
+  });
+
   it("executes at least one command when a single command exceeds the budget", () => {
     const driver = new ManualFrameDriver();
     const executed: number[] = [];

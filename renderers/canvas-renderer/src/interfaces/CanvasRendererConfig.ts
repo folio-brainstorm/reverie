@@ -1,6 +1,8 @@
 import type { Camera } from "@reverie/core";
 import type { RenderSource } from "@reverie/core/renderer";
 
+import type { CanvasDiagnosticsOptions } from "./diagnostics/CanvasDiagnosticsOptions.js";
+
 /** Dependencies used by a canvas renderer for every explicit render pass. */
 interface CanvasRendererDependencies {
   /** Canvas whose backing buffer receives the rendered raster. */
@@ -10,7 +12,7 @@ interface CanvasRendererDependencies {
   camera: Camera;
 
   /** Enables optional stage timing and 60-call rolling statistics. */
-  readonly diagnostics?: { readonly timings?: boolean };
+  readonly diagnostics?: CanvasDiagnosticsOptions;
 }
 
 /** Exactly one rendering source: an independent Raster or a composed World. */

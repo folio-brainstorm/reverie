@@ -13,6 +13,8 @@ import {
   RendererRangeError,
 } from "../index.js";
 import type { CanvasRendererConfig } from "../index.js";
+import CanvasBackend from "../src/canvas/CanvasBackend.js";
+import CanvasDiagnostics from "../src/canvas/CanvasDiagnostics.js";
 
 function createRenderingContext(): CanvasRenderingContext2D {
   return {
@@ -68,6 +70,615 @@ function createCanvasFixture(width = 4, height = 4) {
 }
 
 describe("CanvasRenderer World composition", () => {
+  it("uses published pixel identity before falling back to byte comparison", () => {
+    const { canvas, tileContexts } = createCanvasFixture(1, 1);
+    const diagnostics = new CanvasDiagnostics(new RenderingCore(), false);
+    const backend = new CanvasBackend(canvas, new Camera(), null, diagnostics);
+    const bounds = { x: 0, y: 0, width: 1, height: 1 };
+    const first = new Uint8Array([255, 0, 0, 255]);
+
+    backend.presentRegions([{ bounds, pixels: first }]);
+    expect(tileContexts[0]?.putImageData).toHaveBeenCalledOnce();
+    expect(diagnostics.getSnapshot().presentation.rgbaComparisonCount).toBe(1);
+
+    backend.presentRegions([{ bounds, pixels: first }]);
+    expect(tileContexts[0]?.putImageData).toHaveBeenCalledOnce();
+    expect(diagnostics.getSnapshot().presentation.rgbaComparisonCount).toBe(1);
+    expect(diagnostics.getSnapshot().presentation.rgbaIdentityReuseCount).toBe(
+      1,
+    );
+
+    const equivalent = new Uint8Array(first);
+    backend.presentRegions([{ bounds, pixels: equivalent }]);
+    expect(tileContexts[0]?.putImageData).toHaveBeenCalledOnce();
+    expect(diagnostics.getSnapshot().presentation.rgbaComparisonCount).toBe(2);
+
+    backend.presentRegions([{ bounds, pixels: equivalent }]);
+    expect(diagnostics.getSnapshot().presentation.rgbaComparisonCount).toBe(2);
+
+    backend.presentRegions([
+      { bounds, pixels: new Uint8Array([0, 255, 0, 255]) },
+    ]);
+    expect(tileContexts[0]?.putImageData).toHaveBeenCalledTimes(2);
+    expect(diagnostics.getSnapshot().presentation.rgbaComparisonCount).toBe(3);
+
+    backend.retainNear({ x: 100, y: 100, width: 1, height: 1 }, 0);
+    backend.presentRegions([{ bounds, pixels: first }]);
+    expect(tileContexts).toHaveLength(2);
+    expect(tileContexts[1]?.putImageData).toHaveBeenCalledOnce();
+    expect(diagnostics.getSnapshot().presentation.rgbaComparisonCount).toBe(4);
+  });
+
+  it("does no Canvas drawing or RGBA comparison for an equivalent settled render", () => {
+    const { canvas, context, tileContexts } = createCanvasFixture(2, 2);
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    const renderer = new CanvasRenderer({
+      canvas,
+      raster,
+      camera: new Camera(),
+    });
+    renderer.render();
+    vi.mocked(context.drawImage).mockClear();
+    vi.mocked(context.clearRect).mockClear();
+    vi.mocked(tileContexts[0]?.putImageData).mockClear();
+
+    renderer.render();
+
+    expect(context.drawImage).not.toHaveBeenCalled();
+    expect(context.clearRect).not.toHaveBeenCalled();
+    expect(tileContexts[0]?.putImageData).not.toHaveBeenCalled();
+    expect(
+      renderer.diagnostics.getSnapshot().presentation.rgbaComparisonCount,
+    ).toBe(0);
+  });
+
+  it("does not replay a projected Region after the required full presentation", () => {
+    const { canvas, context } = createCanvasFixture(2, 2);
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    const camera = new Camera();
+    const renderer = new CanvasRenderer({ canvas, raster, camera });
+    renderer.render();
+    vi.mocked(context.drawImage).mockClear();
+
+    camera.setPan(1, 0);
+    renderer.render();
+
+    expect(context.drawImage).toHaveBeenCalledOnce();
+    expect(renderer.diagnostics.getSnapshot().presentation.rgbaComparisonCount).toBe(0);
+  });
+
+  it("defers and resumes an existing warm continuation without cancelling prefetch", () => {
+    const { canvas } = createCanvasFixture(2, 2);
+    const raster = new Raster({ tileSize: 2 });
+    for (let y = 0; y < 25; y += 1) {
+      for (let x = 0; x < 25; x += 1) {
+        raster.setPixel({ x: x * 2, y: y * 2 }, { r: 255, g: 0, b: 0, a: 255 });
+      }
+    }
+    const renderer = new CanvasRenderer({
+      canvas,
+      raster,
+      camera: new Camera(),
+    });
+    renderer.render({ prefetch: true });
+    renderer.render({ prefetch: true, remainingFrameBudgetMs: 4 });
+    expect(renderer.hasPendingRender).toBe(true);
+
+    renderer.render({ prefetch: true, remainingFrameBudgetMs: 0 });
+    expect(
+      renderer.diagnostics.getSnapshot().coverage.warmContinuationDeferredCount,
+    ).toBe(1);
+    expect(renderer.hasPendingRender).toBe(true);
+
+    renderer.render({ prefetch: true, remainingFrameBudgetMs: 4 });
+    expect(
+      renderer.diagnostics.getSnapshot().coverage.warmContinuationExecutedCount,
+    ).toBe(1);
+    expect(
+      renderer.diagnostics.getSnapshot().coverage.prefetchCompletedCount,
+    ).toBeGreaterThan(0);
+  });
+
+  it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
+    "rejects invalid remaining frame budget hint %s",
+    (remainingFrameBudgetMs) => {
+      const { canvas } = createCanvasFixture(2, 2);
+      const renderer = new CanvasRenderer({
+        canvas,
+        raster: new Raster({ tileSize: 2 }),
+        camera: new Camera(),
+      });
+      expect(() => renderer.render({ remainingFrameBudgetMs })).toThrow(
+        `[${RendererErrorDefinitions.INVALID_FRAME_BUDGET_HINT.code}]`,
+      );
+    },
+  );
+  it("reuses the same output resolution across small zoom changes and repeat renders", () => {
+    const { canvas } = createCanvasFixture(128, 128);
+    const raster = new Raster({ tileSize: 128 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    const camera = new Camera();
+    const renderer = new CanvasRenderer({ canvas, raster, camera });
+
+    renderer.render();
+    renderer.render();
+    expect(renderer.diagnostics.getSnapshot().tiles.renderedCount).toBe(0);
+
+    camera.setZoom(0.99);
+    renderer.render();
+    expect(renderer.diagnostics.getSnapshot().tiles.renderedCount).toBe(0);
+    expect(renderer.diagnostics.getSnapshot().quality?.outputTileSize).toBe(
+      128,
+    );
+
+    camera.setZoom(0.5);
+    renderer.render();
+    expect(renderer.diagnostics.getSnapshot().tiles.renderedCount).toBe(1);
+    expect(renderer.diagnostics.getSnapshot().quality?.outputTileSize).toBe(64);
+    expect(
+      renderer.diagnostics.getSnapshot().reuse.generationHitCount,
+    ).toBeGreaterThan(0);
+  });
+
+  it("reuses identical output even when the interaction quality label changes", () => {
+    const { canvas } = createCanvasFixture(1, 1);
+    const raster = new Raster({ tileSize: 1 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 1, g: 0, b: 0, a: 255 });
+    const renderer = new CanvasRenderer({
+      canvas,
+      raster,
+      camera: new Camera(),
+    });
+
+    renderer.render({ quality: "full" });
+    renderer.render({ quality: "interactive" });
+    expect(renderer.diagnostics.getSnapshot().tiles.renderedCount).toBe(0);
+    expect(renderer.diagnostics.getSnapshot().quality?.outputTileSize).toBe(1);
+  });
+
+  it("adapts screen-space render and retention margins to zoom with bounded Tile counts", () => {
+    const { canvas } = createCanvasFixture(128, 128);
+    const camera = new Camera();
+    const renderer = new CanvasRenderer({
+      canvas,
+      camera,
+      raster: new Raster({ tileSize: 128 }),
+    });
+
+    renderer.render();
+    const normal = renderer.diagnostics.getSnapshot().coverage;
+    expect(normal.renderMarginTiles).toBe(4);
+    expect(normal.renderMarginTiles * 128 * camera.zoom).toBe(512);
+    expect(normal.retentionMarginTiles).toBeGreaterThan(
+      normal.renderMarginTiles,
+    );
+
+    camera.setZoom(0.5);
+    renderer.render();
+    expect(renderer.diagnostics.getSnapshot().coverage.renderMarginTiles).toBe(
+      8,
+    );
+    expect(
+      renderer.diagnostics.getSnapshot().coverage.renderMarginTiles *
+        128 *
+        camera.zoom,
+    ).toBe(512);
+
+    camera.setZoom(2);
+    renderer.render();
+    expect(renderer.diagnostics.getSnapshot().coverage.renderMarginTiles).toBe(
+      2,
+    );
+
+    camera.setZoom(0.01);
+    renderer.render();
+    expect(renderer.diagnostics.getSnapshot().coverage.renderMarginTiles).toBe(
+      24,
+    );
+  });
+
+  it("reuses adaptive warm coverage after a large pan at small zoom", () => {
+    const { canvas } = createCanvasFixture(128, 128);
+    const raster = new Raster({ tileSize: 128 });
+    raster.setPixel({ x: 2048, y: 0 }, { r: 1, g: 0, b: 0, a: 255 });
+    const camera = new Camera({ zoom: 0.125 });
+    const renderer = new CanvasRenderer({ canvas, camera, raster });
+
+    renderer.render({ prefetch: true });
+    renderer.render({ prefetch: true });
+    expect(renderer.diagnostics.getSnapshot().zones.warmCount).toBe(1);
+
+    camera.setPan(2048, 0);
+    renderer.render();
+    expect(renderer.diagnostics.getSnapshot().tiles.renderedCount).toBe(0);
+    expect(
+      renderer.diagnostics.getSnapshot().reuse.generationHitCount,
+    ).toBeGreaterThan(0);
+  });
+
+  it("uses slow motion as base coverage and gives bounded forward work priority before trailing work", () => {
+    const clock = vi.spyOn(performance, "now").mockReturnValue(0);
+    try {
+      const { canvas } = createCanvasFixture(64, 64);
+      const raster = new Raster({ tileSize: 64 });
+      raster.setPixel({ x: 640, y: 0 }, { r: 1, g: 0, b: 0, a: 255 });
+      raster.setPixel({ x: -64, y: 0 }, { r: 2, g: 0, b: 0, a: 255 });
+      raster.setPixel({ x: -640, y: 0 }, { r: 3, g: 0, b: 0, a: 255 });
+      const camera = new Camera();
+      const renderer = new CanvasRenderer({ canvas, camera, raster });
+      renderer.render();
+
+      clock.mockReturnValue(1000);
+      camera.setPan(1, 0);
+      renderer.render({ quality: "interactive", prefetch: true });
+      expect(
+        renderer.diagnostics.getSnapshot().coverage.directionalLookaheadTiles,
+      ).toBe(0);
+
+      clock.mockReturnValue(1016);
+      camera.setPan(65, 0);
+      renderer.render({ quality: "interactive", prefetch: true });
+      const moving = renderer.diagnostics.getSnapshot().coverage;
+      expect(moving.directionX).toBe(1);
+      expect(moving.directionalLookaheadTiles).toBeGreaterThan(0);
+      expect(moving.directionalLookaheadTiles).toBeLessThanOrEqual(16);
+      expect(moving.prefetchCompletedCount).toBe(0);
+
+      renderer.render({ quality: "interactive", prefetch: true });
+      const forward = renderer.diagnostics.getSnapshot().coverage;
+      expect(forward.prefetchCompletedCount).toBe(1);
+      expect(forward.missingWarmCount).toBe(1);
+
+      clock.mockReturnValue(1032);
+      camera.setPan(1, 0);
+      renderer.render({ quality: "interactive", prefetch: true });
+      const reversed = renderer.diagnostics.getSnapshot();
+      expect(reversed.coverage.directionX).toBe(-1);
+      expect(reversed.coverage.directionalLookaheadTiles).toBeGreaterThan(0);
+      expect(reversed.zones.retainedCount).toBeGreaterThan(0);
+
+      renderer.render({ quality: "interactive", prefetch: true });
+      expect(
+        renderer.diagnostics.getSnapshot().coverage.prefetchCompletedCount,
+      ).toBeGreaterThan(forward.prefetchCompletedCount);
+
+      clock.mockReturnValue(1048);
+      camera.setPan(4097, 0);
+      renderer.render({ quality: "interactive", prefetch: true });
+      expect(
+        renderer.diagnostics.getSnapshot().coverage.directionalLookaheadTiles,
+      ).toBe(16);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it("starts visible work before a forward prefetch batch and obeys the Core candidate budget", () => {
+    const clock = vi.spyOn(performance, "now").mockReturnValue(0);
+    try {
+      const { canvas } = createCanvasFixture(2, 2);
+      const raster = new Raster({ tileSize: 1 });
+      raster.setPixel({ x: 64, y: 0 }, { r: 1, g: 0, b: 0, a: 255 });
+      for (let y = 0; y < 5; y += 1) {
+        for (let x = 66; x < 106; x += 1) {
+          raster.setPixel({ x, y }, { r: 2, g: 0, b: 0, a: 255 });
+        }
+      }
+      const camera = new Camera();
+      const renderer = new CanvasRenderer({ canvas, camera, raster });
+      renderer.render();
+
+      clock.mockReturnValue(16);
+      camera.setPan(64, 0);
+      renderer.render({ quality: "interactive", prefetch: true });
+      const visible = renderer.diagnostics.getSnapshot();
+      expect(visible.tiles.renderedCount).toBe(1);
+      expect(visible.coverage.prefetchRequestedCount).toBe(0);
+
+      renderer.render({ quality: "interactive", prefetch: true });
+      const warm = renderer.diagnostics.getSnapshot();
+      expect(warm.coverage.prefetchRequestedCount).toBeGreaterThan(0);
+      expect(warm.coverage.prefetchRequestedCount).toBeLessThanOrEqual(128);
+      expect(warm.coverage.prefetchCompletedCount).toBeLessThanOrEqual(128);
+      expect(renderer.hasPendingRender).toBe(true);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it("chooses cheaper interactive output under movement pressure and refines when settled", () => {
+    const clock = vi.spyOn(performance, "now").mockReturnValue(0);
+    try {
+      const { canvas } = createCanvasFixture(128, 128);
+      const raster = new Raster({ tileSize: 128 });
+      raster.setPixel({ x: 0, y: 0 }, { r: 1, g: 0, b: 0, a: 255 });
+      raster.setPixel({ x: 128, y: 0 }, { r: 2, g: 0, b: 0, a: 255 });
+      const camera = new Camera();
+      const renderer = new CanvasRenderer({ canvas, camera, raster });
+
+      renderer.render({ quality: "interactive" });
+      expect(renderer.diagnostics.getSnapshot().quality?.outputTileSize).toBe(
+        64,
+      );
+
+      clock.mockReturnValue(16);
+      camera.setPan(128, 0);
+      renderer.render({ quality: "interactive", prefetch: true });
+      const pressured = renderer.diagnostics.getSnapshot();
+      expect(pressured.coverage.pressure).toBe("high");
+      expect(pressured.coverage.interactiveOutputTileSize).toBe(32);
+      expect(pressured.coverage.prefetchCompletedCount).toBe(0);
+      expect(pressured.tiles.renderedCount).toBe(1);
+
+      renderer.render({ quality: "full" });
+      const settled = renderer.diagnostics.getSnapshot();
+      expect(settled.coverage.pressure).toBe("normal");
+      expect(settled.coverage.interactiveOutputTileSize).toBeNull();
+      expect(settled.quality?.outputTileSize).toBe(128);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it("projects full-quality warm pixels during interactive pan before generating its lower resolution", () => {
+    const { canvas, context, tileCanvases } = createCanvasFixture(4, 4);
+    const raster = new Raster({ tileSize: 4 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 1, g: 0, b: 0, a: 255 });
+    raster.setPixel({ x: 4, y: 0 }, { r: 2, g: 0, b: 0, a: 255 });
+    const camera = new Camera();
+    const renderer = new CanvasRenderer({ canvas, raster, camera });
+    renderer.render({ prefetch: true });
+    renderer.render({ prefetch: true });
+    vi.mocked(context.drawImage).mockClear();
+
+    camera.setPan(4, 0);
+    renderer.render({ quality: "interactive" });
+
+    expect(tileCanvases[1]?.width).toBe(4);
+    expect(
+      vi
+        .mocked(context.drawImage)
+        .mock.calls.some(
+          (call) => call[0] === tileCanvases[1] && call[1] === 0,
+        ),
+    ).toBe(true);
+    expect(renderer.diagnostics.getSnapshot().tiles.renderedCount).toBe(1);
+    expect(
+      renderer.diagnostics.getSnapshot().reuse.presentationHitCount,
+    ).toBeGreaterThan(0);
+    expect(renderer.diagnostics.getSnapshot().quality?.outputTileSize).toBe(2);
+
+    renderer.render({ quality: "full" });
+    expect(renderer.diagnostics.getSnapshot().tiles.renderedCount).toBe(0);
+    expect(
+      renderer.diagnostics.getSnapshot().reuse.generationHitCount,
+    ).toBeGreaterThan(0);
+  });
+
+  it("does not finish an interactive continuation as settled full quality", () => {
+    const { canvas } = createCanvasFixture(260, 2);
+    const raster = new Raster({ tileSize: 2 });
+    for (let x = 0; x < 260; x += 2) {
+      raster.setPixel({ x, y: 0 }, { r: 1, g: 0, b: 0, a: 255 });
+    }
+    const renderer = new CanvasRenderer({
+      canvas,
+      raster,
+      camera: new Camera(),
+    });
+
+    renderer.render({ quality: "interactive" });
+    expect(renderer.hasPendingRender).toBe(true);
+    expect(renderer.diagnostics.getSnapshot().quality?.outputTileSize).toBe(1);
+
+    renderer.render({ quality: "full" });
+    expect(renderer.diagnostics.getSnapshot().quality?.outputTileSize).toBe(2);
+    expect(
+      renderer.diagnostics.getSnapshot().progressive.cancelledRequestCount,
+    ).toBe(1);
+    renderer.render({ quality: "full" });
+    expect(renderer.hasPendingRender).toBe(false);
+    expect(renderer.diagnostics.getSnapshot().zones.visibleCount).toBe(130);
+  });
+
+  it("retains completed partial regions when camera motion cancels a request", () => {
+    const { canvas } = createCanvasFixture(260, 2);
+    const raster = new Raster({ tileSize: 2 });
+    for (let x = 0; x < 260; x += 2) {
+      raster.setPixel({ x, y: 0 }, { r: 1, g: 0, b: 0, a: 255 });
+    }
+    const camera = new Camera();
+    const renderer = new CanvasRenderer({ canvas, raster, camera });
+
+    renderer.render();
+    expect(renderer.hasPendingRender).toBe(true);
+    const provisionalCount =
+      renderer.diagnostics.getSnapshot().reuse.provisionalRegionCount;
+    expect(provisionalCount).toBeGreaterThan(0);
+    expect(provisionalCount).toBeLessThanOrEqual(128);
+
+    camera.setPan(2, 0);
+    renderer.render();
+    for (let batch = 0; renderer.hasPendingRender && batch < 10; batch += 1) {
+      renderer.render();
+    }
+    expect(renderer.hasPendingRender).toBe(false);
+    expect(
+      renderer.diagnostics.getSnapshot().reuse.generationHitCount,
+    ).toBeGreaterThan(0);
+    expect(renderer.diagnostics.getSnapshot().zones.visibleCount).toBe(129);
+    expect(
+      renderer.diagnostics.getSnapshot().progressive.cancelledRequestCount,
+    ).toBe(1);
+  });
+
+  it("does not project an old source revision after a camera change", () => {
+    const { canvas, context } = createCanvasFixture(2, 2);
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 1, g: 0, b: 0, a: 255 });
+    const camera = new Camera();
+    const renderer = new CanvasRenderer({ canvas, raster, camera });
+
+    renderer.render();
+    vi.mocked(context.drawImage).mockClear();
+    raster.clear();
+    renderer.markSourceChanged();
+    camera.setPan(1, 0);
+    renderer.render();
+
+    expect(context.drawImage).not.toHaveBeenCalled();
+  });
+
+  it("renders visible Tiles before warming nearby Tiles and reuses warm pixels on pan", () => {
+    const { canvas, context, tileContexts } = createCanvasFixture(2, 2);
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 1, g: 0, b: 0, a: 255 });
+    raster.setPixel({ x: 4, y: 0 }, { r: 2, g: 0, b: 0, a: 255 });
+    const camera = new Camera();
+    const renderer = new CanvasRenderer({ canvas, camera, raster });
+
+    renderer.render({ prefetch: true });
+    expect(renderer.diagnostics.getSnapshot().zones).toEqual({
+      visibleCount: 1,
+      warmCount: 0,
+      retainedCount: 0,
+    });
+    expect(context.drawImage).toHaveBeenCalledOnce();
+    expect(renderer.hasPendingRender).toBe(true);
+
+    renderer.render({ prefetch: true });
+    expect(renderer.diagnostics.getSnapshot().zones.warmCount).toBe(1);
+    expect(context.drawImage).toHaveBeenCalledOnce();
+    expect(tileContexts).toHaveLength(1);
+
+    camera.setPan(4, 0);
+    renderer.render();
+    expect(renderer.diagnostics.getSnapshot().tiles.renderedCount).toBe(0);
+    expect(tileContexts).toHaveLength(2);
+    expect(raster.getPixel({ x: 4, y: 0 })).toEqual({
+      r: 2,
+      g: 0,
+      b: 0,
+      a: 255,
+    });
+  });
+
+  it("keeps results outside the warm margin and discards them past retention", () => {
+    const { canvas, tileContexts } = createCanvasFixture(2, 2);
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 1, g: 0, b: 0, a: 255 });
+    const camera = new Camera();
+    const renderer = new CanvasRenderer({ canvas, camera, raster });
+
+    renderer.render();
+    const margin =
+      renderer.diagnostics.getSnapshot().coverage.renderMarginTiles;
+    const retention =
+      renderer.diagnostics.getSnapshot().coverage.retentionMarginTiles;
+    camera.setPan((margin + 2) * raster.tileSize, 0);
+    renderer.render();
+    expect(renderer.diagnostics.getSnapshot().zones.retainedCount).toBe(1);
+
+    camera.setPan(0, 0);
+    renderer.render();
+    expect(renderer.diagnostics.getSnapshot().tiles.renderedCount).toBe(0);
+    expect(tileContexts).toHaveLength(1);
+
+    camera.setPan((retention + 2) * raster.tileSize, 0);
+    renderer.render();
+    expect(renderer.diagnostics.getSnapshot().zones.retainedCount).toBe(0);
+    camera.setPan(0, 0);
+    renderer.render();
+    expect(renderer.diagnostics.getSnapshot().tiles.renderedCount).toBe(1);
+    expect(tileContexts).toHaveLength(2);
+    expect(raster.getPixel({ x: 0, y: 0 }).a).toBe(255);
+  });
+
+  it("reuses unchanged results but removes an edited Tile from retained coverage", () => {
+    const { canvas, tileContexts } = createCanvasFixture(4, 2);
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 1, g: 0, b: 0, a: 255 });
+    raster.setPixel({ x: 2, y: 0 }, { r: 2, g: 0, b: 0, a: 255 });
+    const renderer = new CanvasRenderer({
+      canvas,
+      camera: new Camera(),
+      raster,
+    });
+
+    renderer.render();
+    raster.setPixel({ x: 0, y: 0 }, { r: 0, g: 0, b: 0, a: 0 });
+    renderer.markSourceChanged([{ x: 0, y: 0 }]);
+    renderer.render();
+
+    expect(renderer.diagnostics.getSnapshot().tiles.renderedCount).toBe(0);
+    expect(renderer.diagnostics.getSnapshot().zones.visibleCount).toBe(1);
+    expect(tileContexts[1]?.putImageData).toHaveBeenCalledOnce();
+    expect(raster.getPixel({ x: 0, y: 0 }).a).toBe(0);
+  });
+
+  it("retains a bounded World result during a short excursion past its edge", () => {
+    const { canvas } = createCanvasFixture(2, 2);
+    const world = new World({
+      tileSize: 2,
+      bounds: { x: 0, y: 0, width: 2, height: 2 },
+    });
+    world
+      .getLayer(0)
+      .raster.setPixel({ x: 0, y: 0 }, { r: 1, g: 0, b: 0, a: 255 });
+    const camera = new Camera();
+    const renderer = new CanvasRenderer({ canvas, camera, world });
+
+    renderer.render();
+    const margin =
+      renderer.diagnostics.getSnapshot().coverage.renderMarginTiles;
+    camera.setPan((margin + 2) * world.tileSize, 0);
+    renderer.render();
+    expect(renderer.diagnostics.getSnapshot().zones.retainedCount).toBe(1);
+    camera.setPan(0, 0);
+    renderer.render();
+    expect(renderer.diagnostics.getSnapshot().tiles.renderedCount).toBe(0);
+  });
+
+  it("rejects an unsupported interaction quality at the Canvas boundary", () => {
+    const { canvas } = createCanvasFixture(2, 2);
+    const renderer = new CanvasRenderer({
+      canvas,
+      camera: new Camera(),
+      raster: new Raster({ tileSize: 2 }),
+    });
+
+    expect(() =>
+      renderer.render({
+        // @ts-expect-error Runtime validation protects JavaScript callers.
+        quality: "preview",
+      }),
+    ).toThrow(`[${RendererErrorDefinitions.INVALID_RENDER_QUALITY.code}]`);
+  });
+
+  it("keeps an explicit synchronous render ahead of pending warm work", () => {
+    const { canvas, tileContexts } = createCanvasFixture(2, 2);
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 1, g: 0, b: 0, a: 255 });
+    raster.setPixel({ x: 4, y: 0 }, { r: 2, g: 0, b: 0, a: 255 });
+    const renderer = new CanvasRenderer({
+      canvas,
+      camera: new Camera(),
+      raster,
+    });
+
+    renderer.render({ prefetch: true });
+    expect(renderer.hasPendingRender).toBe(true);
+    raster.setPixel({ x: 0, y: 0 }, { r: 3, g: 0, b: 0, a: 255 });
+    renderer.markSourceChanged([{ x: 0, y: 0 }]);
+    renderer.render();
+
+    expect(renderer.diagnostics.getSnapshot().tiles.renderedCount).toBe(1);
+    expect(tileContexts[0]?.putImageData).toHaveBeenCalledTimes(2);
+    expect(renderer.hasPendingRender).toBe(false);
+  });
+
   it("exposes Canvas and Core counters and keeps old snapshots stable", () => {
     const { canvas } = createCanvasFixture(2, 2);
     const raster = new Raster({ tileSize: 2 });
@@ -127,6 +738,74 @@ describe("CanvasRenderer World composition", () => {
       snapshot.presentation.drawDurationMs?.current,
     ).toBeGreaterThanOrEqual(0);
   });
+
+  it("starts Canvas and Core timing only while diagnostics are enabled", () => {
+    const { canvas } = createCanvasFixture(2, 2);
+    const raster = new Raster({ tileSize: 2 });
+    raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    const renderer = new CanvasRenderer({
+      canvas,
+      camera: new Camera(),
+      raster,
+    });
+
+    renderer.render();
+    expect(renderer.diagnostics.getSnapshot().rendering).toBeUndefined();
+    expect(
+      renderer.diagnostics.getSnapshot().presentation.presentationDurationMs,
+    ).toBeUndefined();
+
+    renderer.configureDiagnostics({ timings: true });
+    expect(renderer.diagnostics.getSnapshot().rendering).toBeUndefined();
+    renderer.render();
+    const openSnapshot = renderer.diagnostics.getSnapshot();
+    expect(
+      openSnapshot.rendering?.coreDurationMs.current,
+    ).toBeGreaterThanOrEqual(0);
+    expect(
+      openSnapshot.presentation.presentationDurationMs?.current,
+    ).toBeGreaterThanOrEqual(0);
+
+    renderer.configureDiagnostics({ timings: false });
+    const closedSnapshot = renderer.diagnostics.getSnapshot();
+    expect(closedSnapshot.rendering).toBeUndefined();
+    expect(closedSnapshot.presentation.presentationDurationMs).toBeUndefined();
+    expect(closedSnapshot.interaction.fullRenderCount).toBe(2);
+    renderer.render();
+    expect(
+      renderer.diagnostics.getSnapshot().presentation.presentationDurationMs,
+    ).toBeUndefined();
+
+    renderer.configureDiagnostics({ timings: true });
+    expect(renderer.diagnostics.getSnapshot().rendering).toBeUndefined();
+    expect(
+      renderer.diagnostics.getSnapshot().presentation.presentationDurationMs,
+    ).toBeUndefined();
+    renderer.render();
+    expect(
+      renderer.diagnostics.getSnapshot().rendering?.coreDurationMs.current,
+    ).toBeGreaterThanOrEqual(0);
+    expect(renderer.diagnostics.getSnapshot().interaction.fullRenderCount).toBe(
+      4,
+    );
+  });
+
+  it("rejects invalid runtime diagnostics options", () => {
+    const { canvas } = createCanvasFixture(2, 2);
+    const renderer = new CanvasRenderer({
+      canvas,
+      camera: new Camera(),
+      raster: new Raster({ tileSize: 2 }),
+    });
+
+    expect(() =>
+      renderer.configureDiagnostics({
+        // @ts-expect-error Runtime validation protects JavaScript callers.
+        timings: "on",
+      }),
+    ).toThrow(`[${RendererErrorDefinitions.INVALID_DIAGNOSTICS_OPTIONS.code}]`);
+  });
+
   it("resolves rendering demand through Rendering Core before presentation", () => {
     const { canvas } = createCanvasFixture(2, 2);
     const raster = new Raster({ tileSize: 2 });
@@ -160,15 +839,28 @@ describe("CanvasRenderer World composition", () => {
     renderer.render();
 
     expect(renderer.hasPendingRender).toBe(true);
-    expect(context.drawImage).not.toHaveBeenCalled();
+    expect(vi.mocked(context.drawImage).mock.calls.length).toBeGreaterThan(0);
+    expect(vi.mocked(context.drawImage).mock.calls.length).toBeLessThanOrEqual(
+      128,
+    );
 
-    renderer.render();
+    for (let batch = 0; renderer.hasPendingRender && batch < 10; batch += 1) {
+      renderer.render();
+    }
 
     expect(renderer.hasPendingRender).toBe(false);
     expect(context.drawImage).toHaveBeenCalledTimes(129);
+    expect(
+      renderer.diagnostics.getSnapshot().presentation
+        .completionDeltaRegionCount,
+    ).toBe(1);
+    expect(
+      renderer.diagnostics.getSnapshot().presentation
+        .skippedAlreadyPresentedRegionCount,
+    ).toBe(128);
   });
 
-  it("presents a changed late Tile before its full request completes", () => {
+  it("updates a changed late Tile without regenerating unchanged coverage", () => {
     const { canvas, context } = createCanvasFixture(260, 2);
     const raster = new Raster({ tileSize: 2 });
     for (let x = 0; x < 260; x += 2) {
@@ -188,13 +880,13 @@ describe("CanvasRenderer World composition", () => {
     renderer.markSourceChanged([{ x: 129, y: 0 }]);
     renderer.render();
 
-    expect(renderer.hasPendingRender).toBe(true);
-    expect(context.drawImage).toHaveBeenCalledOnce();
-    expect(vi.mocked(context.drawImage).mock.calls[0]?.slice(1)).toEqual([
-      258, 0, 2, 2,
-    ]);
-    expect(context.clearRect).toHaveBeenCalledOnce();
-    expect(context.clearRect).toHaveBeenCalledWith(258, 0, 2, 2);
+    expect(renderer.hasPendingRender).toBe(false);
+    expect(renderer.diagnostics.getSnapshot().tiles.renderedCount).toBe(1);
+    expect(
+      vi
+        .mocked(context.drawImage)
+        .mock.calls.some((call) => call.slice(1).join(":") === "258:0:2:2"),
+    ).toBe(true);
   });
 
   it("advances interactive pixels across repeated source changes without completing a viewport", () => {
@@ -216,7 +908,7 @@ describe("CanvasRenderer World composition", () => {
       raster.setPixel({ x: 258, y: 0 }, { r: 0, g: 0, b: blue, a: 255 });
       renderer.markSourceChanged([{ x: 129, y: 0 }]);
       renderer.render();
-      expect(renderer.hasPendingRender).toBe(true);
+      expect(renderer.hasPendingRender).toBe(false);
       expect(vi.mocked(context.drawImage).mock.calls.at(-1)?.slice(1)).toEqual([
         258, 0, 2, 2,
       ]);
@@ -259,7 +951,7 @@ describe("CanvasRenderer World composition", () => {
     expect(vi.mocked(context.drawImage).mock.calls[0]?.slice(1)).toEqual([
       12, 1, 2, 2,
     ]);
-    expect(renderer.hasPendingRender).toBe(true);
+    expect(renderer.hasPendingRender).toBe(false);
   });
 
   it("preserves the visible frame while newly allocated tiles are pending", () => {
@@ -281,12 +973,17 @@ describe("CanvasRenderer World composition", () => {
     renderer.render();
 
     expect(renderer.hasPendingRender).toBe(true);
-    expect(context.drawImage).not.toHaveBeenCalled();
-    expect(context.clearRect).not.toHaveBeenCalled();
+    expect(vi.mocked(context.drawImage).mock.calls.length).toBeGreaterThan(0);
+    expect(vi.mocked(context.drawImage).mock.calls.length).toBeLessThanOrEqual(
+      128,
+    );
+    expect(context.clearRect).not.toHaveBeenCalledWith(0, 0, 260, 2);
 
-    renderer.render();
+    for (let batch = 0; renderer.hasPendingRender && batch < 10; batch += 1) {
+      renderer.render();
+    }
     expect(renderer.hasPendingRender).toBe(false);
-    expect(context.drawImage).toHaveBeenCalledTimes(130);
+    expect(context.drawImage).toHaveBeenCalledTimes(129);
   });
 
   it("cancels an unfinished request without clearing the visible frame", () => {
@@ -309,7 +1006,7 @@ describe("CanvasRenderer World composition", () => {
 
     expect(renderer.hasPendingRender).toBe(true);
     expect(context.clearRect).not.toHaveBeenCalled();
-    expect(context.drawImage).toHaveBeenCalledOnce();
+    expect(context.drawImage).toHaveBeenCalledTimes(129);
   });
 
   it("refreshes tiles edited while a continuation is pending", () => {
@@ -357,6 +1054,7 @@ describe("CanvasRenderer World composition", () => {
 
     renderer.render();
     raster.clear();
+    renderer.invalidate();
     renderer.render();
 
     expect(context.clearRect).toHaveBeenCalledWith(0, 0, 2, 2);
@@ -608,6 +1306,7 @@ describe("CanvasRenderer World composition", () => {
         .mock.calls[0]?.[0].data.slice(0, 4),
     ).toEqual(new Uint8ClampedArray([128, 0, 128, 255]));
     world.moveLayer(top, 0);
+    renderer.invalidate();
     alphas.length = 0;
     vi.mocked(context.drawImage).mockClear();
     renderer.render();
@@ -640,6 +1339,7 @@ describe("CanvasRenderer World composition", () => {
     renderer.render();
     layer.name = "New name";
     layer.opacity = 0.2;
+    renderer.invalidate();
     renderer.render();
     expect(tileContexts).toHaveLength(1);
     expect(tileContexts[0]?.putImageData).toHaveBeenCalledTimes(2);
@@ -958,6 +1658,7 @@ describe("CanvasRenderer rendering", () => {
 
     renderer.render();
     raster.setPixel({ x: 1, y: 0 }, { r: 0, g: 255, b: 0, a: 255 });
+    renderer.markSourceChanged([{ x: 0, y: 0 }]);
     renderer.render();
 
     expect(ownerDocument.createElement).toHaveBeenCalledTimes(1);
@@ -1054,6 +1755,7 @@ describe("CanvasRenderer rendering", () => {
     expect(uploadCountBeforeChange).toBe(2);
 
     raster.setPixel({ x: 3, y: 0 }, { r: 0, g: 0, b: 255, a: 255 });
+    renderer.markSourceChanged([{ x: 1, y: 0 }]);
     renderer.render();
     const uploadCountAfterChange = tileContexts.reduce(
       (count, context) =>

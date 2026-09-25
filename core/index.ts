@@ -121,6 +121,7 @@ export type { Renderer } from "./src/interfaces/renderer/Renderer.js";
 export type { RendererBackend } from "./src/interfaces/renderer/RendererBackend.js";
 export type { RenderTarget } from "./src/interfaces/renderer/RenderTarget.js";
 export type { RenderContext } from "./src/interfaces/renderer/RenderContext.js";
+export type { RenderQualityMode } from "./src/interfaces/renderer/RenderQualityMode.js";
 export type { RenderRequest } from "./src/interfaces/renderer/RenderRequest.js";
 export type { RenderRegion } from "./src/interfaces/renderer/RenderRegion.js";
 export type { RenderRegionSet } from "./src/interfaces/renderer/RenderRegionSet.js";

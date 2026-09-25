@@ -10,6 +10,7 @@ import type {
 import { DocumentHistory } from "@reverie/core/history";
 import type { RasterHistoryTransaction } from "@reverie/core/history";
 import type { CanvasRenderer } from "@reverie/canvas-renderer";
+import type { RenderQualityMode } from "@reverie/core/renderer";
 
 import { WebErrorDefinitions } from "../errors/WebErrorDefinitions.js";
 import { WebError, WebRangeError, WebTypeError } from "../errors/WebErrors.js";
@@ -73,6 +74,9 @@ export class CanvasDrawingSession {
   private isAttached = false;
   private isDisposed = false;
   private isLayerRemovalPending = false;
+  private viewQuality: RenderQualityMode = "full";
+  private isViewRenderQueued = false;
+  private isViewPrefetchActive = false;
 
   /** Processes pointer-down failures through the Session error boundary. */
   private readonly handlePointerDown = (event: PointerEvent): void => {
@@ -202,9 +206,24 @@ export class CanvasDrawingSession {
         onRender: (hasNewDrawingCommands, changedTiles) => {
           if (hasNewDrawingCommands) {
             this.renderer.markSourceChanged(changedTiles);
+            this.viewQuality = "full";
+            this.isViewPrefetchActive = false;
           }
-          this.renderer.render();
-          return this.renderer.hasPendingRender;
+          const hasViewRequest = this.isViewRenderQueued;
+          if (hasViewRequest) {
+            this.renderer.recordViewRenderExecution();
+            this.isViewRenderQueued = false;
+          }
+          this.renderer.render({
+            quality: this.viewQuality,
+            prefetch: this.isViewPrefetchActive,
+            remainingFrameBudgetMs: this.scheduler.remainingFrameBudgetMs,
+          });
+          const hasPendingRender = this.renderer.hasPendingRender;
+          if (!hasPendingRender) {
+            this.isViewPrefetchActive = false;
+          }
+          return hasPendingRender;
         },
         ...(config.onError === undefined ? {} : { onError: config.onError }),
       });
@@ -212,9 +231,32 @@ export class CanvasDrawingSession {
 
   /** Schedules frames until the current progressive render has completed. */
   requestRenderContinuation(): void {
+    this.viewQuality = "full";
+    this.isViewPrefetchActive = false;
     if (this.renderer.hasPendingRender) {
       this.scheduler.requestRender();
     }
+  }
+
+  /**
+   * Coalesces camera changes and renders the latest view in an animation frame.
+   * @param quality - Host-selected policy for this interaction frame.
+   * @throws {WebTypeError} The quality is unsupported at runtime.
+   */
+  requestViewRender(quality: RenderQualityMode): void {
+    if (this.isDisposed) {
+      return;
+    }
+    if (quality !== "full" && quality !== "interactive") {
+      throw WebTypeError.from(WebErrorDefinitions.INVALID_VIEW_QUALITY);
+    }
+    this.renderer.recordViewRenderRequest(
+      this.isViewRenderQueued || !this.scheduler.idle,
+    );
+    this.viewQuality = quality;
+    this.isViewPrefetchActive = true;
+    this.isViewRenderQueued = true;
+    this.scheduler.requestRender();
   }
 
   /**
@@ -256,7 +298,7 @@ export class CanvasDrawingSession {
     if (this.isDisposed) {
       throw WebError.from(WebErrorDefinitions.SELECTION_CHANGE_WHILE_DISPOSED);
     }
-    if (this.isPainting || !this.scheduler.idle) {
+    if (this.isPainting || this.scheduler.pendingCommandCount > 0) {
       throw WebError.from(WebErrorDefinitions.SELECTION_CHANGE_WHILE_BUSY);
     }
     this.currentSelection = selection;
@@ -273,7 +315,7 @@ export class CanvasDrawingSession {
     if (this.isLayerRemovalPending) {
       throw WebError.from(WebErrorDefinitions.LAYER_CHANGE_DURING_REMOVAL);
     }
-    if (this.isPainting || !this.scheduler.idle) {
+    if (this.isPainting || this.scheduler.pendingCommandCount > 0) {
       throw WebError.from(WebErrorDefinitions.LAYER_CHANGE_WHILE_BUSY);
     }
   }
@@ -700,7 +742,7 @@ export class CanvasDrawingSession {
     if (this.isLayerRemovalPending) {
       throw WebError.from(WebErrorDefinitions.HISTORY_CHANGE_DURING_REMOVAL);
     }
-    if (this.isPainting || !this.scheduler.idle) {
+    if (this.isPainting || this.scheduler.pendingCommandCount > 0) {
       throw WebError.from(WebErrorDefinitions.HISTORY_CHANGE_WHILE_BUSY);
     }
   }

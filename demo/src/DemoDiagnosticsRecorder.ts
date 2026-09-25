@@ -24,8 +24,8 @@ export default class DemoDiagnosticsRecorder {
     if (this.isInstalled || this.isDisposed) {
       return;
     }
-    this.renderer.render = (): void => {
-      this.originalRender.call(this.renderer);
+    this.renderer.render = (options): void => {
+      this.originalRender.call(this.renderer, options);
       this.samples.push(
         Object.freeze({
           sequence: this.nextSequence,
@@ -38,6 +38,16 @@ export default class DemoDiagnosticsRecorder {
       }
     };
     this.isInstalled = true;
+  }
+
+  /** Stops observing render calls and clears the prior open-panel history. */
+  stopRecording(): void {
+    if (this.isInstalled) {
+      this.renderer.render = this.originalRender;
+      this.isInstalled = false;
+    }
+    this.samples.length = 0;
+    this.nextSequence = 1;
   }
 
   /** Returns an independent ordered list of the latest completed render calls. */
@@ -55,10 +65,7 @@ export default class DemoDiagnosticsRecorder {
     if (this.isDisposed) {
       return;
     }
-    if (this.isInstalled) {
-      this.renderer.render = this.originalRender;
-      this.isInstalled = false;
-    }
+    this.stopRecording();
     this.isDisposed = true;
   }
 }
