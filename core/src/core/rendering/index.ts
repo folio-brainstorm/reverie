@@ -3,10 +3,12 @@ export type { RenderSourceSnapshot } from "../../interfaces/renderer/RenderSourc
 export type { RenderRequest } from "../../interfaces/renderer/RenderRequest.js";
 export type { RenderRequestIdentity } from "../../interfaces/renderer/RenderRequestIdentity.js";
 export type { RenderRegion } from "../../interfaces/renderer/RenderRegion.js";
+export type { RenderResultClass } from "../../interfaces/renderer/RenderResultClass.js";
 export type { RenderRegionSet } from "../../interfaces/renderer/RenderRegionSet.js";
 export type { RenderBudget } from "../../interfaces/renderer/RenderBudget.js";
 export type { RenderContinuation } from "../../interfaces/renderer/RenderContinuation.js";
 export type { RenderDiagnostics } from "../../interfaces/renderer/RenderDiagnostics.js";
+export type { RenderResultCacheDiagnostics } from "../../interfaces/renderer/RenderResultCacheDiagnostics.js";
 export type { RenderingCoreDiagnosticsSnapshot } from "../../interfaces/renderer/RenderingCoreDiagnosticsSnapshot.js";
 export type { TimingMetric } from "../../interfaces/renderer/TimingMetric.js";
 export type {

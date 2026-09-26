@@ -415,6 +415,7 @@ describe("RenderingCore", () => {
       renderedCount: 1,
       renderEmptyCount: 0,
       generatedPixelBytes: 16,
+      outputPixelBytes: 16,
     });
     expect(first.regions.generatedCount).toBe(1);
     expect(first.quality).toEqual({

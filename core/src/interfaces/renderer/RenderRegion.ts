@@ -1,4 +1,5 @@
 import type { WorldRect } from "../camera/WorldRect.js";
+import type { RenderResultClass } from "./RenderResultClass.js";
 
 /**
  * One bounded world-space area resolved by Rendering Core for presentation.
@@ -9,8 +10,13 @@ export interface RenderRegion {
 
   /**
    * Final row-major RGBA8 pixels for `bounds`, independent of Raster storage.
-   * Once Core emits this result, the buffer must never be modified in place.
-   * Consumers may retain its identity to avoid redundant Canvas uploads.
+   * Once Core emits this result, callers must treat the buffer as immutable and
+   * must not modify it in place. Core may return this exact buffer again from
+   * its result cache without copying it. Caller mutation is unsupported and
+   * may affect later cache hits.
    */
   readonly pixels: Uint8Array;
+
+  /** Absent for canonical pixels; marks a World interaction preview. */
+  readonly resultClass?: RenderResultClass;
 }

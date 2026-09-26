@@ -13,6 +13,9 @@ interface CanvasRendererDependencies {
 
   /** Enables optional stage timing and 60-call rolling statistics. */
   readonly diagnostics?: CanvasDiagnosticsOptions;
+
+  /** Maximum bytes retained by the owned RenderingCore result cache. */
+  readonly resultCacheByteBudget?: number;
 }
 
 /** Exactly one rendering source: an independent Raster or a composed World. */

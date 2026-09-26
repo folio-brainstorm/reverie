@@ -121,11 +121,14 @@ export class CanvasRenderer<
     this.renderSource = CanvasRenderer.toRenderSource(this.source);
     this.canvas = config.canvas;
     this.camera = config.camera;
-    this.renderingCore = new RenderingCore(
-      config.diagnostics === undefined
+    this.renderingCore = new RenderingCore({
+      ...(config.diagnostics === undefined
         ? {}
-        : { diagnostics: config.diagnostics },
-    );
+        : { diagnostics: config.diagnostics }),
+      ...(config.resultCacheByteBudget === undefined
+        ? {}
+        : { resultCacheByteBudget: config.resultCacheByteBudget }),
+    });
     this.diagnosticCollector = new CanvasDiagnostics(
       this.renderingCore,
       config.diagnostics?.timings === true,
@@ -248,15 +251,22 @@ export class CanvasRenderer<
     const renderScale = hasCoveragePressure ? scale / 2 : scale;
     this.currentRenderScale = renderScale;
     const renderContext = { scale: renderScale, quality };
+    const outputTileSize = this.renderingCore.resolveOutputTileSize(
+      tileSize,
+      renderContext,
+    );
     const cacheContext: PresentationCacheContext = {
       viewport,
       sourceRevision,
       scaleKey: String(scale),
       quality,
-      outputTileSize: this.renderingCore.resolveOutputTileSize(
-        tileSize,
-        renderContext,
-      ),
+      outputTileSize,
+      resultClass:
+        "world" in this.renderSource &&
+        quality === "interactive" &&
+        outputTileSize < tileSize
+          ? "approximate"
+          : "canonical",
     };
     this.diagnosticCollector.setCoveragePolicy(
       coverage,
@@ -295,12 +305,15 @@ export class CanvasRenderer<
     if (this.lastPresentedViewportKey !== viewportKey) {
       this.presentedPixels.clear();
       if (visibleFrame?.identity.sourceRevision === sourceRevision) {
-        this.backend.present(visibleFrame, this.backend.target);
-        this.rememberPresented(visibleFrame.regions);
+        // Every completed region is retained before presentation. Select one
+        // cached variant per visible coordinate before drawing the projection.
+        this.backend.present(
+          { ...visibleFrame, regions: projectedRegions },
+          this.backend.target,
+        );
+        this.rememberPresented(projectedRegions);
       } else {
         this.backend.clear();
-      }
-      if (projectedRegions.length > 0) {
         this.presentUnseenRegions(projectedRegions);
       }
       this.lastPresentedViewportKey = viewportKey;
@@ -329,7 +342,8 @@ export class CanvasRenderer<
       pendingIdentity.viewportKey === viewportKey &&
       pendingIdentity.sourceRevision === sourceRevision &&
       this.presentationState.pendingOutputTileSize ===
-        cacheContext.outputTileSize;
+        cacheContext.outputTileSize &&
+      this.presentationState.pendingResultClass === cacheContext.resultClass;
     const identity = isContinuation
       ? pendingIdentity
       : this.createRequestIdentity(viewportKey, sourceRevision);
@@ -697,10 +711,11 @@ export class CanvasRenderer<
     this.needsFreshRender = true;
   }
 
-  /** Releases cached Canvas surfaces retained by the presentation backend. */
+  /** Releases presentation surfaces and the owned Core result cache. */
   dispose(): void {
     this.discardPresentation();
     this.backend.dispose();
+    this.renderingCore.dispose();
   }
 
   /** Drops an obsolete continuation without deleting valid presentation. */

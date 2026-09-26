@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { Camera, CircleBrush, Raster, World } from "@reverie/core";
+import { RenderingCore } from "@reverie/core/renderer";
 
 import { CanvasRenderer } from "../../index.js";
 
@@ -35,6 +36,119 @@ function readPixel(
 }
 
 describe("CanvasRenderer browser minification", () => {
+  it.each([1, 0.5, 0.25])(
+    "preserves translucent pixels through cached Pan and canonical refinement at zoom %s",
+    (zoom) => {
+      const world = new World({ tileSize: 16 });
+      const bottom = world.getLayer(0);
+      const top = world.addLayer();
+      top.opacity = 0.6;
+      for (let y = 0; y < 32; y += 1) {
+        for (let x = 0; x < 32; x += 1) {
+          bottom.raster.setPixel(
+            { x, y },
+            { r: x * 7, g: y * 7, b: 100, a: 140 },
+          );
+          if ((x + y) % 3 !== 0) {
+            top.raster.setPixel({ x, y }, { r: 200, g: 30, b: 150, a: 90 });
+          }
+        }
+      }
+      const canvas = createCanvas(48, 48);
+      const camera = new Camera({ zoom, panX: -4, panY: -4 });
+      const renderer = new CanvasRenderer({ canvas, world, camera });
+      const drain = (quality: "full" | "interactive"): void => {
+        for (let batch = 0; batch < 20; batch += 1) {
+          renderer.render({ quality });
+          if (!renderer.hasPendingRender) return;
+        }
+        throw new Error("Expected the four-Tile frame to complete.");
+      };
+      try {
+        drain("full");
+        drain("interactive");
+        for (const panX of [-2, -4, -1, -4]) {
+          camera.setPan(panX, -4);
+          drain("interactive");
+        }
+        expect(renderer.diagnostics.getSnapshot().tiles.renderedCount).toBe(0);
+        expect(
+          renderer.diagnostics.getSnapshot().presentation.uploadedRegionCount,
+        ).toBe(0);
+        const referenceCanvas = createCanvas(48, 48);
+        const reference = new CanvasRenderer({
+          canvas: referenceCanvas,
+          world,
+          camera,
+        });
+        try {
+          do {
+            reference.render({ quality: "interactive" });
+          } while (reference.hasPendingRender);
+          expect(readPixels(canvas)).toEqual(readPixels(referenceCanvas));
+          drain("full");
+          do {
+            reference.render({ quality: "full" });
+          } while (reference.hasPendingRender);
+          expect(readPixels(canvas)).toEqual(readPixels(referenceCanvas));
+        } finally {
+          reference.dispose();
+        }
+      } finally {
+        renderer.dispose();
+      }
+    },
+  );
+
+  it("replaces a low-resolution World preview with canonical pixels when interaction settles", () => {
+    const canvas = createCanvas(1, 1);
+    const world = new World({ tileSize: 2 });
+    const bottom = world.getLayer(0);
+    const top = world.addLayer();
+    top.opacity = 0.7;
+    for (let y = 0; y < 2; y += 1) {
+      for (let x = 0; x < 2; x += 1) {
+        const isEven = (x + y) % 2 === 0;
+        bottom.raster.setPixel(
+          { x, y },
+          isEven
+            ? { r: 240, g: 10, b: 20, a: 255 }
+            : { r: 10, g: 30, b: 220, a: 255 },
+        );
+        top.raster.setPixel(
+          { x, y },
+          isEven
+            ? { r: 30, g: 230, b: 50, a: 160 }
+            : { r: 220, g: 20, b: 180, a: 40 },
+        );
+      }
+    }
+    const viewport = { x: 0, y: 0, width: 2, height: 2 };
+    const core = new RenderingCore();
+    const preview = core.render({
+      source: { world },
+      context: { scale: 0.5, quality: "interactive" },
+      viewport,
+    }).regions[0];
+    const canonical = core.render({
+      source: { world },
+      context: { scale: 0.5, quality: "full" },
+      viewport,
+    }).regions[0];
+    const camera = new Camera({ zoom: 0.5 });
+    const renderer = new CanvasRenderer({ canvas, world, camera });
+
+    renderer.render({ quality: "interactive" });
+    expect(Array.from(readPixels(canvas))).toEqual(
+      Array.from(preview?.pixels ?? []),
+    );
+    renderer.render({ quality: "full" });
+    expect(Array.from(readPixels(canvas))).toEqual(
+      Array.from(canonical?.pixels ?? []),
+    );
+    expect(canonical?.pixels).not.toEqual(preview?.pixels);
+  });
+
   it("keeps the old pixels until a multi-batch replacement is complete", () => {
     const canvas = createCanvas(258, 2);
     const raster = new Raster({ tileSize: 2 });

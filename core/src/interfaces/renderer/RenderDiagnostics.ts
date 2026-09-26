@@ -9,6 +9,9 @@ export interface RenderDiagnostics {
   /** Bytes in newly generated RGBA8 output buffers. */
   readonly generatedPixelBytes: number;
 
+  /** Bytes of output returned by the batch, including reused buffers. */
+  readonly outputPixelBytes: number;
+
   /** Synchronous wall-clock duration of the resolved batch, in milliseconds. */
   readonly renderDurationMs: number;
 

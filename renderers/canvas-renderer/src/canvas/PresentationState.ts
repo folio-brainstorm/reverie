@@ -31,6 +31,12 @@ export default class PresentationState {
     return this.currentPendingFrame?.cacheContext?.outputTileSize ?? null;
   }
 
+  /** Pixel semantics required by the unfinished request. */
+  get pendingResultClass(): "canonical" | "approximate" | null {
+    const context = this.currentPendingFrame?.cacheContext;
+    return context === undefined ? null : (context.resultClass ?? "canonical");
+  }
+
   /** Number of regions accumulated by the incomplete request. */
   get pendingRegionCount(): number {
     return this.currentPendingFrame?.regions.size ?? 0;
@@ -40,7 +46,6 @@ export default class PresentationState {
   get visibleRegionCount(): number {
     return this.currentVisibleRegions.size;
   }
-
 
   /** Number of final pixel results held inside the current retention boundary. */
   get retainedRegionCount(): number {
@@ -110,39 +115,54 @@ export default class PresentationState {
   getReusableRegions(
     context: PresentationCacheContext,
   ): RenderRegionSet["regions"] {
-    return [...this.cachedRegions.values()]
-      .filter(
-        (cached) =>
-          cached.sourceRevision === context.sourceRevision &&
-          cached.outputTileSize === context.outputTileSize &&
-          PresentationState.intersects(
-            cached.region.bounds,
-            context.viewport,
-            0,
-          ),
-      )
-      .map((cached) => cached.region);
+    const reusable = new Map<string, RenderRegionSet["regions"][number]>();
+    for (const cached of this.cachedRegions.values()) {
+      if (
+        cached.sourceRevision !== context.sourceRevision ||
+        cached.outputTileSize !== context.outputTileSize ||
+        (context.resultClass !== "approximate" &&
+          cached.region.resultClass === "approximate") ||
+        !PresentationState.intersects(cached.region.bounds, context.viewport, 0)
+      ) {
+        continue;
+      }
+      const key = PresentationState.getRegionKey(cached.region);
+      // Canonical pixels may satisfy interactive requests at the same size.
+      const previous = reusable.get(key);
+      if (previous === undefined || previous.resultClass === "approximate") {
+        reusable.set(key, cached.region);
+      }
+    }
+    return [...reusable.values()];
   }
 
   /** Returns same-source pixels that can be projected as temporary coverage. */
   getProvisionalRegions(
     context: PresentationCacheContext,
   ): RenderRegionSet["regions"] {
-    return [...this.cachedRegions.values()]
-      .filter(
-        (cached) =>
-          cached.sourceRevision === context.sourceRevision &&
-          PresentationState.intersects(
-            cached.region.bounds,
-            context.viewport,
-            0,
-          ),
-      )
-      .map((cached) => cached.region);
+    const selected = new Map<string, CachedPresentationRegion>();
+    for (const cached of this.cachedRegions.values()) {
+      if (
+        cached.sourceRevision !== context.sourceRevision ||
+        !PresentationState.intersects(cached.region.bounds, context.viewport, 0)
+      ) {
+        continue;
+      }
+      const key = PresentationState.getRegionKey(cached.region);
+      const previous = selected.get(key);
+      if (
+        previous === undefined ||
+        PresentationState.prefersProjection(cached, previous, context)
+      ) {
+        selected.set(key, cached);
+      }
+    }
+    return [...selected.values()].map((cached) => cached.region);
   }
 
   /**
-   * Adds lower-priority results without presenting them outside the viewport.
+   * Retains at most a regular and a recent interactive result per coordinate.
+   * Interactive Raster results are canonical too, but need their own size slot.
    * @param regions - Completed warm-zone pixel results.
    * @param context - Validity metadata attached to those results.
    */
@@ -151,11 +171,15 @@ export default class PresentationState {
     context: PresentationCacheContext,
   ): void {
     for (const region of regions) {
-      const key = PresentationState.getRegionKey(region);
+      const key = `${PresentationState.getRegionKey(region)}:${context.quality}`;
       const cached = this.cachedRegions.get(key);
       if (
         cached?.sourceRevision === context.sourceRevision &&
-        cached.outputTileSize > context.outputTileSize
+        ((context.quality !== "interactive" &&
+          cached.outputTileSize > context.outputTileSize) ||
+          (cached.outputTileSize === context.outputTileSize &&
+            cached.region.resultClass !== "approximate" &&
+            region.resultClass === "approximate"))
       ) {
         continue;
       }
@@ -188,7 +212,7 @@ export default class PresentationState {
       ),
     );
     for (const [key, cached] of this.cachedRegions) {
-      if (changedKeys.has(key)) {
+      if (changedKeys.has(PresentationState.getRegionKey(cached.region))) {
         this.cachedRegions.delete(key);
       } else {
         this.cachedRegions.set(key, { ...cached, sourceRevision });
@@ -209,7 +233,13 @@ export default class PresentationState {
     let visible = 0;
     let warm = 0;
     let retained = 0;
+    const counted = new Set<string>();
     for (const { region } of this.cachedRegions.values()) {
+      const key = PresentationState.getRegionKey(region);
+      if (counted.has(key)) {
+        continue;
+      }
+      counted.add(key);
       if (PresentationState.intersects(region.bounds, viewport, 0)) {
         visible += 1;
       } else if (PresentationState.intersects(region.bounds, warmViewport, 0)) {
@@ -303,6 +333,11 @@ export default class PresentationState {
     for (const region of result.regions) {
       pendingFrame.regions.set(PresentationState.getRegionKey(region), region);
     }
+    if (pendingFrame.cacheContext !== undefined) {
+      // Completed pixels survive cancellation, including transparent results
+      // whose visible removal is deferred until request reconciliation.
+      this.addWarmRegions(result.regions, pendingFrame.cacheContext);
+    }
     if (result.continuation !== undefined) {
       return null;
     }
@@ -319,7 +354,9 @@ export default class PresentationState {
             cacheContext.viewport,
             0,
           ) &&
-          !pendingFrame.regions.has(key)
+          !pendingFrame.regions.has(
+            PresentationState.getRegionKey(cached.region),
+          )
         ) {
           this.cachedRegions.delete(key);
         }
@@ -336,6 +373,27 @@ export default class PresentationState {
       },
       removedBounds,
     };
+  }
+
+  /** Prefers matching output, then canonical fallback, then higher resolution. */
+  private static prefersProjection(
+    candidate: CachedPresentationRegion,
+    previous: CachedPresentationRegion,
+    context: PresentationCacheContext,
+  ): boolean {
+    const isCandidateApproximate =
+      candidate.region.resultClass === "approximate";
+    const isPreviousApproximate = previous.region.resultClass === "approximate";
+    const isCandidateExact =
+      candidate.outputTileSize === context.outputTileSize &&
+      (context.resultClass === "approximate" || !isCandidateApproximate);
+    const isPreviousExact =
+      previous.outputTileSize === context.outputTileSize &&
+      (context.resultClass === "approximate" || !isPreviousApproximate);
+    if (isCandidateExact !== isPreviousExact) return isCandidateExact;
+    if (isCandidateApproximate !== isPreviousApproximate)
+      return !isCandidateApproximate;
+    return candidate.outputTileSize > previous.outputTileSize;
   }
 
   /** Uses half-open intersections so a Tile touching an edge is outside it. */

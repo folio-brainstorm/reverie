@@ -1,8 +1,10 @@
 import type { WorldRect } from "../camera/WorldRect.js";
 import type { Raster } from "../../core/raster/Raster.js";
 import type { RasterLayer } from "../../core/world/RasterLayer.js";
+import type { World } from "../../core/world/World.js";
 import type { RasterAllocatedTileView } from "./RasterAllocatedTileView.js";
 import type { RenderRequestIdentity } from "./RenderRequestIdentity.js";
+import type { RenderResultClass } from "./RenderResultClass.js";
 import type { TileCoord } from "../tile/TileCoord.js";
 
 /** Internal mutable state retained while a render request is progressively pulled. */
@@ -12,8 +14,11 @@ export interface RenderWorkState {
   readonly excludedViewport: WorldRect | null;
   readonly tileSize: number;
   readonly outputTileSize: number;
+  readonly resultClass: RenderResultClass;
   readonly layers: readonly RasterLayer[] | null;
   readonly raster: Raster | null;
+  readonly world: World | null;
+  readonly sourceId: number;
   readonly candidateIterators: readonly IterableIterator<RasterAllocatedTileView>[];
   iteratorIndex: number;
   readonly pendingCoords: RasterAllocatedTileView["coord"][];

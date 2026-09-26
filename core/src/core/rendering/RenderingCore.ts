@@ -1,5 +1,6 @@
 import type { Raster } from "../raster/Raster.js";
 import type { RasterLayer } from "../world/RasterLayer.js";
+import type { World } from "../world/World.js";
 import type { WorldRect } from "../../interfaces/camera/WorldRect.js";
 import type { RenderBudget } from "../../interfaces/renderer/RenderBudget.js";
 import type { RenderContext } from "../../interfaces/renderer/RenderContext.js";
@@ -9,6 +10,7 @@ import type { RenderingCoreDiagnosticsSnapshot } from "../../interfaces/renderer
 import type { RenderLodStrategy } from "../../interfaces/renderer/RenderLodStrategy.js";
 import type { RenderRegion } from "../../interfaces/renderer/RenderRegion.js";
 import type { RenderRegionSet } from "../../interfaces/renderer/RenderRegionSet.js";
+import type { RenderResultClass } from "../../interfaces/renderer/RenderResultClass.js";
 import type { RenderRequest } from "../../interfaces/renderer/RenderRequest.js";
 import type { RenderRequestIdentity } from "../../interfaces/renderer/RenderRequestIdentity.js";
 import type { RenderWorkState } from "../../interfaces/renderer/RenderWorkState.js";
@@ -26,7 +28,9 @@ import {
   getRasterTileView,
 } from "./bridge/RasterRenderBridge.js";
 import { compositeRgbaSourceOverInPlace } from "./composition/CompositeRgbaSourceOverInPlace.js";
+import { composeWorldPreviewTile } from "./composition/ComposeWorldPreviewTile.js";
 import { getWorldCompositionLayers } from "./composition/GetWorldCompositionLayers.js";
+import RenderResultCache from "./cache/RenderResultCache.js";
 import { downsampleRgbaTile } from "./region/DownsampleRgbaTile.js";
 import TileRenderSummaryCache from "./summary/TileRenderSummaryCache.js";
 import RollingTiming from "./diagnostics/RollingTiming.js";
@@ -36,11 +40,13 @@ const DEFAULT_RENDER_BUDGET: RenderBudget = {
   maxGeneratedPixelBytes: 2 * 1024 * 1024,
   maxRenderDurationMs: 8,
 };
+const DEFAULT_RESULT_CACHE_BYTE_BUDGET = 32 * 1024 * 1024;
 
 const EMPTY_DIAGNOSTICS: RenderDiagnostics = {
   candidateTileCount: 0,
   renderedTileCount: 0,
   generatedPixelBytes: 0,
+  outputPixelBytes: 0,
   renderDurationMs: 0,
   processedRegionCount: 0,
 };
@@ -62,6 +68,9 @@ class RenderContinuationToken implements RenderContinuation {
 export class RenderingCore {
   private readonly budget: RenderBudget;
   private readonly lodStrategy: RenderLodStrategy;
+  private readonly resultCache: RenderResultCache;
+  private sourceIds = new WeakMap<object, number>();
+  private nextSourceId = 1;
   private readonly continuationWork = new WeakMap<
     RenderContinuationToken,
     RenderWorkState
@@ -87,6 +96,14 @@ export class RenderingCore {
   private rasterDurationMs = 0;
   private compositionDurationMs = 0;
   private lodDurationMs = 0;
+  private worldCanonicalGeneratedCount = 0;
+  private worldApproximateGeneratedCount = 0;
+  private worldCanonicalCacheHits = 0;
+  private worldApproximateCacheHits = 0;
+  private worldCanonicalCompositionPixels = 0;
+  private worldApproximateCompositionPixels = 0;
+  private worldCanonicalGenerationDurationMs = 0;
+  private worldApproximateGenerationDurationMs = 0;
 
   /**
    * Creates a core with conservative configurable internal render limits.
@@ -97,6 +114,15 @@ export class RenderingCore {
   constructor(config: RenderingCoreConfig = {}) {
     this.budget = RenderingCore.resolveBudget(config.budget);
     this.lodStrategy = config.lodStrategy ?? new ScaleRenderLodStrategy();
+    const resultCacheByteBudget =
+      config.resultCacheByteBudget ?? DEFAULT_RESULT_CACHE_BYTE_BUDGET;
+    if (
+      !Number.isSafeInteger(resultCacheByteBudget) ||
+      resultCacheByteBudget < 0
+    ) {
+      throw RenderingCore.createInvalidBudgetError("resultCacheByteBudget");
+    }
+    this.resultCache = new RenderResultCache(resultCacheByteBudget);
     this.timingsEnabled = config.diagnostics?.timings === true;
   }
 
@@ -163,7 +189,8 @@ export class RenderingCore {
    * Begins a fresh bounded render request, cancelling any prior continuation.
    *
    * A zero-area viewport requires no presentation and returns an empty set.
-   * Each returned region owns a fresh RGBA8 buffer. If the result contains a
+   * A returned region may reuse an immutable RGBA8 buffer from this Core's
+   * result cache. If the result contains a
    * continuation, callers pull it through {@link continueRender} to complete
    * the same request without scheduling policy in this class.
    *
@@ -241,6 +268,14 @@ export class RenderingCore {
     this.cancelActiveContinuation();
   }
 
+  /** Releases retained result pixels and pending work owned by this Core. */
+  dispose(): void {
+    this.cancelActiveContinuation();
+    this.resultCache.clear();
+    this.sourceIds = new WeakMap<object, number>();
+    this.nextSourceId = 1;
+  }
+
   /** Returns detached counters and optional rolling timings for this core. */
   getDiagnosticsSnapshot(): RenderingCoreDiagnosticsSnapshot {
     const coreDurationMs = this.coreTiming.getSnapshot();
@@ -248,6 +283,7 @@ export class RenderingCore {
     const compositionDurationMs = this.compositionTiming.getSnapshot();
     const lodDurationMs = this.lodTiming.getSnapshot();
     const snapshot: RenderingCoreDiagnosticsSnapshot = {
+      resultCache: this.resultCache.getSnapshot(),
       ...(coreDurationMs !== undefined &&
       rasterDurationMs !== undefined &&
       compositionDurationMs !== undefined &&
@@ -267,8 +303,20 @@ export class RenderingCore {
         renderedCount: this.lastDiagnostics.renderedTileCount,
         renderEmptyCount: this.renderEmptyTileCount,
         generatedPixelBytes: this.lastDiagnostics.generatedPixelBytes,
+        outputPixelBytes: this.lastDiagnostics.outputPixelBytes,
       },
       regions: { generatedCount: this.lastDiagnostics.processedRegionCount },
+      world: {
+        canonicalGeneratedCount: this.worldCanonicalGeneratedCount,
+        approximateGeneratedCount: this.worldApproximateGeneratedCount,
+        canonicalCacheHits: this.worldCanonicalCacheHits,
+        approximateCacheHits: this.worldApproximateCacheHits,
+        canonicalCompositionPixels: this.worldCanonicalCompositionPixels,
+        approximateCompositionPixels: this.worldApproximateCompositionPixels,
+        canonicalGenerationDurationMs: this.worldCanonicalGenerationDurationMs,
+        approximateGenerationDurationMs:
+          this.worldApproximateGenerationDurationMs,
+      },
       progressive: {
         requestCount: this.requestCount,
         completedRequestCount: this.completedRequestCount,
@@ -292,7 +340,14 @@ export class RenderingCore {
         ? {}
         : { rendering: Object.freeze(snapshot.rendering) }),
       tiles: Object.freeze(snapshot.tiles),
+      resultCache: Object.freeze({
+        ...snapshot.resultCache,
+        hitsByOutputTileSize: Object.freeze(
+          snapshot.resultCache.hitsByOutputTileSize,
+        ),
+      }),
       regions: Object.freeze(snapshot.regions),
+      world: Object.freeze(snapshot.world),
       progressive: Object.freeze(snapshot.progressive),
       ...(snapshot.quality === undefined
         ? {}
@@ -307,12 +362,24 @@ export class RenderingCore {
     identity: RenderRequestIdentity,
   ): RenderWorkState {
     const source = request.source;
+    const sourceObject = "raster" in source ? source.raster : source.world;
+    let sourceId = this.sourceIds.get(sourceObject);
+    if (sourceId === undefined) {
+      sourceId = this.nextSourceId++;
+      this.sourceIds.set(sourceObject, sourceId);
+    }
     const tileSize =
       "raster" in source ? source.raster.tileSize : source.world.tileSize;
     const outputTileSize = this.resolveOutputTileSize(
       tileSize,
       request.context,
     );
+    const resultClass: RenderResultClass =
+      "world" in source &&
+      request.context.quality === "interactive" &&
+      outputTileSize < tileSize
+        ? "approximate"
+        : "canonical";
     const interactiveTiles = RenderingCore.resolveInteractiveTiles(
       request.interactiveTiles,
       tileSize,
@@ -342,8 +409,11 @@ export class RenderingCore {
         excludedViewport,
         tileSize,
         outputTileSize,
+        resultClass,
         layers: null,
         raster: source.raster,
+        world: null,
+        sourceId,
         candidateIterators: [getAllocatedRasterTileViews(source.raster)],
         iteratorIndex: 0,
         pendingCoords: [],
@@ -361,8 +431,11 @@ export class RenderingCore {
       excludedViewport,
       tileSize,
       outputTileSize,
+      resultClass,
       layers,
       raster: null,
+      world: source.world,
+      sourceId,
       candidateIterators: layers.map((layer) =>
         getAllocatedRasterTileViews(layer.raster),
       ),
@@ -392,12 +465,13 @@ export class RenderingCore {
     let inspectedTileCount = 0;
     let visibleTileCount = 0;
     let renderEmptyTileCount = 0;
+    let outputPixelBytes = 0;
     let generatedPixelBytes = 0;
     const pixelByteLength = work.outputTileSize ** 2 * 4;
     while (work.interactiveIndex < work.interactiveTiles.length) {
       if (
         regions.length > 0 &&
-        (generatedPixelBytes + pixelByteLength >
+        (outputPixelBytes + pixelByteLength >
           this.budget.maxGeneratedPixelBytes ||
           Date.now() - startedAt >= this.budget.maxRenderDurationMs)
       ) {
@@ -408,14 +482,14 @@ export class RenderingCore {
       if (coord === undefined) {
         continue;
       }
-      const pixels = this.resolvePixels(work, coord);
+      const region = this.resolveRegion(work, coord);
       visibleTileCount += 1;
-      if (pixels !== undefined) {
-        regions.push({
-          bounds: RenderingCore.tileBounds(coord, work.tileSize),
-          pixels,
-        });
-        generatedPixelBytes += pixels.byteLength;
+      if (region !== undefined) {
+        regions.push(region.region);
+        outputPixelBytes += region.region.pixels.byteLength;
+        if (!region.isCached) {
+          generatedPixelBytes += region.region.pixels.byteLength;
+        }
       } else {
         renderEmptyTileCount += 1;
       }
@@ -484,22 +558,21 @@ export class RenderingCore {
         continue;
       }
       const exceedsPixelBudget =
-        generatedPixelBytes + pixelByteLength >
-        this.budget.maxGeneratedPixelBytes;
+        outputPixelBytes + pixelByteLength > this.budget.maxGeneratedPixelBytes;
       if (exceedsPixelBudget && regions.length > 0) {
         work.pendingCoords.push(...coords.slice(index));
         break;
       }
-      const pixels = this.resolvePixels(work, coord);
-      if (pixels === undefined) {
+      const region = this.resolveRegion(work, coord);
+      if (region === undefined) {
         renderEmptyTileCount += 1;
         continue;
       }
-      regions.push({
-        bounds: RenderingCore.tileBounds(coord, work.tileSize),
-        pixels,
-      });
-      generatedPixelBytes += pixels.byteLength;
+      regions.push(region.region);
+      outputPixelBytes += region.region.pixels.byteLength;
+      if (!region.isCached) {
+        generatedPixelBytes += region.region.pixels.byteLength;
+      }
     }
 
     const renderDurationMs = Math.max(0, Date.now() - startedAt);
@@ -507,6 +580,7 @@ export class RenderingCore {
       candidateTileCount,
       renderedTileCount: regions.length,
       generatedPixelBytes,
+      outputPixelBytes,
       renderDurationMs,
       processedRegionCount: regions.length,
     };
@@ -610,11 +684,13 @@ export class RenderingCore {
     return undefined;
   }
 
-  /** Resolves one allocated candidate into independent final pixels. */
-  private resolvePixels(
+  /** Selects an emitted candidate before resolving viewport-independent pixels. */
+  private resolveRegion(
     work: RenderWorkState,
     coord: TileCoord,
-  ): Uint8Array | undefined {
+  ): { readonly region: RenderRegion; readonly isCached: boolean } | undefined {
+    const bounds = RenderingCore.tileBounds(coord, work.tileSize);
+    const key = `${work.sourceId}:${coord.x}:${coord.y}:${work.tileSize}:${work.outputTileSize}`;
     if (work.raster !== null) {
       const startedAt = this.timingsEnabled ? performance.now() : 0;
       const tile = getRasterTileView(work.raster, coord);
@@ -627,6 +703,14 @@ export class RenderingCore {
         }
         return undefined;
       }
+      const signature = `${tile.tileId}:${tile.revision}`;
+      const cached = this.resultCache.get(key, signature, work.outputTileSize);
+      if (cached !== undefined) {
+        if (this.timingsEnabled) {
+          this.rasterDurationMs += performance.now() - startedAt;
+        }
+        return { region: cached, isCached: true };
+      }
       const pixels = this.downsamplePixels(
         tile.pixels,
         work.tileSize,
@@ -635,20 +719,94 @@ export class RenderingCore {
       if (this.timingsEnabled) {
         this.rasterDurationMs += performance.now() - startedAt;
       }
-      return pixels;
+      const region = { bounds, pixels };
+      this.resultCache.set(key, signature, region);
+      return { region, isCached: false };
+    }
+    const world = work.world;
+    if (world === null) {
+      return undefined;
+    }
+    const layers = [...getWorldCompositionLayers(world)];
+    const isRelevant = layers.some((layer) => {
+      const tile = getRasterTileView(layer.raster, coord);
+      return (
+        tile !== undefined &&
+        this.hasVisibleAlpha(tile, coord, work.tileSize, work.viewport)
+      );
+    });
+    if (!isRelevant) {
+      return undefined;
+    }
+    const signature = this.worldSignature(world, coord);
+    const cached = this.resultCache.getCompatible(
+      work.resultClass === "approximate" ? [key, `${key}:approximate`] : [key],
+      signature,
+      work.outputTileSize,
+    );
+    if (cached !== undefined) {
+      if (cached.resultClass === "approximate") {
+        this.worldApproximateCacheHits += 1;
+      } else {
+        this.worldCanonicalCacheHits += 1;
+      }
+      return { region: cached, isCached: true };
     }
     const startedAt = this.timingsEnabled ? performance.now() : 0;
     const pixels = this.composeWorldTile(
-      work.layers ?? [],
+      layers,
       coord,
       work.tileSize,
       work.outputTileSize,
-      work.viewport,
+      work.resultClass,
     );
     if (this.timingsEnabled) {
-      this.compositionDurationMs += performance.now() - startedAt;
+      const durationMs = performance.now() - startedAt;
+      this.compositionDurationMs += durationMs;
+      if (work.resultClass === "approximate") {
+        this.worldApproximateGenerationDurationMs += durationMs;
+      } else {
+        this.worldCanonicalGenerationDurationMs += durationMs;
+      }
     }
-    return pixels;
+    if (pixels === undefined) {
+      return undefined;
+    }
+    const region: RenderRegion =
+      work.resultClass === "approximate"
+        ? { bounds, pixels, resultClass: "approximate" }
+        : { bounds, pixels };
+    if (work.resultClass === "approximate") {
+      this.worldApproximateGeneratedCount += 1;
+    } else {
+      this.worldCanonicalGeneratedCount += 1;
+    }
+    this.resultCache.set(
+      work.resultClass === "approximate" ? `${key}:approximate` : key,
+      signature,
+      region,
+    );
+    return { region, isCached: false };
+  }
+
+  /** Encodes ordered layer state and Tile versions without reading pixel buffers. */
+  private worldSignature(world: World, coord: TileCoord): string {
+    return JSON.stringify(
+      world.layers.map((layer) => {
+        const tile =
+          layer.visible && layer.opacity > 0
+            ? getRasterTileView(layer.raster, coord)
+            : undefined;
+        return [
+          layer.id,
+          layer.visible,
+          layer.opacity,
+          layer.blendMode,
+          tile?.tileId ?? null,
+          tile?.revision ?? null,
+        ];
+      }),
+    );
   }
 
   /** Checks cached alpha coverage against the requested world area. */
@@ -678,13 +836,13 @@ export class RenderingCore {
     coord: TileCoord,
     tileSize: number,
     outputTileSize: number,
-    viewport: WorldRect,
+    resultClass: RenderResultClass,
   ): Uint8Array | undefined {
     const contributors = layers.flatMap((layer) => {
       const tile = getRasterTileView(layer.raster, coord);
       if (
         tile === undefined ||
-        !this.hasVisibleAlpha(tile, coord, tileSize, viewport)
+        this.tileRenderSummaries.get(tile, tileSize).alphaBounds === null
       ) {
         return [];
       }
@@ -693,6 +851,12 @@ export class RenderingCore {
     if (contributors.length === 0) {
       return undefined;
     }
+    if (resultClass === "approximate") {
+      this.worldApproximateCompositionPixels +=
+        contributors.length * outputTileSize ** 2;
+      return composeWorldPreviewTile(contributors, tileSize, outputTileSize);
+    }
+    this.worldCanonicalCompositionPixels += contributors.length * tileSize ** 2;
 
     const composedPixels = new Uint8ClampedArray(tileSize * tileSize * 4);
     for (const { layer, tile } of contributors) {

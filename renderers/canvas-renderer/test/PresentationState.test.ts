@@ -15,6 +15,141 @@ function createRegion(x: number, red: number): RenderRegion {
 }
 
 describe("PresentationState", () => {
+  it("retains a smaller preview beside canonical pixels and selects it for interactive projection", () => {
+    const state = new PresentationState();
+    const canonical = { ...createRegion(0, 60), pixels: new Uint8Array(16) };
+    const preview = {
+      ...createRegion(0, 30),
+      resultClass: "approximate" as const,
+    };
+    const full = {
+      viewport: { x: 0, y: 0, width: 2, height: 2 },
+      sourceRevision: "0",
+      scaleKey: "1",
+      quality: "full" as const,
+      outputTileSize: 2,
+      resultClass: "canonical" as const,
+    };
+    const interactive = {
+      ...full,
+      quality: "interactive" as const,
+      outputTileSize: 1,
+      resultClass: "approximate" as const,
+    };
+    state.addWarmRegions([canonical], full);
+    state.addWarmRegions([preview], interactive);
+
+    expect(state.getReusableRegions(interactive)).toEqual([preview]);
+    expect(state.getReusableRegions(full)).toEqual([canonical]);
+    expect(state.getProvisionalRegions(interactive)).toEqual([preview]);
+    expect(state.getProvisionalRegions(full)).toEqual([canonical]);
+    expect(state.retainedRegionCount).toBe(2);
+    expect(state.getZoneCounts(full.viewport, full.viewport)).toEqual({
+      visible: 1,
+      warm: 0,
+      retained: 0,
+    });
+
+    state.retainSourceChanges("1", [{ x: 0, y: 0 }], 2);
+    expect(state.retainedRegionCount).toBe(0);
+  });
+
+  it("bounds retained variants while replacing interactive sizes and evicts both outside retention", () => {
+    const state = new PresentationState();
+    const viewport = { x: -2, y: 0, width: 2, height: 2 };
+    const full = {
+      viewport,
+      sourceRevision: "0",
+      scaleKey: "1",
+      quality: "full" as const,
+      outputTileSize: 4,
+      resultClass: "canonical" as const,
+    };
+    const canonical = { ...createRegion(-2, 60), pixels: new Uint8Array(64) };
+    state.addWarmRegions([canonical], full);
+    for (const outputTileSize of [2, 1, 2, 1]) {
+      const context = {
+        ...full,
+        quality: "interactive" as const,
+        outputTileSize,
+        resultClass: "approximate" as const,
+      };
+      const preview = {
+        ...createRegion(-2, 30),
+        pixels: new Uint8Array(outputTileSize ** 2 * 4),
+        resultClass: "approximate" as const,
+      };
+      state.addWarmRegions([preview], context);
+      expect(state.retainedRegionCount).toBe(2);
+      expect(state.getReusableRegions(context)).toEqual([preview]);
+      expect(state.getReusableRegions(full)).toEqual([canonical]);
+    }
+    state.retainSourceChanges("1", [{ x: 0, y: 0 }], 2);
+    expect(state.getReusableRegions(full)).toEqual([]);
+    expect(state.getReusableRegions({ ...full, sourceRevision: "1" })).toEqual([
+      canonical,
+    ]);
+    state.retainNear({ x: 0, y: 0, width: 2, height: 2 }, 0);
+    expect(state.retainedRegionCount).toBe(0);
+  });
+
+  it("retains completed transparent previews across cancellation without presenting partial removal", () => {
+    const state = new PresentationState();
+    const identity = {
+      requestId: 1,
+      viewportKey: "first",
+      sourceRevision: "0",
+    };
+    const full = {
+      viewport: { x: 0, y: 0, width: 2, height: 2 },
+      sourceRevision: "0",
+      scaleKey: "1",
+      quality: "full" as const,
+      outputTileSize: 2,
+      resultClass: "canonical" as const,
+    };
+    const canonical = {
+      ...createRegion(0, 60),
+      pixels: new Uint8Array(16).fill(255),
+    };
+    state.begin(identity, full);
+    state.append({ identity, regions: [canonical] });
+    const interactive = {
+      ...full,
+      outputTileSize: 1,
+      quality: "interactive" as const,
+      resultClass: "approximate" as const,
+    };
+    const preview = {
+      ...createRegion(0, 0),
+      pixels: new Uint8Array(4),
+      resultClass: "approximate" as const,
+    };
+    const pending = { ...identity, requestId: 2 };
+    const batch = {
+      identity: pending,
+      regions: [preview],
+      continuation: { isRenderContinuation: true as const, identity: pending },
+    };
+    state.begin(pending, interactive);
+    expect(state.append(batch)).toBeNull();
+    expect(state.applyProvisional(batch)).toEqual([]);
+    expect(state.visibleFrame?.regions).toEqual([canonical]);
+    state.cancelPending();
+    expect(state.getReusableRegions(interactive)).toEqual([preview]);
+    expect(state.getReusableRegions(full)).toEqual([canonical]);
+
+    const next = { ...identity, requestId: 3, viewportKey: "next" };
+    state.begin(next, interactive, state.getReusableRegions(interactive));
+    expect(
+      state.append({ identity: next, regions: [] })?.frame.regions,
+    ).toEqual([preview]);
+    // A complete empty result removes every cached variant at that coordinate.
+    state.begin({ ...next, requestId: 4 }, full);
+    state.append({ identity: { ...next, requestId: 4 }, regions: [] });
+    expect(state.retainedRegionCount).toBe(0);
+  });
+
   const first: RenderRequestIdentity = {
     requestId: 1,
     viewportKey: "viewport",
@@ -25,6 +160,38 @@ describe("PresentationState", () => {
     viewportKey: "viewport",
     sourceRevision: "1",
   };
+
+  it("keeps approximate Regions out of settled reuse and favors canonical warm pixels", () => {
+    const state = new PresentationState();
+    const preview = {
+      ...createRegion(0, 30),
+      resultClass: "approximate" as const,
+    };
+    const canonical = createRegion(0, 60);
+    const viewport = { x: 0, y: 0, width: 2, height: 2 };
+    const base = {
+      viewport,
+      sourceRevision: "0",
+      scaleKey: "0.5",
+      quality: "interactive" as const,
+      outputTileSize: 1,
+    };
+    const interactive = { ...base, resultClass: "approximate" as const };
+    const settled = {
+      ...base,
+      quality: "full" as const,
+      resultClass: "canonical" as const,
+    };
+
+    state.addWarmRegions([preview], interactive);
+    expect(state.getReusableRegions(interactive)).toEqual([preview]);
+    expect(state.getReusableRegions(settled)).toEqual([]);
+    state.addWarmRegions([canonical], settled);
+    expect(state.getReusableRegions(settled)).toEqual([canonical]);
+    state.addWarmRegions([preview], interactive);
+    expect(state.getReusableRegions(interactive)).toEqual([canonical]);
+    expect(state.getReusableRegions(settled)).toEqual([canonical]);
+  });
 
   it("accumulates multiple batches before replacing visible bounds", () => {
     const state = new PresentationState();

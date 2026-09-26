@@ -9,6 +9,9 @@ export interface RenderingCoreConfig {
   /** Strategy used to select Tile output resolution for the request. */
   readonly lodStrategy?: RenderLodStrategy;
 
+  /** Maximum retained final pixel bytes; zero disables result caching. */
+  readonly resultCacheByteBudget?: number;
+
   /** Enables optional per-stage timing and rolling statistics. */
   readonly diagnostics?: { readonly timings?: boolean };
 }
