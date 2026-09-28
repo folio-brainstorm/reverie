@@ -99,7 +99,13 @@ graph LR
 
 ## Quick Start
 
-Install dependencies and start the included demo from the repository root:
+In an existing browser project, install the Web facade:
+
+```bash
+pnpm add @reverie/web
+```
+
+To run the included demo from the repository root:
 
 ```bash
 pnpm install
@@ -123,8 +129,14 @@ const reverie = new ReverieCanvas({
   height: 768,
 });
 
-// Pointer input is attached automatically. Dispose when the owning view unmounts.
+// Pointer input and responsive sizing are attached automatically.
 ```
+
+`ReverieCanvas` owns its Session and Renderer, including their cleanup. Do not
+dispose `reverie.session` or `reverie.renderer` independently. Applications using
+`CanvasRenderer` directly own it and must call `renderer.dispose()`. After direct
+World or Raster changes, call `renderer.markSourceChanged()` (or `invalidate()`
+for a full reset) before rendering; the Web facade handles its drawing path.
 
 For high-frequency camera input, update the public Camera and request one
 animation-frame render. Request full quality when the gesture ends:
@@ -135,6 +147,9 @@ reverie.requestViewRender("interactive");
 
 // On pointer release or after wheel input becomes idle:
 reverie.requestViewRender("full");
+
+// When the owning view unmounts:
+reverie.dispose();
 ```
 
 `reverie.render()` remains synchronous. `renderer.diagnostics.getSnapshot()`
