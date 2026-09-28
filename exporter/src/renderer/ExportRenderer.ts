@@ -5,8 +5,9 @@ import {
   compositeRgbaSourceOverInPlace,
   intersectRenderRegion,
   resolveRenderSource,
-} from "@reverie/core/renderer";
-import type { RenderSourceSnapshot, TileCoord } from "@reverie/core/renderer";
+} from "@reverie/core/rendering/internal";
+import type { TileCoord } from "@reverie/core/rendering";
+import type { RenderSourceSnapshot } from "@reverie/core/rendering/internal";
 
 import { ExporterErrorDefinitions } from "../errors/ExporterErrorDefinitions.js";
 import {

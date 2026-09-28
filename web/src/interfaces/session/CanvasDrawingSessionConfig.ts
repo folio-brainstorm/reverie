@@ -7,7 +7,7 @@ import type {
   SelectionMask,
   World,
 } from "@reverie/core";
-import type { CanvasRenderer } from "@reverie/renderer";
+import type { CanvasRenderer } from "@reverie/canvas-renderer";
 
 import type { DrawingScheduler } from "../../scheduler/DrawingScheduler.js";
 

@@ -9,7 +9,7 @@ import { ReverieRangeError } from "../../utils/errors/ReverieErrors.js";
 import { isValidRGBAColor } from "../../utils/number/color/IsValidRGBAColor.js";
 import { isValidCoord } from "../../utils/number/coords/isValidCoord.js";
 import { isValidTileSize } from "../../utils/number/tile/IsValidTileSize.js";
-import { registerTilePixelBuffer } from "../renderer/RasterRenderBridge.js";
+import { registerTilePixelBuffer } from "../rendering/bridge/RasterRenderBridge.js";
 
 let nextTileId = 1;
 

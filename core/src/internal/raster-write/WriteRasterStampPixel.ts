@@ -7,7 +7,7 @@ import {
   getOrCreateRasterTileForTrustedWrite,
   getTilePixelBufferForTrustedWrite,
   markTrustedTilePixelWritten,
-} from "../../core/renderer/RasterRenderBridge.js";
+} from "../../core/rendering/bridge/RasterRenderBridge.js";
 import { isRasterPixelWritable } from "../paint-target/ActiveRasterPaintBounds.js";
 import { blendSourceOverChannel } from "../color/BlendSourceOverChannel.js";
 import { roundAndClampChannel } from "../color/RoundAndClampChannel.js";

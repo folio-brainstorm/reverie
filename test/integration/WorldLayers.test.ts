@@ -9,7 +9,7 @@ import {
   ReverieTypeError,
   World,
 } from "@reverie/core";
-import { getRasterTileVersion } from "@reverie/core/renderer";
+import { getRasterTileVersion } from "@reverie/core/rendering/internal";
 
 describe("World layer membership and ordering", () => {
   it.each(["Layer", "", "Sketch"])(

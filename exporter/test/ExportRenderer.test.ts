@@ -6,8 +6,8 @@ import { deserializeDocument, serializeDocument } from "@reverie/core/document";
 import {
   getRasterTilePixels,
   getRasterTileVersion,
-} from "@reverie/core/renderer";
-import type { TileCoord } from "@reverie/core/renderer";
+} from "@reverie/core/rendering/internal";
+import type { TileCoord } from "@reverie/core/rendering";
 
 import {
   ExportRenderer,

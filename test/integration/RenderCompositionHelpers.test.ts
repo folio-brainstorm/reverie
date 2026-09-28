@@ -5,7 +5,7 @@ import {
   compositeRgbaSourceOverInPlace,
   intersectRenderRegion,
   resolveRenderSource,
-} from "@reverie/core/renderer";
+} from "@reverie/core/rendering/internal";
 
 describe("shared render-source resolution", () => {
   it("captures immutable dependencies without freezing or retaining caller config", () => {

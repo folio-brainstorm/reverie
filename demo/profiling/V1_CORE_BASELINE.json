@@ -1,0 +1,577 @@
+{
+  "environment": {
+    "node": "v24.18.1",
+    "platform": "win32",
+    "arch": "x64"
+  },
+  "method": {
+    "warmups": 2,
+    "trials": 7,
+    "timing": "performance.now(), instrumented Core diagnostics enabled"
+  },
+  "fixture": {
+    "tileSize": 256,
+    "strokeBrush": "opaque PixelBrush size=1 spacing=0.25",
+    "compositionWorld": "512x512 dense, 4 tiles/layer"
+  },
+  "raster": [
+    {
+      "name": "tile-allocation",
+      "elapsedMs": 3.090299999999843,
+      "writes": 16,
+      "tileCount": 16,
+      "rawPixelBytes": 4194304,
+      "tileBounds": {
+        "minX": 0,
+        "minY": 0,
+        "maxX": 3,
+        "maxY": 3
+      },
+      "timing": {
+        "meanMs": 3.73489999999986,
+        "medianMs": 3.2369999999991705,
+        "p95Ms": 5.79070000000047
+      }
+    },
+    {
+      "name": "repeated-writes",
+      "elapsedMs": 2.7663999999995212,
+      "writes": 4096,
+      "revisionBefore": 1,
+      "revisionAfter": 4097,
+      "tileCount": 1,
+      "rawPixelBytes": 262144,
+      "tileBounds": {
+        "minX": 0,
+        "minY": 0,
+        "maxX": 0,
+        "maxY": 0
+      },
+      "timing": {
+        "meanMs": 2.371328571428421,
+        "medianMs": 2.31880000000001,
+        "p95Ms": 2.7663999999995212
+      }
+    },
+    {
+      "name": "cross-tile-stamps",
+      "elapsedMs": 4.946600000000217,
+      "stamps": 512,
+      "tileCount": 8,
+      "rawPixelBytes": 2097152,
+      "tileBounds": {
+        "minX": 0,
+        "minY": -1,
+        "maxX": 1,
+        "maxY": 2
+      },
+      "timing": {
+        "meanMs": 6.120528571428492,
+        "medianMs": 5.256500000000415,
+        "p95Ms": 10.462900000000445
+      }
+    }
+  ],
+  "strokes": [
+    {
+      "name": "short",
+      "elapsedMs": 0.6291000000001077,
+      "processingMs": 0.3150999999998021,
+      "rasterWriteMs": 0.3140000000003056,
+      "inputSamples": 2,
+      "processedSamples": 2,
+      "stampCount": 4,
+      "tileCount": 1,
+      "rawPixelBytes": 262144,
+      "tileBounds": {
+        "minX": 0,
+        "minY": 0,
+        "maxX": 0,
+        "maxY": 0
+      },
+      "timing": {
+        "meanMs": 0.40989999999991206,
+        "medianMs": 0.3213000000005195,
+        "p95Ms": 0.8015999999997803
+      },
+      "processingTiming": {
+        "meanMs": 0.1614285714284571,
+        "medianMs": 0.12229999999999563,
+        "p95Ms": 0.32039999999960855
+      },
+      "rasterWriteTiming": {
+        "meanMs": 0.24847142857145496,
+        "medianMs": 0.19900000000052387,
+        "p95Ms": 0.4812000000001717
+      }
+    },
+    {
+      "name": "medium-cross-tile",
+      "elapsedMs": 17.636600000000726,
+      "processingMs": 15.198100000000522,
+      "rasterWriteMs": 2.4385000000002037,
+      "inputSamples": 33,
+      "processedSamples": 769,
+      "stampCount": 3073,
+      "tileCount": 4,
+      "rawPixelBytes": 1048576,
+      "tileBounds": {
+        "minX": 0,
+        "minY": 0,
+        "maxX": 3,
+        "maxY": 0
+      },
+      "timing": {
+        "meanMs": 10.375885714286076,
+        "medianMs": 6.615700000000288,
+        "p95Ms": 18.777200000000448
+      },
+      "processingTiming": {
+        "meanMs": 7.624714285714488,
+        "medianMs": 4.722200000000157,
+        "p95Ms": 15.198100000000522
+      },
+      "rasterWriteTiming": {
+        "meanMs": 2.751171428571589,
+        "medianMs": 2.502900000000409,
+        "p95Ms": 4.742900000000191
+      }
+    },
+    {
+      "name": "long-sparse",
+      "elapsedMs": 21.418100000000777,
+      "processingMs": 11.640900000000329,
+      "rasterWriteMs": 9.777200000000448,
+      "inputSamples": 9,
+      "processedSamples": 4097,
+      "stampCount": 16385,
+      "tileCount": 17,
+      "rawPixelBytes": 4456448,
+      "tileBounds": {
+        "minX": 0,
+        "minY": 0,
+        "maxX": 16,
+        "maxY": 0
+      },
+      "timing": {
+        "meanMs": 18.485657142857495,
+        "medianMs": 18.512500000000728,
+        "p95Ms": 21.418100000000777
+      },
+      "processingTiming": {
+        "meanMs": 7.279900000000063,
+        "medianMs": 7.172900000000482,
+        "p95Ms": 11.640900000000329
+      },
+      "rasterWriteTiming": {
+        "meanMs": 11.205757142857433,
+        "medianMs": 11.339600000000246,
+        "p95Ms": 12.53309999999965
+      }
+    }
+  ],
+  "composition": [
+    {
+      "layerCount": 1,
+      "scale": 1,
+      "inputTiles": 4,
+      "outputPixels": 262144,
+      "elapsedMs": 13.699599999999919,
+      "regionCount": 4,
+      "outputTileSize": 256,
+      "cache": {
+        "hits": 0,
+        "misses": 4,
+        "hitRate": 0,
+        "entries": 4,
+        "bytes": 1048576,
+        "byteBudget": 33554432,
+        "insertions": 4,
+        "evictions": 0,
+        "validationFailures": 0,
+        "reusedPixelBytes": 0,
+        "hitsByOutputTileSize": {}
+      },
+      "world": {
+        "canonicalGeneratedCount": 4,
+        "approximateGeneratedCount": 0,
+        "canonicalCacheHits": 0,
+        "approximateCacheHits": 0,
+        "canonicalCompositionPixels": 262144,
+        "approximateCompositionPixels": 0,
+        "canonicalGenerationDurationMs": 9.382600000000139,
+        "approximateGenerationDurationMs": 0
+      },
+      "progressive": {
+        "requestCount": 1,
+        "completedRequestCount": 1,
+        "cancelledRequestCount": 0,
+        "continuationCount": 1,
+        "batchCount": 2,
+        "hasPendingRequest": false
+      },
+      "timings": {
+        "coreDurationMs": {
+          "current": 5.584100000000035,
+          "average": 6.756349999999998,
+          "max": 7.92859999999996
+        },
+        "rasterDurationMs": {
+          "current": 0,
+          "average": 0,
+          "max": 0
+        },
+        "compositionDurationMs": {
+          "current": 4.1870000000001255,
+          "average": 4.691300000000069,
+          "max": 5.195600000000013
+        },
+        "lodDurationMs": {
+          "current": 0,
+          "average": 0,
+          "max": 0
+        }
+      },
+      "timing": {
+        "meanMs": 14.745271428571382,
+        "medianMs": 14.049699999999802,
+        "p95Ms": 18.146499999999833
+      }
+    },
+    {
+      "layerCount": 1,
+      "scale": 0.25,
+      "inputTiles": 4,
+      "outputPixels": 16384,
+      "elapsedMs": 18.715799999999945,
+      "regionCount": 4,
+      "outputTileSize": 64,
+      "cache": {
+        "hits": 0,
+        "misses": 4,
+        "hitRate": 0,
+        "entries": 4,
+        "bytes": 65536,
+        "byteBudget": 33554432,
+        "insertions": 4,
+        "evictions": 0,
+        "validationFailures": 0,
+        "reusedPixelBytes": 0,
+        "hitsByOutputTileSize": {}
+      },
+      "world": {
+        "canonicalGeneratedCount": 4,
+        "approximateGeneratedCount": 0,
+        "canonicalCacheHits": 0,
+        "approximateCacheHits": 0,
+        "canonicalCompositionPixels": 262144,
+        "approximateCompositionPixels": 0,
+        "canonicalGenerationDurationMs": 14.230000000000018,
+        "approximateGenerationDurationMs": 0
+      },
+      "progressive": {
+        "requestCount": 1,
+        "completedRequestCount": 1,
+        "cancelledRequestCount": 0,
+        "continuationCount": 1,
+        "batchCount": 2,
+        "hasPendingRequest": false
+      },
+      "timings": {
+        "coreDurationMs": {
+          "current": 9.564200000000028,
+          "average": 9.333349999999996,
+          "max": 9.564200000000028
+        },
+        "rasterDurationMs": {
+          "current": 0,
+          "average": 0,
+          "max": 0
+        },
+        "compositionDurationMs": {
+          "current": 7.287699999999859,
+          "average": 7.115000000000009,
+          "max": 7.287699999999859
+        },
+        "lodDurationMs": {
+          "current": 2.0422000000000935,
+          "average": 1.8213500000000522,
+          "max": 2.0422000000000935
+        }
+      },
+      "timing": {
+        "meanMs": 18.968742857142843,
+        "medianMs": 18.715799999999945,
+        "p95Ms": 22.78989999999999
+      }
+    },
+    {
+      "layerCount": 2,
+      "scale": 1,
+      "inputTiles": 8,
+      "outputPixels": 262144,
+      "elapsedMs": 48.375999999999976,
+      "regionCount": 4,
+      "outputTileSize": 256,
+      "cache": {
+        "hits": 0,
+        "misses": 4,
+        "hitRate": 0,
+        "entries": 4,
+        "bytes": 1048576,
+        "byteBudget": 33554432,
+        "insertions": 4,
+        "evictions": 0,
+        "validationFailures": 0,
+        "reusedPixelBytes": 0,
+        "hitsByOutputTileSize": {}
+      },
+      "world": {
+        "canonicalGeneratedCount": 4,
+        "approximateGeneratedCount": 0,
+        "canonicalCacheHits": 0,
+        "approximateCacheHits": 0,
+        "canonicalCompositionPixels": 524288,
+        "approximateCompositionPixels": 0,
+        "canonicalGenerationDurationMs": 44.07140000000027,
+        "approximateGenerationDurationMs": 0
+      },
+      "progressive": {
+        "requestCount": 1,
+        "completedRequestCount": 1,
+        "cancelledRequestCount": 0,
+        "continuationCount": 3,
+        "batchCount": 4,
+        "hasPendingRequest": false
+      },
+      "timings": {
+        "coreDurationMs": {
+          "current": 9.63740000000007,
+          "average": 12.078824999999938,
+          "max": 15.199799999999868
+        },
+        "rasterDurationMs": {
+          "current": 0,
+          "average": 0,
+          "max": 0
+        },
+        "compositionDurationMs": {
+          "current": 9.006200000000035,
+          "average": 11.017850000000067,
+          "max": 14.040899999999965
+        },
+        "lodDurationMs": {
+          "current": 0,
+          "average": 0,
+          "max": 0
+        }
+      },
+      "timing": {
+        "meanMs": 41.41721428571418,
+        "medianMs": 40.559299999999894,
+        "p95Ms": 48.375999999999976
+      }
+    },
+    {
+      "layerCount": 2,
+      "scale": 0.25,
+      "inputTiles": 8,
+      "outputPixels": 16384,
+      "elapsedMs": 36.267799999999625,
+      "regionCount": 4,
+      "outputTileSize": 64,
+      "cache": {
+        "hits": 0,
+        "misses": 4,
+        "hitRate": 0,
+        "entries": 4,
+        "bytes": 65536,
+        "byteBudget": 33554432,
+        "insertions": 4,
+        "evictions": 0,
+        "validationFailures": 0,
+        "reusedPixelBytes": 0,
+        "hitsByOutputTileSize": {}
+      },
+      "world": {
+        "canonicalGeneratedCount": 4,
+        "approximateGeneratedCount": 0,
+        "canonicalCacheHits": 0,
+        "approximateCacheHits": 0,
+        "canonicalCompositionPixels": 524288,
+        "approximateCompositionPixels": 0,
+        "canonicalGenerationDurationMs": 33.30630000000065,
+        "approximateGenerationDurationMs": 0
+      },
+      "progressive": {
+        "requestCount": 1,
+        "completedRequestCount": 1,
+        "cancelledRequestCount": 0,
+        "continuationCount": 3,
+        "batchCount": 4,
+        "hasPendingRequest": false
+      },
+      "timings": {
+        "coreDurationMs": {
+          "current": 9.864599999999882,
+          "average": 9.049599999999828,
+          "max": 9.864599999999882
+        },
+        "rasterDurationMs": {
+          "current": 0,
+          "average": 0,
+          "max": 0
+        },
+        "compositionDurationMs": {
+          "current": 8.916000000000167,
+          "average": 8.326575000000162,
+          "max": 9.159500000000207
+        },
+        "lodDurationMs": {
+          "current": 0.7762000000002445,
+          "average": 0.9618249999999762,
+          "max": 1.4051999999996951
+        }
+      },
+      "timing": {
+        "meanMs": 40.07245714285715,
+        "medianMs": 40.752300000000105,
+        "p95Ms": 48.16020000000026
+      }
+    },
+    {
+      "layerCount": 4,
+      "scale": 1,
+      "inputTiles": 16,
+      "outputPixels": 262144,
+      "elapsedMs": 114.18150000000014,
+      "regionCount": 4,
+      "outputTileSize": 256,
+      "cache": {
+        "hits": 0,
+        "misses": 4,
+        "hitRate": 0,
+        "entries": 4,
+        "bytes": 1048576,
+        "byteBudget": 33554432,
+        "insertions": 4,
+        "evictions": 0,
+        "validationFailures": 0,
+        "reusedPixelBytes": 0,
+        "hitsByOutputTileSize": {}
+      },
+      "world": {
+        "canonicalGeneratedCount": 4,
+        "approximateGeneratedCount": 0,
+        "canonicalCacheHits": 0,
+        "approximateCacheHits": 0,
+        "canonicalCompositionPixels": 1048576,
+        "approximateCompositionPixels": 0,
+        "canonicalGenerationDurationMs": 110.14300000000003,
+        "approximateGenerationDurationMs": 0
+      },
+      "progressive": {
+        "requestCount": 1,
+        "completedRequestCount": 1,
+        "cancelledRequestCount": 0,
+        "continuationCount": 3,
+        "batchCount": 4,
+        "hasPendingRequest": false
+      },
+      "timings": {
+        "coreDurationMs": {
+          "current": 25.6241,
+          "average": 28.530800000000113,
+          "max": 34.508000000000266
+        },
+        "rasterDurationMs": {
+          "current": 0,
+          "average": 0,
+          "max": 0
+        },
+        "compositionDurationMs": {
+          "current": 24.91339999999991,
+          "average": 27.535750000000007,
+          "max": 33.76139999999987
+        },
+        "lodDurationMs": {
+          "current": 0,
+          "average": 0,
+          "max": 0
+        }
+      },
+      "timing": {
+        "meanMs": 87.04011428571435,
+        "medianMs": 82.8997000000004,
+        "p95Ms": 114.18150000000014
+      }
+    },
+    {
+      "layerCount": 4,
+      "scale": 0.25,
+      "inputTiles": 16,
+      "outputPixels": 16384,
+      "elapsedMs": 135.64090000000033,
+      "regionCount": 4,
+      "outputTileSize": 64,
+      "cache": {
+        "hits": 0,
+        "misses": 4,
+        "hitRate": 0,
+        "entries": 4,
+        "bytes": 65536,
+        "byteBudget": 33554432,
+        "insertions": 4,
+        "evictions": 0,
+        "validationFailures": 0,
+        "reusedPixelBytes": 0,
+        "hitsByOutputTileSize": {}
+      },
+      "world": {
+        "canonicalGeneratedCount": 4,
+        "approximateGeneratedCount": 0,
+        "canonicalCacheHits": 0,
+        "approximateCacheHits": 0,
+        "canonicalCompositionPixels": 1048576,
+        "approximateCompositionPixels": 0,
+        "canonicalGenerationDurationMs": 131.22170000000096,
+        "approximateGenerationDurationMs": 0
+      },
+      "progressive": {
+        "requestCount": 1,
+        "completedRequestCount": 1,
+        "cancelledRequestCount": 0,
+        "continuationCount": 3,
+        "batchCount": 4,
+        "hasPendingRequest": false
+      },
+      "timings": {
+        "coreDurationMs": {
+          "current": 24.511599999999817,
+          "average": 33.87417499999992,
+          "max": 41.64210000000003
+        },
+        "rasterDurationMs": {
+          "current": 0,
+          "average": 0,
+          "max": 0
+        },
+        "compositionDurationMs": {
+          "current": 23.861399999999776,
+          "average": 32.80542500000024,
+          "max": 40.23350000000028
+        },
+        "lodDurationMs": {
+          "current": 0.7950000000000728,
+          "average": 1.1797500000000127,
+          "max": 1.7483000000001994
+        }
+      },
+      "timing": {
+        "meanMs": 122.83480000000029,
+        "medianMs": 130.98680000000058,
+        "p95Ms": 155.38590000000022
+      }
+    }
+  ]
+}

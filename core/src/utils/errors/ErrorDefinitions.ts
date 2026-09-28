@@ -64,6 +64,44 @@ export const ErrorDefinitions = {
         "Camera viewport `$param` must be non-negative, but received `$received`.",
     },
   },
+  RENDERING: {
+    INVALID_REQUEST: {
+      code: "EC_RENDERING_0001",
+      template: "Render request must provide a viewport object.",
+    },
+    INVALID_VIEWPORT_COMPONENT_TYPE: {
+      code: "EC_RENDERING_0002",
+      template:
+        "Render viewport `$component` must be a number, but received `$received`.",
+    },
+    INVALID_VIEWPORT_COMPONENT_VALUE: {
+      code: "EC_RENDERING_0003",
+      template:
+        "Render viewport `$component` must be finite, but received `$received`.",
+    },
+    INVALID_VIEWPORT_EXTENT: {
+      code: "EC_RENDERING_0004",
+      template: "Render viewport width and height must be non-negative.",
+    },
+    INVALID_RENDER_BUDGET: {
+      code: "EC_RENDERING_0005",
+      template:
+        "Render budget `$component` must be a positive finite value that can make progress.",
+    },
+    INVALID_LOD_STRATEGY_RESULT: {
+      code: "EC_RENDERING_0006",
+      template:
+        "Render LOD strategy returned invalid output tile size `$outputTileSize` for source tile size `$tileSize`.",
+    },
+    INVALID_RENDER_QUALITY: {
+      code: "EC_RENDERING_0007",
+      template: "Render quality must be `full` or `interactive`.",
+    },
+    INVALID_DIAGNOSTICS_TIMINGS: {
+      code: "EC_RENDERING_0008",
+      template: "Render timing diagnostics setting must be a boolean.",
+    },
+  },
   BRUSH: {
     INVALID_SIZE: {
       code: "EC_BRUSH_0001",

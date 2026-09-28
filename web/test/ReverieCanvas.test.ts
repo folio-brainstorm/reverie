@@ -37,6 +37,121 @@ afterEach(() => {
 });
 
 describe("ReverieCanvas construction", () => {
+  it("coalesces camera requests into one latest-state frame without changing source", () => {
+    const runtime = createCanvasRuntime(2, 2);
+    const world = new World({ tileSize: 2 });
+    world
+      .getLayer(0)
+      .raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas, world });
+    const render = vi.spyOn(reverie.renderer, "render");
+    const markSourceChanged = vi.spyOn(reverie.renderer, "markSourceChanged");
+    const before =
+      reverie.renderer.diagnostics.getSnapshot().progressive.requestCount;
+
+    reverie.camera.setPan(1, 0);
+    reverie.requestViewRender("interactive");
+    reverie.camera.setPan(2, 0);
+    reverie.requestViewRender("interactive");
+    reverie.camera.setPan(3, 0);
+    reverie.requestViewRender("interactive");
+
+    expect(render).not.toHaveBeenCalled();
+    expect(reverie.renderer.diagnostics.getSnapshot().scheduling).toEqual({
+      requestedCount: 3,
+      executedCount: 0,
+      coalescedCount: 2,
+    });
+    runtime.runNextFrame();
+    expect(render).toHaveBeenCalledOnce();
+    expect(render).toHaveBeenCalledWith(
+      expect.objectContaining({
+        quality: "interactive",
+        prefetch: true,
+        remainingFrameBudgetMs: expect.any(Number),
+      }),
+    );
+    expect(markSourceChanged).not.toHaveBeenCalled();
+    expect(reverie.camera.panX).toBe(3);
+    expect(
+      reverie.renderer.diagnostics.getSnapshot().progressive.requestCount,
+    ).toBe(before + 1);
+    expect(reverie.renderer.diagnostics.getSnapshot().interaction.mode).toBe(
+      "interactive",
+    );
+
+    reverie.requestViewRender("full");
+    runtime.runNextFrame();
+    expect(reverie.renderer.diagnostics.getSnapshot().interaction.mode).toBe(
+      "full",
+    );
+    expect(reverie.renderer.diagnostics.getSnapshot().scheduling).toEqual({
+      requestedCount: 4,
+      executedCount: 2,
+      coalescedCount: 3,
+    });
+    reverie.dispose();
+  });
+
+  it("rejects unsupported camera quality before scheduling", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+
+    expect(() =>
+      reverie.requestViewRender(
+        // @ts-expect-error Runtime validation protects JavaScript callers.
+        "preview",
+      ),
+    ).toThrow(`[${WebErrorDefinitions.INVALID_VIEW_QUALITY.code}]`);
+    expect(
+      reverie.renderer.diagnostics.getSnapshot().scheduling.requestedCount,
+    ).toBe(0);
+    reverie.dispose();
+  });
+
+  it("does not block document controls while only warm rendering remains", () => {
+    const runtime = createCanvasRuntime(2, 2);
+    const world = new World({ tileSize: 2 });
+    world
+      .getLayer(0)
+      .raster.setPixel({ x: 0, y: 0 }, { r: 1, g: 0, b: 0, a: 255 });
+    world
+      .getLayer(0)
+      .raster.setPixel({ x: 4, y: 0 }, { r: 2, g: 0, b: 0, a: 255 });
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas, world });
+
+    reverie.requestViewRender("full");
+    runtime.runNextFrame();
+    expect(reverie.renderer.hasPendingRender).toBe(true);
+    expect(() => reverie.setSelection(null)).not.toThrow();
+    runtime.runNextFrame();
+    expect(reverie.renderer.diagnostics.getSnapshot().zones.warmCount).toBe(1);
+    reverie.dispose();
+  });
+
+  it("forwards optional renderer timing diagnostics to its public renderer", () => {
+    const runtime = createCanvasRuntime();
+    const reverie = new ReverieCanvas({
+      canvas: runtime.canvas,
+      diagnostics: { timings: true },
+    });
+
+    const requestCountBeforeRender =
+      reverie.renderer.diagnostics.getSnapshot().progressive.requestCount;
+    reverie.render();
+    const snapshot = reverie.renderer.diagnostics.getSnapshot();
+    expect(snapshot.progressive.requestCount).toBe(
+      requestCountBeforeRender + 1,
+    );
+    expect(snapshot.rendering?.coreDurationMs.current).toBeGreaterThanOrEqual(
+      0,
+    );
+    expect(
+      snapshot.presentation.presentationDurationMs?.current,
+    ).toBeGreaterThanOrEqual(0);
+    reverie.dispose();
+  });
+
   it("adopts an existing World without changing its document state", () => {
     const runtime = createCanvasRuntime();
     const world = new World({ id: "adopted-world", tileSize: 2 });
@@ -138,6 +253,100 @@ describe("ReverieCanvas construction", () => {
 });
 
 describe("ReverieCanvas drawing and lifecycle", () => {
+  it.each([
+    { name: "down to up without a move", moveX: null, upX: 4.5, finalX: 4 },
+    { name: "down to move to up", moveX: 2.5, upX: 4.5, finalX: 4 },
+    { name: "up beyond the last move", moveX: 2.5, upX: 3.5, finalX: 3 },
+    { name: "up at the last move", moveX: 4.5, upX: 4.5, finalX: 4 },
+  ])(
+    "paints the final path for $name without duplicate stamps",
+    ({ moveX, upX, finalX }) => {
+      const runtime = createCanvasRuntime();
+      const reverie = new ReverieCanvas({
+        canvas: runtime.canvas,
+        frameBudget: 1000,
+        brush: new PixelBrush({
+          size: 1,
+          spacing: 1,
+          color: { r: 255, g: 0, b: 0, a: 128 },
+        }),
+      });
+      const pointer = {
+        button: 0,
+        pointerId: 1,
+        clientX: 0.5,
+        clientY: 0.5,
+        timeStamp: 0,
+      };
+      runtime.canvas.dispatchPointer("pointerdown", pointer);
+      if (moveX !== null) {
+        runtime.canvas.dispatchPointer("pointermove", {
+          ...pointer,
+          clientX: moveX,
+          timeStamp: 1,
+        });
+      }
+      runtime.canvas.dispatchPointer("pointerup", {
+        ...pointer,
+        clientX: upX,
+        timeStamp: 2,
+      });
+      expect(reverie.session.isPainting).toBe(false);
+      runtime.runNextFrame();
+
+      for (let x = 0; x <= finalX; x += 1) {
+        expect(reverie.activeLayer.raster.getPixel({ x, y: 0 }).a).toBe(128);
+      }
+      expect(
+        reverie.activeLayer.raster.getPixel({ x: finalX + 1, y: 0 }).a,
+      ).toBe(0);
+      reverie.dispose();
+    },
+  );
+
+  it.each(["pointercancel", "lostpointercapture"])(
+    "clears interaction state after %s and accepts the next stroke",
+    (endEvent) => {
+      const runtime = createCanvasRuntime();
+      const reverie = new ReverieCanvas({
+        canvas: runtime.canvas,
+        brush: new PixelBrush({
+          size: 1,
+          color: { r: 255, g: 0, b: 0, a: 255 },
+        }),
+      });
+      const pointer = {
+        button: 0,
+        pointerId: 1,
+        clientX: 0.5,
+        clientY: 0.5,
+        timeStamp: 0,
+      };
+      runtime.canvas.dispatchPointer("pointerdown", pointer);
+      runtime.runNextFrame();
+      runtime.canvas.dispatchPointer(endEvent, { ...pointer, timeStamp: 1 });
+      expect(reverie.session.isPainting).toBe(false);
+      expect(reverie.activeLayer.raster.getPixel({ x: 0, y: 0 }).a).toBe(255);
+
+      runtime.canvas.dispatchPointer("pointerdown", {
+        ...pointer,
+        pointerId: 2,
+        clientX: 2.5,
+        timeStamp: 2,
+      });
+      expect(reverie.session.isPainting).toBe(true);
+      runtime.canvas.dispatchPointer("pointerup", {
+        ...pointer,
+        pointerId: 2,
+        clientX: 2.5,
+        timeStamp: 3,
+      });
+      runtime.runNextFrame();
+      expect(reverie.activeLayer.raster.getPixel({ x: 2, y: 0 }).a).toBe(255);
+      reverie.dispose();
+    },
+  );
+
   it("responds to pointer input immediately and clips painting to fixed bounds", () => {
     const runtime = createCanvasRuntime();
     const reverie = new ReverieCanvas({
@@ -293,10 +502,14 @@ describe("ReverieCanvas drawing and lifecycle", () => {
     const runtime = createCanvasRuntime();
     const reverie = new ReverieCanvas({ canvas: runtime.canvas });
     const brush = reverie.brush;
+    const sessionDispose = vi.spyOn(reverie.session, "dispose");
+    const rendererDispose = vi.spyOn(reverie.renderer, "dispose");
 
     reverie.dispose();
     reverie.dispose();
 
+    expect(sessionDispose).toHaveBeenCalledTimes(1);
+    expect(rendererDispose).toHaveBeenCalledTimes(1);
     expect(runtime.canvas.listenerCount).toBe(0);
     expect(runtime.observer?.hasDisconnected).toBe(true);
     expect(() => reverie.setBrush(brush)).toThrow(WebError);
@@ -307,9 +520,72 @@ describe("ReverieCanvas drawing and lifecycle", () => {
       `[${WebErrorDefinitions.REVERIE_CANVAS_DISPOSED.code}]`,
     );
   });
+
+  it("releases the owned Renderer when Session cleanup throws", () => {
+    const runtime = createCanvasRuntime();
+    const failure = new Error("session cleanup failed");
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+    const rendererDispose = vi.spyOn(reverie.renderer, "dispose");
+    const disposeSession = reverie.session.dispose.bind(reverie.session);
+    vi.spyOn(reverie.session, "dispose").mockImplementation(() => {
+      disposeSession();
+      throw failure;
+    });
+
+    expect(() => reverie.dispose()).toThrow(failure);
+    expect(rendererDispose).toHaveBeenCalledTimes(1);
+    expect(() => reverie.render()).toThrow(WebError);
+    expect(() => reverie.dispose()).not.toThrow();
+  });
 });
 
 describe("CanvasDrawingSession pointer input mapping", () => {
+  it("advances a partial render continuation without clearing its first batch", () => {
+    const runtime = createCanvasRuntime(258, 2);
+    const reverie = new ReverieCanvas({
+      canvas: runtime.canvas,
+      width: 258,
+      height: 2,
+      tileSize: 2,
+    });
+    const context = runtime.canvas.getContext("2d");
+
+    if (context === null) {
+      throw new Error("Test canvas must provide a 2D context.");
+    }
+
+    const clearRect = vi.spyOn(context, "clearRect");
+    const countFullCanvasClears = (): number =>
+      clearRect.mock.calls.filter(
+        ([x, y, width, height]) =>
+          x === 0 && y === 0 && width === 258 && height === 2,
+      ).length;
+    for (let x = 0; x < 258; x += 2) {
+      reverie.activeLayer.raster.setPixel(
+        { x, y: 0 },
+        { r: 12, g: 34, b: 56, a: 255 },
+      );
+    }
+
+    runtime.canvas.dispatchPointer("pointerdown", {
+      button: 0,
+      pointerId: 1,
+      clientX: 0.5,
+      clientY: 0.5,
+      timeStamp: 0,
+    });
+    runtime.runNextFrame();
+
+    expect(reverie.renderer.hasPendingRender).toBe(true);
+    expect(countFullCanvasClears()).toBe(0);
+
+    runtime.runNextFrame();
+
+    expect(reverie.renderer.hasPendingRender).toBe(false);
+    expect(countFullCanvasClears()).toBe(0);
+    reverie.dispose();
+  });
+
   it("preserves pen pressure and tilt", () => {
     const runtime = createCanvasRuntime();
     const reverie = new ReverieCanvas({ canvas: runtime.canvas });
@@ -643,6 +919,7 @@ describe("CanvasDrawingSession deterministic stroke seeds", () => {
       const reverie = new ReverieCanvas({
         canvas: runtime.canvas,
         brush,
+        frameBudget: 1_000,
       });
       const first = {
         button: 0,
@@ -1550,7 +1827,11 @@ class TestCanvas {
   }
 
   /** Creates a canvas associated with the supplied fake document. */
-  constructor(ownerDocument: Document) {
+  constructor(
+    ownerDocument: Document,
+    private readonly cssWidth = 16,
+    private readonly cssHeight = 16,
+  ) {
     this.ownerDocument = ownerDocument;
   }
 
@@ -1566,10 +1847,10 @@ class TestCanvas {
       y: 0,
       left: 0,
       top: 0,
-      right: 16,
-      bottom: 16,
-      width: 16,
-      height: 16,
+      right: this.cssWidth,
+      bottom: this.cssHeight,
+      width: this.cssWidth,
+      height: this.cssHeight,
       toJSON(): object {
         return {};
       },
@@ -1617,6 +1898,7 @@ class TestCanvas {
   ): void {
     const event = {
       ...createPointerFields(pointer),
+      type,
       preventDefault(): void {},
       getCoalescedEvents(): readonly PointerEvent[] {
         return coalescedEvents.map(createPointerFields);
@@ -1642,7 +1924,7 @@ interface TestCanvasRuntime {
 }
 
 /** Creates deterministic Canvas, DOM lifecycle, and animation-frame primitives. */
-function createCanvasRuntime(): TestCanvasRuntime {
+function createCanvasRuntime(cssWidth = 16, cssHeight = 16): TestCanvasRuntime {
   const frameCallbacks = new Map<number, FrameCallback>();
   let nextFrameHandle = 0;
   let currentObserver: TestResizeObserver | null = null;
@@ -1670,11 +1952,11 @@ function createCanvasRuntime(): TestCanvasRuntime {
         throw new Error(`Unexpected element request: ${tagName}`);
       }
 
-      return new TestCanvas(ownerDocument);
+      return new TestCanvas(ownerDocument, cssWidth, cssHeight);
     },
   } as unknown as Document;
 
-  const testCanvas = new TestCanvas(ownerDocument);
+  const testCanvas = new TestCanvas(ownerDocument, cssWidth, cssHeight);
   const downloads = new DownloadTestRuntime();
   downloads.install();
   vi.stubGlobal("requestAnimationFrame", (callback: FrameCallback): number => {

@@ -23,7 +23,7 @@ import { isUnitInterval } from "../../utils/number/math/IsUnitInterval.js";
 import { isValidTileSize } from "../../utils/number/tile/IsValidTileSize.js";
 import { isValidWorldBounds } from "../../utils/number/world/IsValidWorldBounds.js";
 import { blendSourceOver } from "../paint/BlendSourceOver.js";
-import { registerRasterTileStore } from "../renderer/RasterRenderBridge.js";
+import { registerRasterTileStore } from "../rendering/bridge/RasterRenderBridge.js";
 import { TileStore } from "../tile/index.js";
 
 const DEFAULT_RASTER_TILE_SIZE = 256;
@@ -154,6 +154,7 @@ export class Raster {
     const result = blendSourceOver(color, destination);
     captureRasterTileBeforeWrite(this, tileCoord.x, tileCoord.y);
     const destinationTile = tile ?? this.tileStore.getOrCreate(tileCoord);
+    this.tileStore.noteStampWrite(tileCoord);
 
     destinationTile.setPixel(localPixel, result);
   }
@@ -292,5 +293,4 @@ export class Raster {
   private locateValidPixel(pixel: PixelCoord): PixelLocation {
     return CoordCoverter.World.locateWorldPixel(pixel, this.tileSize);
   }
-
 }

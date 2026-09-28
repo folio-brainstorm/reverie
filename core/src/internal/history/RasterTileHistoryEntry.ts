@@ -5,7 +5,7 @@ import type { Raster } from "../../core/raster/Raster.js";
 import {
   getRasterTilePixels,
   restoreRasterTileSnapshot,
-} from "../../core/renderer/RasterRenderBridge.js";
+} from "../../core/rendering/bridge/RasterRenderBridge.js";
 
 const TILE_ENTRY_OVERHEAD_BYTES = 64;
 

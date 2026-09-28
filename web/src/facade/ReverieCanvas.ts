@@ -7,8 +7,9 @@ import type {
   SelectionMask,
   WorldBounds,
 } from "@reverie/core";
+import type { RenderQualityMode } from "@reverie/core/rendering";
 import type { ExportRegion } from "@reverie/exporter";
-import { CanvasRenderer } from "@reverie/renderer";
+import { CanvasRenderer } from "@reverie/canvas-renderer";
 
 import { WebErrorDefinitions } from "../errors/WebErrorDefinitions.js";
 import { WebError, WebRangeError, WebTypeError } from "../errors/WebErrors.js";
@@ -43,10 +44,12 @@ export class ReverieCanvas {
     return this.currentActiveLayer;
   }
 
-  /** Canvas renderer composing the whole World through the camera. */
+  /**
+   * Canvas renderer composing the World; callers must not dispose it independently.
+   */
   readonly renderer: CanvasRenderer;
 
-  /** Attached browser drawing Session owned by this facade. */
+  /** Attached browser Session; callers must not dispose it independently. */
   readonly session: CanvasDrawingSession;
 
   private isDisposed = false;
@@ -98,6 +101,9 @@ export class ReverieCanvas {
       canvas: config.canvas,
       world: this.world,
       camera: this.camera,
+      ...(config.diagnostics === undefined
+        ? {}
+        : { diagnostics: config.diagnostics }),
     });
     this.session = new CanvasDrawingSession({
       canvas: config.canvas,
@@ -221,7 +227,9 @@ export class ReverieCanvas {
     const layer = this.world.addLayer();
     this.session.setLayer(layer);
     this.currentActiveLayer = layer;
+    this.renderer.invalidate();
     this.renderer.render();
+    this.session.requestRenderContinuation();
     return layer;
   }
 
@@ -238,7 +246,9 @@ export class ReverieCanvas {
     this.assertUsable();
     this.session.assertCanChangeLayer();
     this.world.moveLayer(layer, index);
+    this.renderer.invalidate();
     this.renderer.render();
+    this.session.requestRenderContinuation();
   }
 
   /**
@@ -265,7 +275,9 @@ export class ReverieCanvas {
     this.assertUsable();
     this.session.assertCanChangeLayer();
     this.world.getLayer(layer).visible = visible;
+    this.renderer.invalidate();
     this.renderer.render();
+    this.session.requestRenderContinuation();
   }
 
   /**
@@ -280,7 +292,9 @@ export class ReverieCanvas {
     this.assertUsable();
     this.session.assertCanChangeLayer();
     this.world.getLayer(layer).opacity = opacity;
+    this.renderer.invalidate();
     this.renderer.render();
+    this.session.requestRenderContinuation();
   }
 
   /**
@@ -298,7 +312,9 @@ export class ReverieCanvas {
     this.assertUsable();
     this.session.assertCanChangeLayer();
     this.world.getLayer(layer).blendMode = blendMode;
+    this.renderer.invalidate();
     this.renderer.render();
+    this.session.requestRenderContinuation();
   }
 
   /**
@@ -313,7 +329,9 @@ export class ReverieCanvas {
     this.assertUsable();
     this.session.assertCanChangeLayer();
     const removed = this.world.removeLayer(layer);
+    this.renderer.invalidate();
     this.renderer.render();
+    this.session.requestRenderContinuation();
     return removed;
   }
 
@@ -371,6 +389,24 @@ export class ReverieCanvas {
   render(): void {
     this.assertUsable();
     this.renderer.render();
+    this.session.requestRenderContinuation();
+  }
+
+  /**
+   * Schedules the latest Camera view for one coalesced animation-frame render.
+   * Call again with `full` when an interactive gesture settles.
+   * @param quality - Interactive or full resolution; defaults to full.
+   * @throws {WebError} This facade has been disposed.
+   * @throws {WebTypeError} The quality is unsupported at runtime.
+   * @example
+   * reverie.camera.panBy(2, 0);
+   * reverie.requestViewRender("interactive");
+   * // On pointer release:
+   * reverie.requestViewRender("full");
+   */
+  requestViewRender(quality: RenderQualityMode = "full"): void {
+    this.assertUsable();
+    this.session.requestViewRender(quality);
   }
 
   /**
@@ -412,15 +448,34 @@ export class ReverieCanvas {
     );
   }
 
-  /** Releases input, resize, and owned scheduling resources permanently. */
+  /**
+   * Releases the owned Session and Renderer, even if one cleanup stage fails.
+   * @throws A cleanup failure unchanged, or an AggregateError for multiple failures.
+   */
   dispose(): void {
     if (this.isDisposed) {
       return;
     }
 
     this.isDisposed = true;
-    this.stopObservingLayerRemoval();
-    this.session.dispose();
+    const failures: unknown[] = [];
+    for (const cleanup of [
+      () => this.stopObservingLayerRemoval(),
+      () => this.session.dispose(),
+      () => this.renderer.dispose(),
+    ]) {
+      try {
+        cleanup();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length === 1) {
+      throw failures[0];
+    }
+    if (failures.length > 1) {
+      throw new AggregateError(failures, "ReverieCanvas teardown failed.");
+    }
   }
 
   /** Creates the centralized default Brush used by zero-configuration canvases. */

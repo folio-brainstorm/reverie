@@ -99,7 +99,13 @@ graph LR
 
 ## Quick Start
 
-Install dependencies and start the included demo from the repository root:
+In an existing browser project, install the Web facade:
+
+```bash
+pnpm add @reverie/web
+```
+
+To run the included demo from the repository root:
 
 ```bash
 pnpm install
@@ -123,8 +129,58 @@ const reverie = new ReverieCanvas({
   height: 768,
 });
 
-// Pointer input is attached automatically. Dispose when the owning view unmounts.
+// Pointer input and responsive sizing are attached automatically.
 ```
+
+`ReverieCanvas` owns its Session and Renderer, including their cleanup. Do not
+dispose `reverie.session` or `reverie.renderer` independently. Applications using
+`CanvasRenderer` directly own it and must call `renderer.dispose()`. After direct
+World or Raster changes, call `renderer.markSourceChanged()` (or `invalidate()`
+for a full reset) before rendering; the Web facade handles its drawing path.
+
+For high-frequency camera input, update the public Camera and request one
+animation-frame render. Request full quality when the gesture ends:
+
+```ts
+reverie.camera.panBy(2, 0);
+reverie.requestViewRender("interactive");
+
+// On pointer release or after wheel input becomes idle:
+reverie.requestViewRender("full");
+
+// When the owning view unmounts:
+reverie.dispose();
+```
+
+`reverie.render()` remains synchronous. `renderer.diagnostics.getSnapshot()`
+reports coalesced view requests, interaction quality, and visible, warm, and
+retained renderer results. Its `reuse` counters report provisional presentations,
+presentation and generation reuse hits, and visible and warm misses. Camera
+changes do not change document data.
+
+Camera prefetch uses a bounded screen-space margin that grows in Tile count as
+zoom decreases. During interactive panning, recent Camera movement prioritizes
+a forward warm strip after visible rendering; settled `full` renders refine the
+visible area at full quality. The diagnostic snapshot's `coverage` section
+reports the current margins, velocity, lookahead, pressure, interactive output
+size, and cumulative prefetch work. These tuning values are internal and may
+change between releases.
+
+The Web scheduler passes `remainingFrameBudgetMs` to Canvas renders as an
+advisory warm-work admission hint. A deferred warm continuation remains pending
+for a later frame. Canvas diagnostics also report RGBA identity hits, fallback
+comparison calls and bytes, completion drawing deltas, and warm executions and
+deferrals. Published `RenderRegion.pixels` buffers must not be modified in place.
+
+Stage timings can be collected only while a diagnostics view is open:
+
+```ts
+reverie.renderer.configureDiagnostics({ timings: true });
+// When the diagnostics view closes:
+reverie.renderer.configureDiagnostics({ timings: false });
+```
+
+Each change starts a fresh timing window; render counters remain available.
 
 Requires Node.js `^22.12.0`, `^24.0.0`, or `>=26.0.0`, and pnpm `11.18.0`.
 
@@ -138,14 +194,14 @@ Requires Node.js `^22.12.0`, `^24.0.0`, or `>=26.0.0`, and pnpm `11.18.0`.
 
 ## Packages
 
-| Package                           | Responsibility                                                                                        |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| [`@reverie/core`](./core)         | Platform-independent world, layers, sparse pixels, brushes, strokes, selections, and document models. |
-| [`@reverie/renderer`](./renderer) | Presents the active Camera view with HTML Canvas and maintains a LOD cache for zoomed-out views.      |
-| [`@reverie/web`](./web)           | Browser input, drawing scheduling, history, canvas facade, and download capabilities.                 |
-| [`@reverie/exporter`](./exporter) | World-region composition plus PNG, JPEG, and WebP encoding.                                           |
-| [`@reverie/demo`](./demo)         | Browser example application built with React and Vite.                                                |
-| [`@reverie/test`](./test)         | Vitest integration tests for core behavior.                                                           |
+| Package                                                   | Responsibility                                                                                        |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| [`@reverie/core`](./core)                                 | Platform-independent world, layers, sparse pixels, brushes, strokes, selections, and document models. |
+| [`@reverie/canvas-renderer`](./renderers/canvas-renderer) | Presents the active Camera view with HTML Canvas and maintains a LOD cache for zoomed-out views.      |
+| [`@reverie/web`](./web)                                   | Browser input, drawing scheduling, history, canvas facade, and download capabilities.                 |
+| [`@reverie/exporter`](./exporter)                         | World-region composition plus PNG, JPEG, and WebP encoding.                                           |
+| [`@reverie/demo`](./demo)                                 | Browser example application built with React and Vite.                                                |
+| [`@reverie/test`](./test)                                 | Vitest integration tests for core behavior.                                                           |
 
 ## Built with
 
@@ -153,7 +209,7 @@ TypeScript · Node.js · pnpm workspaces · HTML Canvas · React · Vite · Vite
 
 ## Documentation
 
-This README stays at the project-introduction level and does not duplicate the API reference. The typed entry points are the source of truth for complete interfaces: [`core`](./core/index.ts), [`renderer`](./renderer/index.ts), [`web`](./web/index.ts), and [`exporter`](./exporter/index.ts). A standalone documentation site is in preparation.
+This README stays at the project-introduction level and does not duplicate the API reference. The typed entry points are the source of truth for complete interfaces: [`core`](./core/index.ts), [`canvas-renderer`](./renderers/canvas-renderer/index.ts), [`web`](./web/index.ts), and [`exporter`](./exporter/index.ts). A standalone documentation site is in preparation.
 
 ## Development
 

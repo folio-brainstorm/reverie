@@ -7,7 +7,7 @@ import {
   getRasterTilePixels,
   getRasterTileVersion,
   getRasterTileView,
-} from "@reverie/core/renderer";
+} from "@reverie/core/rendering/internal";
 
 const RED = { r: 255, g: 0, b: 0, a: 255 };
 const BLUE = { r: 0, g: 0, b: 255, a: 255 };

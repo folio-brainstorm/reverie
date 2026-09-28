@@ -4,7 +4,7 @@ import { Raster, World } from "@reverie/core";
 import {
   getRasterTilePixels,
   getRasterTileVersion,
-} from "@reverie/core/renderer";
+} from "@reverie/core/rendering/internal";
 import {
   deserializeRaster,
   parseDocument,

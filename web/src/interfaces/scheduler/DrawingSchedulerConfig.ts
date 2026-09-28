@@ -1,3 +1,5 @@
+import type { TileCoord } from "@reverie/core/rendering";
+
 import type { FrameDriver } from "./FrameDriver.js";
 
 /** Optional dependencies and callbacks for cooperative drawing scheduling. */
@@ -8,8 +10,17 @@ export interface DrawingSchedulerConfig {
   /** Runtime frame primitives; defaults to {@link WebFrameDriver}. */
   readonly frameDriver?: FrameDriver;
 
-  /** Called at most once after a frame executes one or more commands. */
-  readonly onRender?: () => void;
+  /**
+   * Called after drawing work or while a prior render requests another batch.
+   * @param hasNewDrawingCommands - Whether this frame executed one or more
+   * drawing commands that changed the document since the previous presentation.
+   * @param changedTiles - Conservative Tile coordinates touched by those commands.
+   * Return `true` to request one more frame for progressive presentation.
+   */
+  readonly onRender?: (
+    hasNewDrawingCommands: boolean,
+    changedTiles?: readonly TileCoord[],
+  ) => boolean | void;
 
   /** Receives an execution or render error after scheduling has stopped. */
   readonly onError?: (error: unknown) => void;

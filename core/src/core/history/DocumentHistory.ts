@@ -10,7 +10,7 @@ import {
   ReverieError,
   ReverieRangeError,
 } from "../../utils/errors/ReverieErrors.js";
-import { getRasterAllocatedByteLength } from "../renderer/RasterRenderBridge.js";
+import { getRasterAllocatedByteLength } from "../rendering/bridge/RasterRenderBridge.js";
 import type { Raster } from "../raster/Raster.js";
 import type { World } from "../world/World.js";
 import { RasterHistoryTransaction } from "./RasterHistoryTransaction.js";

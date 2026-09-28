@@ -1,0 +1,1024 @@
+{
+  "environment": {
+    "browser": "153.0.8010.12",
+    "node": "v24.18.1",
+    "platform": "win32",
+    "arch": "x64"
+  },
+  "fixture": {
+    "tileSize": 256,
+    "worldSize": 4096,
+    "width": 768,
+    "height": 512,
+    "layers": 2,
+    "allocatedTiles": 512,
+    "panTicks": 60,
+    "requestsPerTick": 3,
+    "cssPixelsPerTick": 4,
+    "pixelRatio": 1
+  },
+  "method": {
+    "instrumentedRuns": 1,
+    "uninstrumentedRuns": 1,
+    "panTicks": 60,
+    "outerTiming": "renderer.render call; excludes deferred browser paint"
+  },
+  "cases": [
+    {
+      "zoom": 1,
+      "startsInteractive": false,
+      "cold": {
+        "instrumentedElapsedMs": 85.10000000149012,
+        "uninstrumentedElapsedMs": 176,
+        "calls": 5,
+        "timing": {
+          "meanMs": 16.800000001490115,
+          "p95Ms": 28.900000002235174
+        },
+        "generatedRegions": 8,
+        "resolved": 8,
+        "composed": 8,
+        "lodCalls": 0,
+        "lodMs": 0,
+        "uploads": 8,
+        "draws": 8,
+        "world": {
+          "canonicalGeneratedCount": 8,
+          "approximateGeneratedCount": 0,
+          "canonicalCacheHits": 0,
+          "approximateCacheHits": 0,
+          "canonicalCompositionPixels": 1048576,
+          "approximateCompositionPixels": 0,
+          "canonicalGenerationDurationMs": 62.599999997764826,
+          "approximateGenerationDurationMs": 0
+        },
+        "progressive": {
+          "requestCount": 1,
+          "completedRequestCount": 1,
+          "cancelledRequestCount": 0,
+          "continuationCount": 4,
+          "batchCount": 5,
+          "hasPendingRequest": false
+        },
+        "cache": {
+          "hits": 0,
+          "misses": 8,
+          "hitRate": 0,
+          "entries": 8,
+          "bytes": 2097152,
+          "byteBudget": 33554432,
+          "insertions": 8,
+          "evictions": 0,
+          "validationFailures": 0,
+          "reusedPixelBytes": 0,
+          "hitsByOutputTileSize": {}
+        }
+      },
+      "pan": {
+        "calls": 60,
+        "timing": {
+          "meanMs": 2.1133333335320157,
+          "p95Ms": 9.799999997019768
+        },
+        "visibleMin": 8,
+        "visibleMax": 8,
+        "newlyVisible": 2,
+        "scanned": 30720,
+        "resolved": 10,
+        "composed": 10,
+        "lodCalls": 20,
+        "cacheHits": 0,
+        "cacheMisses": 10,
+        "draws": 488,
+        "uploads": 10
+      },
+      "panUninstrumented": {
+        "meanMs": 2.8200000002980232,
+        "p95Ms": 14.700000002980232
+      },
+      "hold": {
+        "calls": 22,
+        "timing": {
+          "meanMs": 9.031818181953646,
+          "p95Ms": 9.5
+        },
+        "visibleMin": 8,
+        "visibleMax": 8,
+        "newlyVisible": 0,
+        "scanned": 1024,
+        "resolved": 44,
+        "composed": 44,
+        "lodCalls": 88,
+        "cacheHits": 0,
+        "cacheMisses": 44,
+        "draws": 0,
+        "uploads": 0
+      },
+      "settle": {
+        "calls": 28,
+        "timing": {
+          "meanMs": 11.371428571641445,
+          "p95Ms": 16.5
+        },
+        "visibleMin": 8,
+        "visibleMax": 8,
+        "newlyVisible": 0,
+        "scanned": 1024,
+        "resolved": 40,
+        "composed": 40,
+        "lodCalls": 0,
+        "cacheHits": 0,
+        "cacheMisses": 40,
+        "draws": 8,
+        "uploads": 2
+      },
+      "requests": 60,
+      "completed": 56,
+      "cancelled": 4,
+      "viewRequests": 180,
+      "viewExecutions": 60,
+      "finalPendingRequest": false,
+      "cache": {
+        "hits": 0,
+        "misses": 102,
+        "hitRate": 0,
+        "entries": 102,
+        "bytes": 16121856,
+        "byteBudget": 33554432,
+        "insertions": 102,
+        "evictions": 0,
+        "validationFailures": 0,
+        "reusedPixelBytes": 0,
+        "hitsByOutputTileSize": {}
+      },
+      "retention": {
+        "initial": {
+          "entries": 8,
+          "uniquePixelBuffers": 8,
+          "pixelBytes": 2097152
+        },
+        "pan": {
+          "entries": 18,
+          "uniquePixelBuffers": 18,
+          "pixelBytes": 2752512
+        },
+        "final": {
+          "entries": 102,
+          "uniquePixelBuffers": 102,
+          "pixelBytes": 16121856
+        }
+      },
+      "disposed": {
+        "retention": {
+          "entries": 0,
+          "uniquePixelBuffers": 0,
+          "pixelBytes": 0
+        },
+        "resultCache": {
+          "hits": 0,
+          "misses": 0,
+          "hitRate": 0,
+          "entries": 0,
+          "bytes": 0,
+          "byteBudget": 33554432,
+          "insertions": 0,
+          "evictions": 0,
+          "validationFailures": 0,
+          "reusedPixelBytes": 0,
+          "hitsByOutputTileSize": {}
+        }
+      },
+      "maxGenerationPerVariant": 1
+    },
+    {
+      "zoom": 0.5,
+      "startsInteractive": false,
+      "cold": {
+        "instrumentedElapsedMs": 259.19999999925494,
+        "uninstrumentedElapsedMs": 267.70000000298023,
+        "calls": 24,
+        "timing": {
+          "meanMs": 10.762500000496706,
+          "p95Ms": 15.699999999254942
+        },
+        "generatedRegions": 24,
+        "resolved": 24,
+        "composed": 24,
+        "lodCalls": 24,
+        "lodMs": 33.70000000670552,
+        "uploads": 24,
+        "draws": 24,
+        "world": {
+          "canonicalGeneratedCount": 24,
+          "approximateGeneratedCount": 0,
+          "canonicalCacheHits": 0,
+          "approximateCacheHits": 0,
+          "canonicalCompositionPixels": 3145728,
+          "approximateCompositionPixels": 0,
+          "canonicalGenerationDurationMs": 227.09999999031425,
+          "approximateGenerationDurationMs": 0
+        },
+        "progressive": {
+          "requestCount": 1,
+          "completedRequestCount": 1,
+          "cancelledRequestCount": 0,
+          "continuationCount": 23,
+          "batchCount": 24,
+          "hasPendingRequest": false
+        },
+        "cache": {
+          "hits": 0,
+          "misses": 24,
+          "hitRate": 0,
+          "entries": 24,
+          "bytes": 1572864,
+          "byteBudget": 33554432,
+          "insertions": 24,
+          "evictions": 0,
+          "validationFailures": 0,
+          "reusedPixelBytes": 0,
+          "hitsByOutputTileSize": {}
+        }
+      },
+      "pan": {
+        "calls": 60,
+        "timing": {
+          "meanMs": 2.7566666666418316,
+          "p95Ms": 9.700000002980232
+        },
+        "visibleMin": 28,
+        "visibleMax": 28,
+        "newlyVisible": 8,
+        "scanned": 30720,
+        "resolved": 32,
+        "composed": 32,
+        "lodCalls": 64,
+        "cacheHits": 0,
+        "cacheMisses": 32,
+        "draws": 1687,
+        "uploads": 32
+      },
+      "panUninstrumented": {
+        "meanMs": 3.3849999997764826,
+        "p95Ms": 11.300000004470348
+      },
+      "hold": {
+        "calls": 47,
+        "timing": {
+          "meanMs": 8.41489361670423,
+          "p95Ms": 10.5
+        },
+        "visibleMin": 28,
+        "visibleMax": 28,
+        "newlyVisible": 0,
+        "scanned": 1024,
+        "resolved": 136,
+        "composed": 136,
+        "lodCalls": 272,
+        "cacheHits": 0,
+        "cacheMisses": 136,
+        "draws": 0,
+        "uploads": 0
+      },
+      "settle": {
+        "calls": 93,
+        "timing": {
+          "meanMs": 11.852688172010966,
+          "p95Ms": 15.5
+        },
+        "visibleMin": 28,
+        "visibleMax": 28,
+        "newlyVisible": 0,
+        "scanned": 1024,
+        "resolved": 144,
+        "composed": 144,
+        "lodCalls": 144,
+        "cacheHits": 0,
+        "cacheMisses": 144,
+        "draws": 28,
+        "uploads": 8
+      },
+      "requests": 60,
+      "completed": 52,
+      "cancelled": 8,
+      "viewRequests": 180,
+      "viewExecutions": 60,
+      "finalPendingRequest": false,
+      "cache": {
+        "hits": 0,
+        "misses": 336,
+        "hitRate": 0,
+        "entries": 336,
+        "bytes": 13762560,
+        "byteBudget": 33554432,
+        "insertions": 336,
+        "evictions": 0,
+        "validationFailures": 0,
+        "reusedPixelBytes": 0,
+        "hitsByOutputTileSize": {}
+      },
+      "retention": {
+        "initial": {
+          "entries": 24,
+          "uniquePixelBuffers": 24,
+          "pixelBytes": 1572864
+        },
+        "pan": {
+          "entries": 56,
+          "uniquePixelBuffers": 56,
+          "pixelBytes": 2097152
+        },
+        "final": {
+          "entries": 336,
+          "uniquePixelBuffers": 336,
+          "pixelBytes": 13762560
+        }
+      },
+      "disposed": {
+        "retention": {
+          "entries": 0,
+          "uniquePixelBuffers": 0,
+          "pixelBytes": 0
+        },
+        "resultCache": {
+          "hits": 0,
+          "misses": 0,
+          "hitRate": 0,
+          "entries": 0,
+          "bytes": 0,
+          "byteBudget": 33554432,
+          "insertions": 0,
+          "evictions": 0,
+          "validationFailures": 0,
+          "reusedPixelBytes": 0,
+          "hitsByOutputTileSize": {}
+        }
+      },
+      "maxGenerationPerVariant": 1
+    },
+    {
+      "zoom": 0.25,
+      "startsInteractive": false,
+      "cold": {
+        "instrumentedElapsedMs": 779.1999999992549,
+        "uninstrumentedElapsedMs": 1153,
+        "calls": 69,
+        "timing": {
+          "meanMs": 11.1579710142552,
+          "p95Ms": 15.899999998509884
+        },
+        "generatedRegions": 96,
+        "resolved": 96,
+        "composed": 96,
+        "lodCalls": 96,
+        "lodMs": 63.49999998882413,
+        "uploads": 96,
+        "draws": 96,
+        "world": {
+          "canonicalGeneratedCount": 96,
+          "approximateGeneratedCount": 0,
+          "canonicalCacheHits": 0,
+          "approximateCacheHits": 0,
+          "canonicalCompositionPixels": 12582912,
+          "approximateCompositionPixels": 0,
+          "canonicalGenerationDurationMs": 684.299999974668,
+          "approximateGenerationDurationMs": 0
+        },
+        "progressive": {
+          "requestCount": 1,
+          "completedRequestCount": 1,
+          "cancelledRequestCount": 0,
+          "continuationCount": 68,
+          "batchCount": 69,
+          "hasPendingRequest": false
+        },
+        "cache": {
+          "hits": 0,
+          "misses": 96,
+          "hitRate": 0,
+          "entries": 96,
+          "bytes": 1572864,
+          "byteBudget": 33554432,
+          "insertions": 96,
+          "evictions": 0,
+          "validationFailures": 0,
+          "reusedPixelBytes": 0,
+          "hitsByOutputTileSize": {}
+        }
+      },
+      "pan": {
+        "calls": 60,
+        "timing": {
+          "meanMs": 5.606666666703919,
+          "p95Ms": 11.5
+        },
+        "visibleMin": 88,
+        "visibleMax": 104,
+        "newlyVisible": 16,
+        "scanned": 30720,
+        "resolved": 111,
+        "composed": 111,
+        "lodCalls": 222,
+        "cacheHits": 0,
+        "cacheMisses": 111,
+        "draws": 5905,
+        "uploads": 111
+      },
+      "panUninstrumented": {
+        "meanMs": 6.081666667138537,
+        "p95Ms": 12
+      },
+      "hold": {
+        "calls": 38,
+        "timing": {
+          "meanMs": 8.5289473685583,
+          "p95Ms": 9.699999999254942
+        },
+        "visibleMin": 88,
+        "visibleMax": 88,
+        "newlyVisible": 0,
+        "scanned": 512,
+        "resolved": 145,
+        "composed": 145,
+        "lodCalls": 290,
+        "cacheHits": 0,
+        "cacheMisses": 145,
+        "draws": 0,
+        "uploads": 0
+      },
+      "settle": {
+        "calls": 110,
+        "timing": {
+          "meanMs": 11.767272727326914,
+          "p95Ms": 15.300000000745058
+        },
+        "visibleMin": 88,
+        "visibleMax": 88,
+        "newlyVisible": 0,
+        "scanned": 1024,
+        "resolved": 160,
+        "composed": 160,
+        "lodCalls": 160,
+        "cacheHits": 0,
+        "cacheMisses": 160,
+        "draws": 88,
+        "uploads": 16
+      },
+      "requests": 60,
+      "completed": 39,
+      "cancelled": 21,
+      "viewRequests": 180,
+      "viewExecutions": 60,
+      "finalPendingRequest": false,
+      "cache": {
+        "hits": 0,
+        "misses": 512,
+        "hitRate": 0,
+        "entries": 512,
+        "bytes": 4456448,
+        "byteBudget": 33554432,
+        "insertions": 512,
+        "evictions": 0,
+        "validationFailures": 0,
+        "reusedPixelBytes": 0,
+        "hitsByOutputTileSize": {}
+      },
+      "retention": {
+        "initial": {
+          "entries": 96,
+          "uniquePixelBuffers": 96,
+          "pixelBytes": 1572864
+        },
+        "pan": {
+          "entries": 207,
+          "uniquePixelBuffers": 207,
+          "pixelBytes": 1686528
+        },
+        "final": {
+          "entries": 512,
+          "uniquePixelBuffers": 512,
+          "pixelBytes": 4456448
+        }
+      },
+      "disposed": {
+        "retention": {
+          "entries": 0,
+          "uniquePixelBuffers": 0,
+          "pixelBytes": 0
+        },
+        "resultCache": {
+          "hits": 0,
+          "misses": 0,
+          "hitRate": 0,
+          "entries": 0,
+          "bytes": 0,
+          "byteBudget": 33554432,
+          "insertions": 0,
+          "evictions": 0,
+          "validationFailures": 0,
+          "reusedPixelBytes": 0,
+          "hitsByOutputTileSize": {}
+        }
+      },
+      "maxGenerationPerVariant": 1
+    },
+    {
+      "zoom": 0.0625,
+      "startsInteractive": false,
+      "cold": {
+        "instrumentedElapsedMs": 2394.699999999255,
+        "uninstrumentedElapsedMs": 2992.6999999955297,
+        "calls": 219,
+        "timing": {
+          "meanMs": 10.815525114042982,
+          "p95Ms": 15.600000001490116
+        },
+        "generatedRegions": 256,
+        "resolved": 256,
+        "composed": 256,
+        "lodCalls": 256,
+        "lodMs": 161.30000001192093,
+        "uploads": 256,
+        "draws": 256,
+        "world": {
+          "canonicalGeneratedCount": 256,
+          "approximateGeneratedCount": 0,
+          "canonicalCacheHits": 0,
+          "approximateCacheHits": 0,
+          "canonicalCompositionPixels": 33554432,
+          "approximateCompositionPixels": 0,
+          "canonicalGenerationDurationMs": 2088.4999999776483,
+          "approximateGenerationDurationMs": 0
+        },
+        "progressive": {
+          "requestCount": 1,
+          "completedRequestCount": 1,
+          "cancelledRequestCount": 0,
+          "continuationCount": 218,
+          "batchCount": 219,
+          "hasPendingRequest": false
+        },
+        "cache": {
+          "hits": 0,
+          "misses": 256,
+          "hitRate": 0,
+          "entries": 256,
+          "bytes": 262144,
+          "byteBudget": 33554432,
+          "insertions": 256,
+          "evictions": 0,
+          "validationFailures": 0,
+          "reusedPixelBytes": 0,
+          "hitsByOutputTileSize": {}
+        }
+      },
+      "pan": {
+        "calls": 60,
+        "timing": {
+          "meanMs": 9.116666666666667,
+          "p95Ms": 12.399999998509884
+        },
+        "visibleMin": 256,
+        "visibleMax": 256,
+        "newlyVisible": 0,
+        "scanned": 24302,
+        "resolved": 256,
+        "composed": 256,
+        "lodCalls": 512,
+        "cacheHits": 0,
+        "cacheMisses": 256,
+        "draws": 15616,
+        "uploads": 256
+      },
+      "panUninstrumented": {
+        "meanMs": 10.888333333159487,
+        "p95Ms": 14.600000001490116
+      },
+      "hold": {
+        "calls": 2,
+        "timing": {
+          "meanMs": 0.6499999985098839,
+          "p95Ms": 1.2999999970197678
+        },
+        "visibleMin": 256,
+        "visibleMax": 256,
+        "newlyVisible": 0,
+        "scanned": 512,
+        "resolved": 0,
+        "composed": 0,
+        "lodCalls": 0,
+        "cacheHits": 0,
+        "cacheMisses": 0,
+        "draws": 0,
+        "uploads": 0
+      },
+      "settle": {
+        "calls": 2,
+        "timing": {
+          "meanMs": 2.099999999627471,
+          "p95Ms": 3
+        },
+        "visibleMin": 256,
+        "visibleMax": 256,
+        "newlyVisible": 0,
+        "scanned": 1024,
+        "resolved": 0,
+        "composed": 0,
+        "lodCalls": 0,
+        "cacheHits": 0,
+        "cacheMisses": 0,
+        "draws": 256,
+        "uploads": 0
+      },
+      "requests": 60,
+      "completed": 20,
+      "cancelled": 40,
+      "viewRequests": 180,
+      "viewExecutions": 60,
+      "finalPendingRequest": false,
+      "cache": {
+        "hits": 0,
+        "misses": 512,
+        "hitRate": 0,
+        "entries": 512,
+        "bytes": 278528,
+        "byteBudget": 33554432,
+        "insertions": 512,
+        "evictions": 0,
+        "validationFailures": 0,
+        "reusedPixelBytes": 0,
+        "hitsByOutputTileSize": {}
+      },
+      "retention": {
+        "initial": {
+          "entries": 256,
+          "uniquePixelBuffers": 256,
+          "pixelBytes": 262144
+        },
+        "pan": {
+          "entries": 512,
+          "uniquePixelBuffers": 512,
+          "pixelBytes": 278528
+        },
+        "final": {
+          "entries": 512,
+          "uniquePixelBuffers": 512,
+          "pixelBytes": 278528
+        }
+      },
+      "disposed": {
+        "retention": {
+          "entries": 0,
+          "uniquePixelBuffers": 0,
+          "pixelBytes": 0
+        },
+        "resultCache": {
+          "hits": 0,
+          "misses": 0,
+          "hitRate": 0,
+          "entries": 0,
+          "bytes": 0,
+          "byteBudget": 33554432,
+          "insertions": 0,
+          "evictions": 0,
+          "validationFailures": 0,
+          "reusedPixelBytes": 0,
+          "hitsByOutputTileSize": {}
+        }
+      },
+      "maxGenerationPerVariant": 1
+    },
+    {
+      "zoom": 0.25,
+      "startsInteractive": true,
+      "cold": {
+        "instrumentedElapsedMs": 264.19999999925494,
+        "uninstrumentedElapsedMs": 377.70000000298023,
+        "calls": 28,
+        "timing": {
+          "meanMs": 9.360714285501412,
+          "p95Ms": 11.399999998509884
+        },
+        "generatedRegions": 96,
+        "resolved": 96,
+        "composed": 96,
+        "lodCalls": 192,
+        "lodMs": 115.60000002384186,
+        "uploads": 96,
+        "draws": 96,
+        "world": {
+          "canonicalGeneratedCount": 0,
+          "approximateGeneratedCount": 96,
+          "canonicalCacheHits": 0,
+          "approximateCacheHits": 0,
+          "canonicalCompositionPixels": 0,
+          "approximateCompositionPixels": 49152,
+          "canonicalGenerationDurationMs": 0,
+          "approximateGenerationDurationMs": 182.99999999254942
+        },
+        "progressive": {
+          "requestCount": 1,
+          "completedRequestCount": 1,
+          "cancelledRequestCount": 0,
+          "continuationCount": 27,
+          "batchCount": 28,
+          "hasPendingRequest": false
+        },
+        "cache": {
+          "hits": 0,
+          "misses": 96,
+          "hitRate": 0,
+          "entries": 96,
+          "bytes": 98304,
+          "byteBudget": 33554432,
+          "insertions": 96,
+          "evictions": 0,
+          "validationFailures": 0,
+          "reusedPixelBytes": 0,
+          "hitsByOutputTileSize": {}
+        }
+      },
+      "pan": {
+        "calls": 60,
+        "timing": {
+          "meanMs": 3.07333333324641,
+          "p95Ms": 10.800000000745058
+        },
+        "visibleMin": 88,
+        "visibleMax": 104,
+        "newlyVisible": 16,
+        "scanned": 30720,
+        "resolved": 16,
+        "composed": 16,
+        "lodCalls": 32,
+        "cacheHits": 0,
+        "cacheMisses": 16,
+        "draws": 5890,
+        "uploads": 16
+      },
+      "panUninstrumented": {
+        "meanMs": 4.061666665971279,
+        "p95Ms": 12.100000001490116
+      },
+      "hold": {
+        "calls": 39,
+        "timing": {
+          "meanMs": 8.307692307405746,
+          "p95Ms": 9.5
+        },
+        "visibleMin": 88,
+        "visibleMax": 88,
+        "newlyVisible": 0,
+        "scanned": 512,
+        "resolved": 144,
+        "composed": 144,
+        "lodCalls": 288,
+        "cacheHits": 0,
+        "cacheMisses": 144,
+        "draws": 0,
+        "uploads": 0
+      },
+      "settle": {
+        "calls": 160,
+        "timing": {
+          "meanMs": 12.224374999850989,
+          "p95Ms": 15.5
+        },
+        "visibleMin": 88,
+        "visibleMax": 88,
+        "newlyVisible": 0,
+        "scanned": 1024,
+        "resolved": 256,
+        "composed": 256,
+        "lodCalls": 256,
+        "cacheHits": 0,
+        "cacheMisses": 256,
+        "draws": 88,
+        "uploads": 88
+      },
+      "requests": 60,
+      "completed": 56,
+      "cancelled": 4,
+      "viewRequests": 180,
+      "viewExecutions": 60,
+      "finalPendingRequest": false,
+      "cache": {
+        "hits": 0,
+        "misses": 512,
+        "hitRate": 0,
+        "entries": 512,
+        "bytes": 4456448,
+        "byteBudget": 33554432,
+        "insertions": 512,
+        "evictions": 0,
+        "validationFailures": 0,
+        "reusedPixelBytes": 0,
+        "hitsByOutputTileSize": {}
+      },
+      "retention": {
+        "initial": {
+          "entries": 96,
+          "uniquePixelBuffers": 96,
+          "pixelBytes": 98304
+        },
+        "pan": {
+          "entries": 112,
+          "uniquePixelBuffers": 112,
+          "pixelBytes": 114688
+        },
+        "final": {
+          "entries": 512,
+          "uniquePixelBuffers": 512,
+          "pixelBytes": 4456448
+        }
+      },
+      "disposed": {
+        "retention": {
+          "entries": 0,
+          "uniquePixelBuffers": 0,
+          "pixelBytes": 0
+        },
+        "resultCache": {
+          "hits": 0,
+          "misses": 0,
+          "hitRate": 0,
+          "entries": 0,
+          "bytes": 0,
+          "byteBudget": 33554432,
+          "insertions": 0,
+          "evictions": 0,
+          "validationFailures": 0,
+          "reusedPixelBytes": 0,
+          "hitsByOutputTileSize": {}
+        }
+      },
+      "maxGenerationPerVariant": 1
+    },
+    {
+      "zoom": 0.0625,
+      "startsInteractive": true,
+      "cold": {
+        "instrumentedElapsedMs": 631.8000000007451,
+        "uninstrumentedElapsedMs": 922.0999999940395,
+        "calls": 67,
+        "timing": {
+          "meanMs": 9.317910447772315,
+          "p95Ms": 10.400000002235174
+        },
+        "generatedRegions": 256,
+        "resolved": 256,
+        "composed": 256,
+        "lodCalls": 512,
+        "lodMs": 278.8000000230968,
+        "uploads": 256,
+        "draws": 256,
+        "world": {
+          "canonicalGeneratedCount": 0,
+          "approximateGeneratedCount": 256,
+          "canonicalCacheHits": 0,
+          "approximateCacheHits": 0,
+          "canonicalCompositionPixels": 0,
+          "approximateCompositionPixels": 8192,
+          "canonicalGenerationDurationMs": 0,
+          "approximateGenerationDurationMs": 433.10000002384186
+        },
+        "progressive": {
+          "requestCount": 1,
+          "completedRequestCount": 1,
+          "cancelledRequestCount": 0,
+          "continuationCount": 66,
+          "batchCount": 67,
+          "hasPendingRequest": false
+        },
+        "cache": {
+          "hits": 0,
+          "misses": 256,
+          "hitRate": 0,
+          "entries": 256,
+          "bytes": 16384,
+          "byteBudget": 33554432,
+          "insertions": 256,
+          "evictions": 0,
+          "validationFailures": 0,
+          "reusedPixelBytes": 0,
+          "hitsByOutputTileSize": {}
+        }
+      },
+      "pan": {
+        "calls": 60,
+        "timing": {
+          "meanMs": 3.650000000124176,
+          "p95Ms": 4.899999998509884
+        },
+        "visibleMin": 256,
+        "visibleMax": 256,
+        "newlyVisible": 0,
+        "scanned": 30720,
+        "resolved": 0,
+        "composed": 0,
+        "lodCalls": 0,
+        "cacheHits": 0,
+        "cacheMisses": 0,
+        "draws": 15360,
+        "uploads": 0
+      },
+      "panUninstrumented": {
+        "meanMs": 3.2066666675110658,
+        "p95Ms": 5.299999997019768
+      },
+      "hold": {
+        "calls": 2,
+        "timing": {
+          "meanMs": 0.5,
+          "p95Ms": 1
+        },
+        "visibleMin": 256,
+        "visibleMax": 256,
+        "newlyVisible": 0,
+        "scanned": 512,
+        "resolved": 0,
+        "composed": 0,
+        "lodCalls": 0,
+        "cacheHits": 0,
+        "cacheMisses": 0,
+        "draws": 0,
+        "uploads": 0
+      },
+      "settle": {
+        "calls": 160,
+        "timing": {
+          "meanMs": 14.296250000037253,
+          "p95Ms": 24.700000002980232
+        },
+        "visibleMin": 256,
+        "visibleMax": 256,
+        "newlyVisible": 0,
+        "scanned": 1024,
+        "resolved": 256,
+        "composed": 256,
+        "lodCalls": 256,
+        "cacheHits": 0,
+        "cacheMisses": 256,
+        "draws": 256,
+        "uploads": 256
+      },
+      "requests": 60,
+      "completed": 60,
+      "cancelled": 0,
+      "viewRequests": 180,
+      "viewExecutions": 60,
+      "finalPendingRequest": false,
+      "cache": {
+        "hits": 0,
+        "misses": 512,
+        "hitRate": 0,
+        "entries": 512,
+        "bytes": 278528,
+        "byteBudget": 33554432,
+        "insertions": 512,
+        "evictions": 0,
+        "validationFailures": 0,
+        "reusedPixelBytes": 0,
+        "hitsByOutputTileSize": {}
+      },
+      "retention": {
+        "initial": {
+          "entries": 256,
+          "uniquePixelBuffers": 256,
+          "pixelBytes": 16384
+        },
+        "pan": {
+          "entries": 256,
+          "uniquePixelBuffers": 256,
+          "pixelBytes": 16384
+        },
+        "final": {
+          "entries": 512,
+          "uniquePixelBuffers": 512,
+          "pixelBytes": 278528
+        }
+      },
+      "disposed": {
+        "retention": {
+          "entries": 0,
+          "uniquePixelBuffers": 0,
+          "pixelBytes": 0
+        },
+        "resultCache": {
+          "hits": 0,
+          "misses": 0,
+          "hitRate": 0,
+          "entries": 0,
+          "bytes": 0,
+          "byteBudget": 33554432,
+          "insertions": 0,
+          "evictions": 0,
+          "validationFailures": 0,
+          "reusedPixelBytes": 0,
+          "hitsByOutputTileSize": {}
+        }
+      },
+      "maxGenerationPerVariant": 1
+    }
+  ]
+}

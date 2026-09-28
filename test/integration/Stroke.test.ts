@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   CircleBrush,
   ErrorCodes,
+  PixelBrush,
   Raster,
   ReverieError,
   ReverieRangeError,
@@ -339,6 +340,64 @@ describe("stroke smoothing and resampling", () => {
     expect(stroke.rawSamples).toHaveLength(1);
     expect(stroke.processedSamples).toHaveLength(1);
     expect(stroke.pendingStampCount).toBe(1);
+  });
+
+  it("paints the final pixel when a short stroke crosses a pixel boundary", () => {
+    const raster = new Raster();
+    const brush = new PixelBrush({
+      size: 1,
+      spacing: 0.25,
+      color: { r: 255, g: 0, b: 0, a: 255 },
+    });
+    const stroke = new Stroke({ brush });
+    stroke.addSample({ position: { x: 0.5, y: 0.5 }, timestamp: 0 });
+    stroke.addSample({ position: { x: 1.4, y: 0.5 }, timestamp: 1 });
+    stroke.end();
+
+    let command = stroke.nextStamp();
+    while (command !== undefined) {
+      brush.stamp(raster, command.position, command);
+      command = stroke.nextStamp();
+    }
+    expect(raster.getPixel({ x: 0, y: 0 }).a).toBe(255);
+    expect(raster.getPixel({ x: 1, y: 0 }).a).toBe(255);
+  });
+
+  it("does not append a duplicate stamp for a short same-pixel tail", () => {
+    const stroke = new Stroke({ brush: createRecordingBrush([], 1, 1) });
+    stroke.addSample({ position: { x: 0.5, y: 0.5 }, timestamp: 0 });
+    stroke.addSample({ position: { x: 0.9, y: 0.5 }, timestamp: 1 });
+    stroke.end();
+    stroke.end();
+
+    expect(drainStampPositions(stroke)).toEqual([{ x: 0.5, y: 0.5 }]);
+  });
+
+  it("appends final-tail commands after normal long-stroke stamps at unchanged spacing", () => {
+    const stroke = new Stroke({ brush: createRecordingBrush([], 1, 0.5) });
+    stroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
+    stroke.addSample({ position: { x: 2.4, y: 0 }, timestamp: 1 });
+
+    expect(drainStampPositions(stroke)).toEqual([
+      { x: 0, y: 0 },
+      { x: 0.5, y: 0 },
+      { x: 1, y: 0 },
+      { x: 1.5, y: 0 },
+      { x: 2, y: 0 },
+    ]);
+    stroke.end();
+    expect(drainStampPositions(stroke)).toEqual([]);
+
+    const tailStroke = new Stroke({ brush: createRecordingBrush([], 1, 0.25) });
+    tailStroke.addSample({ position: { x: 0, y: 0 }, timestamp: 0 });
+    tailStroke.addSample({ position: { x: 2.9, y: 0 }, timestamp: 1 });
+    expect(drainStampPositions(tailStroke).at(-1)).toEqual({ x: 2, y: 0 });
+    tailStroke.end();
+    expect(drainStampPositions(tailStroke)).toEqual([
+      { x: 2.25, y: 0 },
+      { x: 2.5, y: 0 },
+      { x: 2.75, y: 0 },
+    ]);
   });
 
   it("stores repeated zero-length raw input without duplicate outputs", () => {

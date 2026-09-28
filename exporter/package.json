@@ -1,7 +1,21 @@
 {
   "name": "@reverie/exporter",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Export a fixed size RGBA buffer or encoded image file.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/folio-brainstorm/reverie.git",
+    "directory": "exporter"
+  },
+  "homepage": "https://github.com/folio-brainstorm/reverie#readme",
+  "bugs": "https://github.com/folio-brainstorm/reverie/issues",
+  "engines": {
+    "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -21,7 +35,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:verbose": "vitest run --reporter=verbose --includeTaskLocation",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@reverie/core": "workspace:*",

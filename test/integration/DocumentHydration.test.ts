@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { Raster, RasterLayer, World } from "@reverie/core";
-import { getRasterTilePixels } from "@reverie/core/renderer";
+import { getRasterTilePixels } from "@reverie/core/rendering/internal";
 import { deserializeDocument, serializeDocument } from "@reverie/core/document";
 
 describe("Document runtime hydration", () => {

@@ -1,3 +1,6 @@
+import { captureRasterStampTiles } from "@reverie/core/rendering/internal";
+import type { TileCoord } from "@reverie/core/rendering";
+
 import type { DrawingCommand } from "../interfaces/scheduler/DrawingCommand.js";
 import type { DrawingSchedulerConfig } from "../interfaces/scheduler/DrawingSchedulerConfig.js";
 import type {
@@ -20,8 +23,13 @@ export class DrawingScheduler {
   /** Runtime-specific frame and timing primitives. */
   private readonly frameDriver: FrameDriver;
 
-  /** Optional presentation callback coalesced to at most once per frame. */
-  private readonly onRender: (() => void) | undefined;
+  /** Optional presentation callback that can request another progressive frame. */
+  private readonly onRender:
+    | ((
+        hasNewDrawingCommands: boolean,
+        changedTiles?: readonly TileCoord[],
+      ) => boolean | void)
+    | undefined;
 
   /** Optional observer for terminal execution and rendering failures. */
   private readonly onError: ((error: unknown) => void) | undefined;
@@ -37,12 +45,16 @@ export class DrawingScheduler {
 
   /** Whether a frame callback is currently executing drawing work. */
   private isRunningFrame = false;
+  private currentFrameStartTime: number | null = null;
 
   /** Whether a runtime callback failure permanently stopped scheduling. */
   private hasFailed = false;
 
   /** Whether lifecycle disposal permanently closed this scheduler. */
   private isDisposed = false;
+
+  /** Whether presentation requested another frame after drawing commands finish. */
+  private hasPendingRender = false;
 
   /**
    * Executes one budgeted frame without depending on a main-thread global.
@@ -59,9 +71,11 @@ export class DrawingScheduler {
     this.isRunningFrame = true;
     let processedCommandCount = 0;
     let executingCommand: DrawingCommand | undefined;
+    const changedTiles = new Map<string, TileCoord>();
 
     try {
       const startTime = this.frameDriver.now();
+      this.currentFrameStartTime = startTime;
 
       while (this.pendingCommandCount > 0 && !this.isDisposed) {
         const hasExhaustedBudget =
@@ -79,24 +93,40 @@ export class DrawingScheduler {
         }
 
         executingCommand = command;
-        const execute = (): void => this.executeCommand(command);
+        let commandChangedTiles: readonly TileCoord[] = [];
+        const execute = (): void => {
+          commandChangedTiles = captureRasterStampTiles(command.raster, () =>
+            this.executeCommand(command),
+          );
+        };
         if (command.historyTransaction === undefined) {
           execute();
         } else {
           command.historyTransaction.executeMutation(execute);
         }
         processedCommandCount += 1;
+        for (const coord of commandChangedTiles) {
+          changedTiles.set(`${coord.x}:${coord.y}`, coord);
+        }
         executingCommand = undefined;
       }
 
-      if (processedCommandCount > 0 && !this.isDisposed) {
-        this.onRender?.();
+      if (
+        (processedCommandCount > 0 || this.hasPendingRender) &&
+        !this.isDisposed
+      ) {
+        this.hasPendingRender =
+          (changedTiles.size > 0
+            ? this.onRender?.(processedCommandCount > 0, [
+                ...changedTiles.values(),
+              ])
+            : this.onRender?.(processedCommandCount > 0)) === true;
       }
     } catch (error) {
       const transaction = executingCommand?.historyTransaction;
       if (transaction?.cancelled === true && !this.isDisposed) {
         try {
-          this.onRender?.();
+          this.onRender?.(true);
         } catch (renderError) {
           this.fail(
             new AggregateError(
@@ -110,6 +140,7 @@ export class DrawingScheduler {
       this.fail(error);
       return;
     } finally {
+      this.currentFrameStartTime = null;
       this.isRunningFrame = false;
     }
 
@@ -126,13 +157,28 @@ export class DrawingScheduler {
     return (
       this.pendingCommandCount === 0 &&
       this.frameHandle === null &&
-      !this.isRunningFrame
+      !this.isRunningFrame &&
+      !this.hasPendingRender
     );
   }
 
   /** Returns whether {@link dispose} permanently closed this scheduler. */
   get disposed(): boolean {
     return this.isDisposed;
+  }
+
+  /** Advisory time left before this scheduler's soft frame budget is exhausted. */
+  get remainingFrameBudgetMs(): number {
+    if (this.currentFrameStartTime === null) {
+      return this.frameBudget;
+    }
+    return Math.min(
+      this.frameBudget,
+      Math.max(
+        0,
+        this.frameBudget - (this.frameDriver.now() - this.currentFrameStartTime),
+      ),
+    );
   }
 
   /**
@@ -187,6 +233,15 @@ export class DrawingScheduler {
     this.scheduleFrame();
   }
 
+  /** Requests a render-only frame and continues while rendering remains pending. */
+  requestRender(): void {
+    if (this.isDisposed || this.hasFailed) {
+      return;
+    }
+    this.hasPendingRender = true;
+    this.scheduleFrame();
+  }
+
   /**
    * Cancels pending frame work, clears queued commands, and closes the scheduler.
    * Repeated calls have no additional effect.
@@ -204,6 +259,7 @@ export class DrawingScheduler {
     this.frameHandle = null;
     this.commands = [];
     this.readIndex = 0;
+    this.hasPendingRender = false;
 
     if (frameHandle !== null) {
       this.frameDriver.cancelFrame(frameHandle);
@@ -244,7 +300,7 @@ export class DrawingScheduler {
       this.isRunningFrame ||
       this.isDisposed ||
       this.hasFailed ||
-      this.pendingCommandCount === 0
+      (this.pendingCommandCount === 0 && !this.hasPendingRender)
     ) {
       return;
     }

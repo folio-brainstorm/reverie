@@ -126,6 +126,32 @@ const reverie = new ReverieCanvas({
 // Pointer 输入会自动绑定；所属视图卸载时调用 dispose。
 ```
 
+对于高频 Camera 输入，更新公开的 Camera，并请求一次动画帧渲染；手势结束时再请求完整质量：
+
+```ts
+reverie.camera.panBy(2, 0);
+reverie.requestViewRender("interactive");
+
+// 松开指针或滚轮输入停止后：
+reverie.requestViewRender("full");
+```
+
+`reverie.render()` 仍为同步调用。`renderer.diagnostics.getSnapshot()` 会报告合并后的视图请求、交互质量，以及可见、预热和保留的渲染结果。其 `reuse` 计数器记录临时呈现、呈现与生成结果的复用命中，以及可见区域与预热区域的未命中。Camera 变化不会修改文档数据。
+
+Camera 预取使用有界的屏幕空间边距；缩小时，该边距覆盖的 Tile 数量会增加。交互式平移时，最近的 Camera 移动方向决定可见区域渲染后前方预热区域的优先级；平移结束后的 `full` 渲染会以完整质量细化可见区域。诊断快照的 `coverage` 部分报告当前边距、速度、前瞻距离、压力、交互输出尺寸和累计预取工作量。这些调优值属于内部实现，可能随版本变化。
+
+Web 调度器向 Canvas 渲染传入 `remainingFrameBudgetMs`，作为预热工作的建议性准入提示。延后的预热续任务会保留到后续帧。Canvas 诊断还报告 RGBA 标识命中、回退比较的次数与字节数、完成绘制的增量，以及预热任务的执行与延后次数。已发布的 `RenderRegion.pixels` 缓冲区不得原地修改。
+
+只在诊断视图打开时收集各阶段耗时：
+
+```ts
+reverie.renderer.configureDiagnostics({ timings: true });
+// 诊断视图关闭时：
+reverie.renderer.configureDiagnostics({ timings: false });
+```
+
+每次切换都会开始新的耗时统计窗口；渲染计数器仍然可用。
+
 需要 Node.js `^22.12.0`、`^24.0.0` 或 `>=26.0.0`，以及 pnpm `11.18.0`。
 
 ## 示例
@@ -138,14 +164,14 @@ const reverie = new ReverieCanvas({
 
 ## 软件包
 
-| 包                                | 职责                                                           |
-| --------------------------------- | -------------------------------------------------------------- |
-| [`@reverie/core`](./core)         | 平台无关的世界、图层、稀疏像素、笔刷、笔触、选区与文档模型。   |
-| [`@reverie/renderer`](./renderer) | 以 HTML Canvas 呈现当前 Camera 视图，并维护缩小时的 LOD 缓存。 |
-| [`@reverie/web`](./web)           | 浏览器输入、绘制调度、历史记录、画布门面和下载能力。           |
-| [`@reverie/exporter`](./exporter) | 世界区域合成，以及 PNG、JPEG、WebP 编码。                      |
-| [`@reverie/demo`](./demo)         | 使用 React + Vite 构建的浏览器示例应用。                       |
-| [`@reverie/test`](./test)         | 核心行为的 Vitest 集成测试。                                   |
+| 包                                                        | 职责                                                           |
+| --------------------------------------------------------- | -------------------------------------------------------------- |
+| [`@reverie/core`](./core)                                 | 平台无关的世界、图层、稀疏像素、笔刷、笔触、选区与文档模型。   |
+| [`@reverie/canvas-renderer`](./renderers/canvas-renderer) | 以 HTML Canvas 呈现当前 Camera 视图，并维护缩小时的 LOD 缓存。 |
+| [`@reverie/web`](./web)                                   | 浏览器输入、绘制调度、历史记录、画布门面和下载能力。           |
+| [`@reverie/exporter`](./exporter)                         | 世界区域合成，以及 PNG、JPEG、WebP 编码。                      |
+| [`@reverie/demo`](./demo)                                 | 使用 React + Vite 构建的浏览器示例应用。                       |
+| [`@reverie/test`](./test)                                 | 核心行为的 Vitest 集成测试。                                   |
 
 ## 技术栈
 
@@ -153,7 +179,7 @@ TypeScript · Node.js · pnpm workspaces · HTML Canvas · React · Vite · Vite
 
 ## 文档
 
-README 保持在项目介绍层面，不重复维护 API Reference。完整接口以各 package 的类型化入口为准：[`core`](./core/index.ts)、[`renderer`](./renderer/index.ts)、[`web`](./web/index.ts) 和 [`exporter`](./exporter/index.ts)。独立文档站正在准备中。
+README 保持在项目介绍层面，不重复维护 API Reference。完整接口以各 package 的类型化入口为准：[`core`](./core/index.ts)、[`canvas-renderer`](./renderers/canvas-renderer/index.ts)、[`web`](./web/index.ts) 和 [`exporter`](./exporter/index.ts)。独立文档站正在准备中。
 
 ## 开发
 
