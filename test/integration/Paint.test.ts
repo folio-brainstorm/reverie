@@ -7,8 +7,8 @@ import {
   Raster,
   Rasterizers,
   ReverieRangeError,
-} from "@reverie/core";
-import type { PaintStyle, PixelCoord, RGBAColor } from "@reverie/core";
+} from "@reveriejs/core";
+import type { PaintStyle, PixelCoord, RGBAColor } from "@reveriejs/core";
 
 const TRANSPARENT_BLACK: RGBAColor = { r: 0, g: 0, b: 0, a: 0 };
 const OPAQUE_RED: RGBAColor = { r: 255, g: 0, b: 0, a: 255 };

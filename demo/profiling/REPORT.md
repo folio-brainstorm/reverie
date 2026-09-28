@@ -200,7 +200,7 @@ LOD 是否真正减少计算：
 - `request identity` 与 `pixel identity` 应继续分离；取消旧 presentation 请求不应否定内容仍有效的生成结果。
 - Profiler probes 改变 batch 时间预算边界，因此 completed/cancelled 小范围计数会波动；tiny 128 candidate 上限造成的 0 complete / 59 cancel 在所有 canonical-start 复跑中一致。
 - 记录覆盖的是 camera → Session → scheduler → renderer 路径；未包含 React UI/SVG overlay 更新、真实 pointer dispatch 或用户现场 GPU。同步 render timer 也不包含完整的浏览器后续工作。
-- 验证完成：`pnpm build`、`pnpm --filter @reverie/demo typecheck`；独立 profiling TypeScript 检查；四主场景、两缓存初态对照、关闭内部 probes 的整组复跑、两次独立浏览器 trace；现有 Core result-cache tests 21/21 通过。`pnpm --filter @reverie/demo test` 未运行：demo 没有 `test` 脚本；本次实际验证由隔离 browser profiling 和其中的 Tile revision/采样 hook 断言承担。
+- 验证完成：`pnpm build`、`pnpm --filter @reveriejs/demo typecheck`；独立 profiling TypeScript 检查；四主场景、两缓存初态对照、关闭内部 probes 的整组复跑、两次独立浏览器 trace；现有 Core result-cache tests 21/21 通过。`pnpm --filter @reveriejs/demo test` 未运行：demo 没有 `test` 脚本；本次实际验证由隔离 browser profiling 和其中的 Tile revision/采样 hook 断言承担。
 - 先前现有 browser suite 有 4 个断言失败，单独 Chromium presentation profile 也因 minified pixel hash 不同而在输出 stats 前失败。没有改变这些断言、修复或宣称整套 browser tests 已通过；它们不承担本报告的测量来源。
 
 复现与数据字段说明见 [README.md](README.md)。

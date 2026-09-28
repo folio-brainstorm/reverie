@@ -1,9 +1,9 @@
-import type { Camera, WorldRect } from "@reverie/core";
-import { RenderingCore } from "@reverie/core/rendering";
+import type { Camera, WorldRect } from "@reveriejs/core";
+import { RenderingCore } from "@reveriejs/core/rendering";
 import {
   intersectRenderRegion,
   resolveRenderSource,
-} from "@reverie/core/rendering/internal";
+} from "@reveriejs/core/rendering/internal";
 import type {
   RenderContinuation,
   RenderQualityMode,
@@ -12,11 +12,11 @@ import type {
   Renderer,
   RenderSource,
   TileCoord,
-} from "@reverie/core/rendering";
+} from "@reveriejs/core/rendering";
 import type {
   RenderRequestIdentity,
   RenderSourceSnapshot,
-} from "@reverie/core/rendering/internal";
+} from "@reveriejs/core/rendering/internal";
 
 import { RendererErrorDefinitions } from "../errors/RendererErrorDefinitions.js";
 import {

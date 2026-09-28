@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { World } from "@reverie/core";
-import { serializeDocument } from "@reverie/core/document";
+import { World } from "@reveriejs/core";
+import { serializeDocument } from "@reveriejs/core/document";
 import {
   encodeProjectContainer,
   exportProject,
   importProject,
-} from "@reverie/core/project";
+} from "@reveriejs/core/project";
 
 describe("Project import", () => {
   it("restores an independent World with equivalent document semantics", () => {

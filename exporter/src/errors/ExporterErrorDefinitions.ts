@@ -1,4 +1,4 @@
-import type { ErrorDefinition } from "@reverie/core";
+import type { ErrorDefinition } from "@reveriejs/core";
 
 /** Exporter-owned message templates paired with stable Exporter error codes. */
 export const ExporterErrorDefinitions = {

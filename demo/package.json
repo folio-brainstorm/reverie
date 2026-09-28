@@ -1,5 +1,5 @@
 {
-  "name": "@reverie/demo",
+  "name": "@reveriejs/demo",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,10 +11,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@reverie/core": "workspace:*",
-    "@reverie/exporter": "workspace:*",
-    "@reverie/canvas-renderer": "workspace:*",
-    "@reverie/web": "workspace:*",
+    "@reveriejs/core": "workspace:*",
+    "@reveriejs/exporter": "workspace:*",
+    "@reveriejs/canvas-renderer": "workspace:*",
+    "@reveriejs/web": "workspace:*",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

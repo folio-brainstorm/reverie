@@ -1,4 +1,4 @@
-import type { ErrorDefinition } from "@reverie/core";
+import type { ErrorDefinition } from "@reveriejs/core";
 
 /** Renderer-owned message templates paired with stable renderer error codes. */
 export const RendererErrorDefinitions = {

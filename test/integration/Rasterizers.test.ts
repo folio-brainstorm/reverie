@@ -5,12 +5,12 @@ import {
   Rasterizers,
   ReverieRangeError,
   ReverieTypeError,
-} from "@reverie/core";
+} from "@reveriejs/core";
 import type {
   Circle,
   PixelCoverage,
   PixelCoverageVisitor,
-} from "@reverie/core";
+} from "@reveriejs/core";
 
 function collectHits(circle: Circle): PixelCoverage[] {
   const hits: PixelCoverage[] = [];

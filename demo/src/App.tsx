@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { useState } from "react";
 
-import type { World } from "@reverie/core";
+import type { World } from "@reveriejs/core";
 
 import { CanvasSetup } from "./CanvasSetup";
 import type { CanvasSize } from "./interfaces/canvas/CanvasSize";

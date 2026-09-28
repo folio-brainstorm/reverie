@@ -1,4 +1,4 @@
-import type { ProjectPreview } from "@reverie/core/project";
+import type { ProjectPreview } from "@reveriejs/core/project";
 
 /** Browser-only options controlling how a project is delivered to the user. */
 export interface WebProjectDownloadOptions {

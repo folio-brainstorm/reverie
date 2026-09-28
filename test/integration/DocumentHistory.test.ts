@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { CircleBrush, ErrorCodes, SelectionMask, World } from "@reverie/core";
-import type { Raster } from "@reverie/core";
-import { DocumentHistory } from "@reverie/core/history";
-import { getRasterTileVersion } from "@reverie/core/rendering/internal";
+import { CircleBrush, ErrorCodes, SelectionMask, World } from "@reveriejs/core";
+import type { Raster } from "@reveriejs/core";
+import { DocumentHistory } from "@reveriejs/core/history";
+import { getRasterTileVersion } from "@reveriejs/core/rendering/internal";
 
 const RED = { r: 255, g: 10, b: 20, a: 255 };
 const BLUE = { r: 10, g: 20, b: 255, a: 180 };

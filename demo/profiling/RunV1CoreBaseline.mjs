@@ -1,9 +1,9 @@
 import { writeFile } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
 
-import { PixelBrush, Raster, Stroke, World } from "@reverie/core";
-import { RenderingCore } from "@reverie/core/rendering";
-import { getRasterTileVersion } from "@reverie/core/rendering/internal";
+import { PixelBrush, Raster, Stroke, World } from "@reveriejs/core";
+import { RenderingCore } from "@reveriejs/core/rendering";
+import { getRasterTileVersion } from "@reveriejs/core/rendering/internal";
 
 const TILE_SIZE = 256;
 const COLOR = { r: 120, g: 80, b: 40, a: 255 };

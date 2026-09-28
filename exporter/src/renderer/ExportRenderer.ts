@@ -1,13 +1,13 @@
-import type { LayerBlendMode, Raster } from "@reverie/core";
+import type { LayerBlendMode, Raster } from "@reveriejs/core";
 import {
   getRasterTileView,
   getWorldCompositionLayers,
   compositeRgbaSourceOverInPlace,
   intersectRenderRegion,
   resolveRenderSource,
-} from "@reverie/core/rendering/internal";
-import type { TileCoord } from "@reverie/core/rendering";
-import type { RenderSourceSnapshot } from "@reverie/core/rendering/internal";
+} from "@reveriejs/core/rendering/internal";
+import type { TileCoord } from "@reveriejs/core/rendering";
+import type { RenderSourceSnapshot } from "@reveriejs/core/rendering/internal";
 
 import { ExporterErrorDefinitions } from "../errors/ExporterErrorDefinitions.js";
 import {

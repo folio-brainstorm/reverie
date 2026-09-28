@@ -102,7 +102,7 @@ graph LR
 In an existing browser project, install the Web facade:
 
 ```bash
-pnpm add @reverie/web
+pnpm add @reveriejs/web
 ```
 
 To run the included demo from the repository root:
@@ -115,7 +115,7 @@ pnpm dev
 For a browser project, `ReverieCanvas` is the shortest integration path:
 
 ```ts
-import { ReverieCanvas } from "@reverie/web";
+import { ReverieCanvas } from "@reveriejs/web";
 
 const canvas = document.querySelector("canvas");
 
@@ -196,12 +196,12 @@ Requires Node.js `^22.12.0`, `^24.0.0`, or `>=26.0.0`, and pnpm `11.18.0`.
 
 | Package                                                   | Responsibility                                                                                        |
 | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| [`@reverie/core`](./core)                                 | Platform-independent world, layers, sparse pixels, brushes, strokes, selections, and document models. |
-| [`@reverie/canvas-renderer`](./renderers/canvas-renderer) | Presents the active Camera view with HTML Canvas and maintains a LOD cache for zoomed-out views.      |
-| [`@reverie/web`](./web)                                   | Browser input, drawing scheduling, history, canvas facade, and download capabilities.                 |
-| [`@reverie/exporter`](./exporter)                         | World-region composition plus PNG, JPEG, and WebP encoding.                                           |
-| [`@reverie/demo`](./demo)                                 | Browser example application built with React and Vite.                                                |
-| [`@reverie/test`](./test)                                 | Vitest integration tests for core behavior.                                                           |
+| [`@reveriejs/core`](./core)                                 | Platform-independent world, layers, sparse pixels, brushes, strokes, selections, and document models. |
+| [`@reveriejs/canvas-renderer`](./renderers/canvas-renderer) | Presents the active Camera view with HTML Canvas and maintains a LOD cache for zoomed-out views.      |
+| [`@reveriejs/web`](./web)                                   | Browser input, drawing scheduling, history, canvas facade, and download capabilities.                 |
+| [`@reveriejs/exporter`](./exporter)                         | World-region composition plus PNG, JPEG, and WebP encoding.                                           |
+| [`@reveriejs/demo`](./demo)                                 | Browser example application built with React and Vite.                                                |
+| [`@reveriejs/test`](./test)                                 | Vitest integration tests for core behavior.                                                           |
 
 ## Built with
 

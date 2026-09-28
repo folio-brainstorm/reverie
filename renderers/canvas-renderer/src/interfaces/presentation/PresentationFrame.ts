@@ -1,5 +1,5 @@
-import type { RenderRegion } from "@reverie/core/rendering";
-import type { RenderRequestIdentity } from "@reverie/core/rendering/internal";
+import type { RenderRegion } from "@reveriejs/core/rendering";
+import type { RenderRequestIdentity } from "@reveriejs/core/rendering/internal";
 
 /** A complete, validated collection of regions that may replace the Canvas. */
 export interface PresentationFrame {

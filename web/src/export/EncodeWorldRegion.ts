@@ -1,11 +1,11 @@
-import type { World } from "@reverie/core";
+import type { World } from "@reveriejs/core";
 import {
   ExportRenderer,
   JPEGEncoder,
   PNGEncoder,
   WebPEncoder,
-} from "@reverie/exporter";
-import type { EncodedImage, ExportRegion } from "@reverie/exporter";
+} from "@reveriejs/exporter";
+import type { EncodedImage, ExportRegion } from "@reveriejs/exporter";
 
 import type { ReverieDownloadOptions } from "../interfaces/export/ReverieDownloadOptions.js";
 import { WebErrorDefinitions } from "../errors/WebErrorDefinitions.js";

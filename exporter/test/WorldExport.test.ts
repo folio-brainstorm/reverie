@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { Raster, World } from "@reverie/core";
-import { getRasterTileVersion } from "@reverie/core/rendering/internal";
+import { Raster, World } from "@reveriejs/core";
+import { getRasterTileVersion } from "@reveriejs/core/rendering/internal";
 
 import { ExportRenderer, ExporterErrorDefinitions } from "../index.js";
 

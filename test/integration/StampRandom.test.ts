@@ -6,7 +6,7 @@ import {
   ReverieRangeError,
   sampleStampRandom,
   STAMP_RANDOM_CHANNELS,
-} from "@reverie/core";
+} from "@reveriejs/core";
 
 describe("deterministic stamp random channels", () => {
   // Computed independently with BigInt multiplication and modulo 2^32 arithmetic.

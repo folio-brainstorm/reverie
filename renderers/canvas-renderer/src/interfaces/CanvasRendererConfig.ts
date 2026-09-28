@@ -1,5 +1,5 @@
-import type { Camera } from "@reverie/core";
-import type { RenderSource } from "@reverie/core/rendering";
+import type { Camera } from "@reveriejs/core";
+import type { RenderSource } from "@reveriejs/core/rendering";
 
 import type { CanvasDiagnosticsOptions } from "./diagnostics/CanvasDiagnosticsOptions.js";
 

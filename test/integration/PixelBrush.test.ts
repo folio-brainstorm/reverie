@@ -7,14 +7,14 @@ import {
   ReverieRangeError,
   ReverieTypeError,
   World,
-} from "@reverie/core";
+} from "@reveriejs/core";
 import type {
   Brush,
   PixelBrushConfig,
   PixelCoord,
   RGBAColor,
   StampCommand,
-} from "@reverie/core";
+} from "@reveriejs/core";
 
 const OPAQUE_BLUE: RGBAColor = { r: 0, g: 80, b: 255, a: 255 };
 const TRANSPARENT_BLACK: RGBAColor = { r: 0, g: 0, b: 0, a: 0 };

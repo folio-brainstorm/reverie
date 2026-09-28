@@ -7,13 +7,13 @@ import {
   Raster,
   ReverieRangeError,
   World,
-} from "@reverie/core";
+} from "@reveriejs/core";
 import type {
   Brush,
   ImageBrushConfig,
   RGBAColor,
   StampCommand,
-} from "@reverie/core";
+} from "@reveriejs/core";
 
 const OPAQUE_RED: RGBAColor = { r: 255, g: 0, b: 0, a: 255 };
 const TRANSPARENT_BLACK: RGBAColor = { r: 0, g: 0, b: 0, a: 0 };

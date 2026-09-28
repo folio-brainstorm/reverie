@@ -113,9 +113,9 @@ genuinely crosses package boundaries.
 requesting a full check:
 
 ```bash
-pnpm --filter @reverie/core typecheck
-pnpm --filter @reverie/demo typecheck
-pnpm --filter @reverie/test test
+pnpm --filter @reveriejs/core typecheck
+pnpm --filter @reveriejs/demo typecheck
+pnpm --filter @reveriejs/test test
 ```
 
 **Tier 2 — Standard change, ready for delivery.** Any change confined to one

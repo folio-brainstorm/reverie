@@ -1,7 +1,7 @@
-import type { World } from "@reverie/core";
-import type { ProjectExportOptions } from "@reverie/core/project";
+import type { World } from "@reveriejs/core";
+import type { ProjectExportOptions } from "@reveriejs/core/project";
 
-import { exportProject } from "@reverie/core/project";
+import { exportProject } from "@reveriejs/core/project";
 
 import { PROJECT_MIME_TYPE } from "../config/project/ProjectFile.js";
 import { createBinaryBlob } from "../export/CreateBinaryBlob.js";

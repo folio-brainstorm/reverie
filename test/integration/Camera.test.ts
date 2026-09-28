@@ -5,14 +5,14 @@ import {
   ErrorCodes,
   ReverieRangeError,
   ReverieTypeError,
-} from "@reverie/core";
+} from "@reveriejs/core";
 import type {
   CameraConfig,
   ScreenPoint,
   ViewportSize,
   WorldPoint,
   WorldRect,
-} from "@reverie/core";
+} from "@reveriejs/core";
 
 describe("Camera construction", () => {
   it("is available with its contracts through the public package entry point", () => {

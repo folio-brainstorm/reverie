@@ -1,4 +1,4 @@
-import type { TileCoord } from "@reverie/core/rendering";
+import type { TileCoord } from "@reveriejs/core/rendering";
 
 import type { FrameDriver } from "./FrameDriver.js";
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { ErrorCodes, Raster as PublicRaster } from "@reverie/core";
-import type { PixelCoord, RasterConfig, RGBAColor } from "@reverie/core";
+import { ErrorCodes, Raster as PublicRaster } from "@reveriejs/core";
+import type { PixelCoord, RasterConfig, RGBAColor } from "@reveriejs/core";
 import { Raster } from "../../core/src/core/raster/Raster";
 import {
   ReverieRangeError,

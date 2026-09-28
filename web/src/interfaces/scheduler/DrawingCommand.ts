@@ -4,8 +4,8 @@ import type {
   RasterLayer,
   SelectionMask,
   StampCommand,
-} from "@reverie/core";
-import type { RasterHistoryTransaction } from "@reverie/core/history";
+} from "@reveriejs/core";
+import type { RasterHistoryTransaction } from "@reveriejs/core/history";
 
 /** Supplies the runtime objects needed to execute one core stamp command. */
 export interface DrawingCommand {

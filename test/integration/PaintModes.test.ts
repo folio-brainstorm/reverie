@@ -9,7 +9,7 @@ import {
   Raster,
   Stroke,
   World,
-} from "@reverie/core";
+} from "@reveriejs/core";
 
 const RED = { r: 220, g: 30, b: 10, a: 255 };
 

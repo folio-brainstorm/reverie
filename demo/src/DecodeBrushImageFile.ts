@@ -1,4 +1,4 @@
-import { BrushImage } from "@reverie/core";
+import { BrushImage } from "@reveriejs/core";
 
 /**
  * Decodes a browser image file into an immutable alpha-only brush source.

@@ -1,4 +1,4 @@
-import type { RGBAColor, Raster } from "@reverie/core";
+import type { RGBAColor, Raster } from "@reveriejs/core";
 
 /** Leftmost world-pixel column of the painted scene. */
 const SCENE_MIN_X = -32;

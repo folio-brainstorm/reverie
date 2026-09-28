@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { Raster, RasterLayer, World } from "@reverie/core";
-import { getRasterTilePixels } from "@reverie/core/rendering/internal";
-import { deserializeDocument, serializeDocument } from "@reverie/core/document";
+import { Raster, RasterLayer, World } from "@reveriejs/core";
+import { getRasterTilePixels } from "@reveriejs/core/rendering/internal";
+import { deserializeDocument, serializeDocument } from "@reveriejs/core/document";
 
 describe("Document runtime hydration", () => {
   it("restores a bounded World, ordered Layer metadata, sparse tiles, and stable identities", () => {

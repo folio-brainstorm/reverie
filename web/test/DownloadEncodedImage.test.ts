@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { EncodedImage } from "@reverie/exporter";
+import type { EncodedImage } from "@reveriejs/exporter";
 
 import {
   WebErrorDefinitions,

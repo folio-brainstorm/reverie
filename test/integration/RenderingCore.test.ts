@@ -3,18 +3,18 @@ import {
   ReverieRangeError,
   ReverieTypeError,
   World,
-} from "@reverie/core";
+} from "@reveriejs/core";
 import {
   RenderingCore,
   type RenderContext,
   type RendererBackend,
   type RenderRegionSet,
   type RenderTarget,
-} from "@reverie/core/rendering";
+} from "@reveriejs/core/rendering";
 import {
   compositeRgbaSourceOverInPlace,
   getRasterTileView,
-} from "@reverie/core/rendering/internal";
+} from "@reveriejs/core/rendering/internal";
 import { describe, expect, it, vi } from "vitest";
 
 const context: RenderContext = {};

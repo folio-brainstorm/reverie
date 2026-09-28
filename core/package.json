@@ -1,5 +1,5 @@
 {
-  "name": "@reverie/core",
+  "name": "@reveriejs/core",
   "version": "1.0.0",
   "description": "Core package for the Rêverie raster painting engine",
   "license": "Apache-2.0",

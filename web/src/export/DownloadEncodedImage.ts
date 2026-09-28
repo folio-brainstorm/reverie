@@ -1,4 +1,4 @@
-import type { EncodedImage } from "@reverie/exporter";
+import type { EncodedImage } from "@reveriejs/exporter";
 
 import type { DownloadImageOptions } from "../interfaces/export/DownloadImageOptions.js";
 
@@ -15,7 +15,7 @@ import { resolveDownloadFilename } from "./ResolveDownloadFilename.js";
  * document. The object URL is always revoked on a later task, even when anchor
  * interaction throws, so a failed download cannot leak it.
  *
- * This helper is deliberately browser-only and lives in `@reverie/web`. It never
+ * This helper is deliberately browser-only and lives in `@reveriejs/web`. It never
  * reads a Raster, renders, or selects an encoder, and it never modifies the
  * supplied bytes.
  *

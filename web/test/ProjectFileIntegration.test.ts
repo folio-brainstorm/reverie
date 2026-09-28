@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { World } from "@reverie/core";
-import { exportProject } from "@reverie/core/project";
+import { World } from "@reveriejs/core";
+import { exportProject } from "@reveriejs/core/project";
 
 import {
   PROJECT_FILE_EXTENSION,

@@ -9,7 +9,7 @@ import {
   ReverieRangeError,
   ReverieTypeError,
   Stroke,
-} from "@reverie/core";
+} from "@reveriejs/core";
 import type {
   Brush,
   StampCommand,
@@ -17,7 +17,7 @@ import type {
   StrokeSample,
   StrokeSampleInput,
   WorldPoint,
-} from "@reverie/core";
+} from "@reveriejs/core";
 
 describe("Stroke construction and lifecycle", () => {
   it("exposes its brush and command contracts through the public package entry point", () => {

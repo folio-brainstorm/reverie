@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { Raster, World } from "@reverie/core";
-import type { RGBAColor } from "@reverie/core";
-import { deserializeDocument, serializeDocument } from "@reverie/core/document";
+import { Raster, World } from "@reveriejs/core";
+import type { RGBAColor } from "@reveriejs/core";
+import { deserializeDocument, serializeDocument } from "@reveriejs/core/document";
 import {
   getRasterTilePixels,
   getRasterTileVersion,
-} from "@reverie/core/rendering/internal";
-import type { TileCoord } from "@reverie/core/rendering";
+} from "@reveriejs/core/rendering/internal";
+import type { TileCoord } from "@reveriejs/core/rendering";
 
 import {
   ExportRenderer,

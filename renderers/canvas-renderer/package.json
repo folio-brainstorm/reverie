@@ -1,5 +1,5 @@
 {
-  "name": "@reverie/canvas-renderer",
+  "name": "@reveriejs/canvas-renderer",
   "version": "1.0.0",
   "description": "Rendering backends for the Rêverie raster painting engine",
   "license": "Apache-2.0",
@@ -39,7 +39,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@reverie/core": "workspace:*"
+    "@reveriejs/core": "workspace:*"
   },
   "devDependencies": {
     "@vitest/browser-playwright": "5.0.0",

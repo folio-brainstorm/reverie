@@ -1,5 +1,5 @@
 import type { CanvasSize } from "./CanvasSize";
-import type { World } from "@reverie/core";
+import type { World } from "@reveriejs/core";
 
 /** Dimensions committed before the drawing runtime mounts. */
 export interface PaintingWorkspaceProps {

@@ -5,7 +5,7 @@
 `reverie.renderer.diagnostics` when using `ReverieCanvas`.
 
 ```ts
-import { CanvasRenderer } from "@reverie/canvas-renderer";
+import { CanvasRenderer } from "@reveriejs/canvas-renderer";
 
 const renderer = new CanvasRenderer({ canvas, camera, raster });
 renderer.render();

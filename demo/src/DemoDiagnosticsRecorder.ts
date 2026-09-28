@@ -1,5 +1,5 @@
-import type { CanvasRenderer } from "@reverie/canvas-renderer";
-import type { CanvasRendererDiagnosticsSnapshot } from "@reverie/canvas-renderer";
+import type { CanvasRenderer } from "@reveriejs/canvas-renderer";
+import type { CanvasRendererDiagnosticsSnapshot } from "@reveriejs/canvas-renderer";
 
 import { DIAGNOSTICS_HISTORY_LIMIT } from "./config/DiagnosticsHistoryConfig";
 import type { DiagnosticsHistorySample } from "./interfaces/diagnostics/DiagnosticsHistorySample";

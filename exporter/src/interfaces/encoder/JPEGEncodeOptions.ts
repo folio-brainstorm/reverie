@@ -1,4 +1,4 @@
-import type { RGBAColor } from "@reverie/core";
+import type { RGBAColor } from "@reveriejs/core";
 
 /** Options accepted by the JPEG encoder. */
 export interface JPEGEncodeOptions {

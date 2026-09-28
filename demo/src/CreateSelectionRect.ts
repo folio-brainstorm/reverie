@@ -1,4 +1,4 @@
-import type { Rect, WorldPoint } from "@reverie/core";
+import type { Rect, WorldPoint } from "@reveriejs/core";
 
 import type { CanvasSize } from "./interfaces/canvas/CanvasSize";
 

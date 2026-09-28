@@ -8,8 +8,8 @@ import {
   ImageBrush,
   Raster,
   Stroke,
-} from "@reverie/core";
-import type { Brush, StampCommand, StrokeConfig } from "@reverie/core";
+} from "@reveriejs/core";
+import type { Brush, StampCommand, StrokeConfig } from "@reveriejs/core";
 
 const COLOR = { r: 84, g: 153, b: 255, a: 255 };
 const BRUSH_FACTORIES = [

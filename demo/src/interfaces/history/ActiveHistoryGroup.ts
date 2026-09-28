@@ -1,4 +1,4 @@
-import type { RasterLayer } from "@reverie/core";
+import type { RasterLayer } from "@reveriejs/core";
 
 import type { HistoryGroupKind } from "./HistoryGroupKind";
 

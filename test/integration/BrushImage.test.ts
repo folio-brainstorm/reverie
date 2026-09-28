@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { BrushImage, ErrorCodes, ReverieRangeError } from "@reverie/core";
-import type { BrushImageConfig, RGBABrushImageSource } from "@reverie/core";
+import { BrushImage, ErrorCodes, ReverieRangeError } from "@reveriejs/core";
+import type { BrushImageConfig, RGBABrushImageSource } from "@reveriejs/core";
 
 describe("BrushImage construction and ownership", () => {
   it("is available with its public configuration contracts", () => {

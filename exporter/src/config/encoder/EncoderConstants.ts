@@ -1,4 +1,4 @@
-import type { RGBAColor } from "@reverie/core";
+import type { RGBAColor } from "@reveriejs/core";
 
 import type { ExportFormat } from "../../interfaces/encoder/ExportFormat.js";
 import type { PNGCompressionLevel } from "../../interfaces/encoder/PNGCompressionLevel.js";

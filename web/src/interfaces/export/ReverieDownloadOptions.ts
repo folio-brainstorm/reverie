@@ -1,5 +1,5 @@
-import type { RGBAColor } from "@reverie/core";
-import type { ExportRegion, PNGCompressionLevel } from "@reverie/exporter";
+import type { RGBAColor } from "@reveriejs/core";
+import type { ExportRegion, PNGCompressionLevel } from "@reveriejs/exporter";
 
 /**
  * One high-level image download request for the Web facade.

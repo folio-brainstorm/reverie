@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
 
-import type { CanvasRendererDiagnosticsSnapshot } from "@reverie/canvas-renderer";
+import type { CanvasRendererDiagnosticsSnapshot } from "@reveriejs/canvas-renderer";
 
 import { DiagnosticsHistoryChart } from "./DiagnosticsHistoryChart";
 import type { DiagnosticsPanelProps } from "./interfaces/diagnostics/DiagnosticsPanelProps";

@@ -1,4 +1,4 @@
-import type { WorldRect } from "@reverie/core";
+import type { WorldRect } from "@reveriejs/core";
 
 /** Reusable Canvas upload resources for one final-pixel render region. */
 export interface CanvasRegionSurface {

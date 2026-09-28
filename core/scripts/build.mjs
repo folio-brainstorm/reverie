@@ -324,6 +324,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error("Failed to build @reverie/core.", error);
+  console.error("Failed to build @reveriejs/core.", error);
   process.exitCode = 1;
 });

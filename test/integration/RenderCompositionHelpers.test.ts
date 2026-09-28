@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { blendSourceOver, CircleBrush, Raster, World } from "@reverie/core";
+import { blendSourceOver, CircleBrush, Raster, World } from "@reveriejs/core";
 import {
   compositeRgbaSourceOverInPlace,
   intersectRenderRegion,
   resolveRenderSource,
-} from "@reverie/core/rendering/internal";
+} from "@reveriejs/core/rendering/internal";
 
 describe("shared render-source resolution", () => {
   it("captures immutable dependencies without freezing or retaining caller config", () => {

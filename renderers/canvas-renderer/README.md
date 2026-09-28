@@ -1,14 +1,14 @@
-# @reverie/canvas-renderer
+# @reveriejs/canvas-renderer
 
-Canvas presentation for a Rêverie `World` or `Raster`. Most browser applications should use `@reverie/web` instead.
+Canvas presentation for a Rêverie `World` or `Raster`. Most browser applications should use `@reveriejs/web` instead.
 
 ```bash
-pnpm add @reverie/core @reverie/canvas-renderer
+pnpm add @reveriejs/core @reveriejs/canvas-renderer
 ```
 
 ```ts
-import { Camera, World } from "@reverie/core";
-import { CanvasRenderer } from "@reverie/canvas-renderer";
+import { Camera, World } from "@reveriejs/core";
+import { CanvasRenderer } from "@reveriejs/canvas-renderer";
 
 const canvas = document.querySelector("canvas");
 if (!(canvas instanceof HTMLCanvasElement)) {

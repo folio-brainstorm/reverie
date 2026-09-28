@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { CircleBrush, Raster, Stroke } from "@reverie/core";
-import type { WorldPoint } from "@reverie/core";
+import { CircleBrush, Raster, Stroke } from "@reveriejs/core";
+import type { WorldPoint } from "@reveriejs/core";
 
 const OPAQUE_INK = { r: 10, g: 20, b: 30, a: 255 };
 

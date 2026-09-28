@@ -17,12 +17,12 @@ const server = await createServer({
   server: { host: "127.0.0.1", port: 5187, strictPort: true },
   optimizeDeps: {
     exclude: [
-      "@reverie/core",
-      "@reverie/core/rendering",
-      "@reverie/core/rendering/internal",
-      "@reverie/canvas-renderer",
-      "@reverie/web",
-      "@reverie/exporter",
+      "@reveriejs/core",
+      "@reveriejs/core/rendering",
+      "@reveriejs/core/rendering/internal",
+      "@reveriejs/canvas-renderer",
+      "@reveriejs/web",
+      "@reveriejs/exporter",
     ],
   },
   plugins: [

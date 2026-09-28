@@ -1,4 +1,4 @@
-import type { World } from "@reverie/core";
+import type { World } from "@reveriejs/core";
 
 import { importProjectBlob } from "./ImportProjectBlob.js";
 

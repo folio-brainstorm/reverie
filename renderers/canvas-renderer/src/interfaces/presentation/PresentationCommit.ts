@@ -1,4 +1,4 @@
-import type { WorldRect } from "@reverie/core";
+import type { WorldRect } from "@reveriejs/core";
 
 import type { PresentationFrame } from "./PresentationFrame.js";
 

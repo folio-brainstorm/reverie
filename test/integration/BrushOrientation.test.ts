@@ -8,7 +8,7 @@ import {
   Raster,
   ReverieRangeError,
   Stroke,
-} from "@reverie/core";
+} from "@reveriejs/core";
 import type {
   BrushDynamics,
   CircleBrushConfig,
@@ -16,7 +16,7 @@ import type {
   ImageBrushConfig,
   RGBAColor,
   StampCommand,
-} from "@reverie/core";
+} from "@reveriejs/core";
 
 const OPAQUE_GREEN: RGBAColor = { r: 0, g: 255, b: 0, a: 255 };
 const STAMP_POSITION = { x: 0.5, y: 0.5 };

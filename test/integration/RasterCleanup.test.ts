@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { Raster, World } from "@reverie/core";
-import { serializeRaster } from "@reverie/core/document";
-import { DocumentHistory } from "@reverie/core/history";
+import { Raster, World } from "@reveriejs/core";
+import { serializeRaster } from "@reveriejs/core/document";
+import { DocumentHistory } from "@reveriejs/core/history";
 import {
   getRasterTilePixels,
   getRasterTileVersion,
   getRasterTileView,
-} from "@reverie/core/rendering/internal";
+} from "@reveriejs/core/rendering/internal";
 
 const RED = { r: 255, g: 0, b: 0, a: 255 };
 const BLUE = { r: 0, g: 0, b: 255, a: 255 };

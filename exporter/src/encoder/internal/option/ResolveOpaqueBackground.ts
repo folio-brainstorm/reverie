@@ -1,4 +1,4 @@
-import type { RGBAColor } from "@reverie/core";
+import type { RGBAColor } from "@reveriejs/core";
 
 import {
   MAX_CHANNEL_VALUE,

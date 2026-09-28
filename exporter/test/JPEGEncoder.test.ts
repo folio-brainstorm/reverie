@@ -1,4 +1,4 @@
-import type { RGBAColor } from "@reverie/core";
+import type { RGBAColor } from "@reveriejs/core";
 import { decode as decodeJpeg } from "jpeg-js";
 import { describe, expect, it } from "vitest";
 

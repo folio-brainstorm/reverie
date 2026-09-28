@@ -1,14 +1,14 @@
-# @reverie/web
+# @reveriejs/web
 
 Browser input and canvas runtime for Rêverie. Use this package for a standard interactive canvas.
 
 ```bash
-pnpm add @reverie/core @reverie/web
+pnpm add @reveriejs/core @reveriejs/web
 ```
 
 ```ts
-import { PixelBrush } from "@reverie/core";
-import { ReverieCanvas } from "@reverie/web";
+import { PixelBrush } from "@reveriejs/core";
+import { ReverieCanvas } from "@reveriejs/web";
 
 const canvas = document.querySelector("canvas");
 if (!(canvas instanceof HTMLCanvasElement)) {

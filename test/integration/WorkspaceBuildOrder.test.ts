@@ -39,9 +39,9 @@ describe("workspace build prerequisites", () => {
   ])("%s builds exporter before its web consumer", (scriptName) => {
     const commands = readRootScript(scriptName).split(" && ");
     const exporterBuildIndex = commands.indexOf(
-      "pnpm --filter @reverie/exporter build",
+      "pnpm --filter @reveriejs/exporter build",
     );
-    const webBuildIndex = commands.indexOf("pnpm --filter @reverie/web build");
+    const webBuildIndex = commands.indexOf("pnpm --filter @reveriejs/web build");
 
     expect(exporterBuildIndex).toBeGreaterThanOrEqual(0);
     expect(webBuildIndex).toBeGreaterThan(exporterBuildIndex);
