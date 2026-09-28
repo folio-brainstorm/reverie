@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { World } from "@reverie/core";
+import { World } from "@reveriejs/core";
 import {
   deserializeDocument,
   serializeDocument,
-} from "@reverie/core/document";
+} from "@reveriejs/core/document";
 import {
   decodeProjectContainer,
   exportProject,
-} from "@reverie/core/project";
+} from "@reveriejs/core/project";
 
 describe("Project export", () => {
   it("exports a complete editable World through the document and container pipeline", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ErrorCodes } from "@reverie/core";
+import { ErrorCodes } from "@reveriejs/core";
 import { TileStore } from "../../core/src/core/tile/store/TileStore";
 import {
   ReverieError,

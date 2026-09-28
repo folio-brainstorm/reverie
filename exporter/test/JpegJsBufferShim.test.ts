@@ -24,7 +24,7 @@ afterEach(() => {
 /**
  * Reads the global `Buffer` without declaring it in this type program.
  *
- * Neither `@reverie/exporter` nor this test declares a global `Buffer`, so the
+ * Neither `@reveriejs/exporter` nor this test declares a global `Buffer`, so the
  * property is reached through a structural view of `globalThis`.
  *
  * @returns The installed shim, or `undefined` when the global is absent.

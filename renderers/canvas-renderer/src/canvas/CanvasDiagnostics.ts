@@ -1,6 +1,6 @@
-import type { RenderingCore } from "@reverie/core/rendering";
-import type { TimingMetric } from "@reverie/core/rendering";
-import type { RenderQualityMode } from "@reverie/core/rendering";
+import type { RenderingCore } from "@reveriejs/core/rendering";
+import type { TimingMetric } from "@reveriejs/core/rendering";
+import type { RenderQualityMode } from "@reveriejs/core/rendering";
 
 import type { CanvasRendererDiagnosticsSnapshot } from "../interfaces/diagnostics/CanvasRendererDiagnosticsSnapshot.js";
 import type { CoveragePlan } from "../interfaces/prefetch/CoveragePlan.js";

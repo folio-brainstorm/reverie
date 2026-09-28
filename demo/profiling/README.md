@@ -8,9 +8,9 @@ From the repository root, with its declared Node and pnpm versions:
 
 ```powershell
 pnpm build
-pnpm --filter @reverie/demo exec tsc -p profiling/tsconfig.json
-pnpm --filter @reverie/demo exec node profiling/RunPanProfile.mjs
-pnpm --filter @reverie/demo exec node profiling/SummarizePanProfile.mjs
+pnpm --filter @reveriejs/demo exec tsc -p profiling/tsconfig.json
+pnpm --filter @reveriejs/demo exec node profiling/RunPanProfile.mjs
+pnpm --filter @reveriejs/demo exec node profiling/SummarizePanProfile.mjs
 ```
 
 The runner uses the already installed Vite and Playwright dependencies, binds
@@ -37,8 +37,8 @@ Disable internal method probes to estimate instrumentation overhead:
 
 ```powershell
 $env:PAN_PROFILE_INSTRUMENT = "false"
-pnpm --filter @reverie/demo exec node profiling/RunPanProfile.mjs
-pnpm --filter @reverie/demo exec node profiling/SummarizePanProfile.mjs pan-profile-baseline
+pnpm --filter @reveriejs/demo exec node profiling/RunPanProfile.mjs
+pnpm --filter @reveriejs/demo exec node profiling/SummarizePanProfile.mjs pan-profile-baseline
 ```
 
 Select a single scenario in a fresh browser process and capture browser-side work:
@@ -46,8 +46,8 @@ Select a single scenario in a fresh browser process and capture browser-side wor
 ```powershell
 $env:PAN_PROFILE_CASE = "3"
 $env:PAN_PROFILE_TRACE = "true"
-pnpm --filter @reverie/demo exec node profiling/RunPanProfile.mjs
-pnpm --filter @reverie/demo exec node profiling/SummarizePanProfile.mjs pan-profile-baseline-case3
+pnpm --filter @reveriejs/demo exec node profiling/RunPanProfile.mjs
+pnpm --filter @reveriejs/demo exec node profiling/SummarizePanProfile.mjs pan-profile-baseline-case3
 ```
 
 Use case 5 for the tiny-zoom interactive-start control. These environment

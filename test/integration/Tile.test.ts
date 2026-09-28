@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { ErrorCodes, ReverieRangeError, Tile } from "@reverie/core";
-import type { RGBAColor } from "@reverie/core";
+import { ErrorCodes, ReverieRangeError, Tile } from "@reveriejs/core";
+import type { RGBAColor } from "@reveriejs/core";
 
 const TILE_SIZE = 4;
 const TRANSPARENT_BLACK: RGBAColor = { r: 0, g: 0, b: 0, a: 0 };

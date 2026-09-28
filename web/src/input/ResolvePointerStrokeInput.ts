@@ -2,7 +2,7 @@ import {
   DEFAULT_PRESSURE,
   DEFAULT_TILT_X,
   DEFAULT_TILT_Y,
-} from "@reverie/core";
+} from "@reveriejs/core";
 
 import type { PointerStrokeInput } from "../interfaces/input/PointerStrokeInput.js";
 

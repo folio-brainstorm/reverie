@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { Camera, Raster, World } from "@reverie/core";
-import { deserializeDocument, serializeDocument } from "@reverie/core/document";
-import { RenderingCore } from "@reverie/core/rendering";
-import type { Renderer } from "@reverie/core/rendering";
+import { Camera, Raster, World } from "@reveriejs/core";
+import { deserializeDocument, serializeDocument } from "@reveriejs/core/document";
+import { RenderingCore } from "@reveriejs/core/rendering";
+import type { Renderer } from "@reveriejs/core/rendering";
 
 import {
   CanvasRenderer,

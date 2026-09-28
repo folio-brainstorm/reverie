@@ -8,8 +8,8 @@ import {
   ReverieRangeError,
   ReverieTypeError,
   World,
-} from "@reverie/core";
-import { getRasterTileVersion } from "@reverie/core/rendering/internal";
+} from "@reveriejs/core";
+import { getRasterTileVersion } from "@reveriejs/core/rendering/internal";
 
 describe("World layer membership and ordering", () => {
   it.each(["Layer", "", "Sketch"])(

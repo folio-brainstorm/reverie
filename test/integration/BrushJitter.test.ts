@@ -9,8 +9,8 @@ import {
   ReverieRangeError,
   sampleStampRandom,
   STAMP_RANDOM_CHANNELS,
-} from "@reverie/core";
-import type { CircleBrushConfig, StampCommand } from "@reverie/core";
+} from "@reveriejs/core";
+import type { CircleBrushConfig, StampCommand } from "@reveriejs/core";
 
 const COLOR = { r: 0, g: 255, b: 0, a: 255 };
 const POSITION = { x: 0.5, y: 0.5 };

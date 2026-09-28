@@ -109,7 +109,7 @@ pnpm dev
 在浏览器项目中，`ReverieCanvas` 是最短的接入路径：
 
 ```ts
-import { ReverieCanvas } from "@reverie/web";
+import { ReverieCanvas } from "@reveriejs/web";
 
 const canvas = document.querySelector("canvas");
 
@@ -166,12 +166,12 @@ reverie.renderer.configureDiagnostics({ timings: false });
 
 | 包                                                        | 职责                                                           |
 | --------------------------------------------------------- | -------------------------------------------------------------- |
-| [`@reverie/core`](./core)                                 | 平台无关的世界、图层、稀疏像素、笔刷、笔触、选区与文档模型。   |
-| [`@reverie/canvas-renderer`](./renderers/canvas-renderer) | 以 HTML Canvas 呈现当前 Camera 视图，并维护缩小时的 LOD 缓存。 |
-| [`@reverie/web`](./web)                                   | 浏览器输入、绘制调度、历史记录、画布门面和下载能力。           |
-| [`@reverie/exporter`](./exporter)                         | 世界区域合成，以及 PNG、JPEG、WebP 编码。                      |
-| [`@reverie/demo`](./demo)                                 | 使用 React + Vite 构建的浏览器示例应用。                       |
-| [`@reverie/test`](./test)                                 | 核心行为的 Vitest 集成测试。                                   |
+| [`@reveriejs/core`](./core)                                 | 平台无关的世界、图层、稀疏像素、笔刷、笔触、选区与文档模型。   |
+| [`@reveriejs/canvas-renderer`](./renderers/canvas-renderer) | 以 HTML Canvas 呈现当前 Camera 视图，并维护缩小时的 LOD 缓存。 |
+| [`@reveriejs/web`](./web)                                   | 浏览器输入、绘制调度、历史记录、画布门面和下载能力。           |
+| [`@reveriejs/exporter`](./exporter)                         | 世界区域合成，以及 PNG、JPEG、WebP 编码。                      |
+| [`@reveriejs/demo`](./demo)                                 | 使用 React + Vite 构建的浏览器示例应用。                       |
+| [`@reveriejs/test`](./test)                                 | 核心行为的 Vitest 集成测试。                                   |
 
 ## 技术栈
 

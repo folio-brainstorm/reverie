@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { ReverieError } from "@reverie/core";
-import type { ReverieDocumentV1 } from "@reverie/core/document";
+import { ReverieError } from "@reveriejs/core";
+import type { ReverieDocumentV1 } from "@reveriejs/core/document";
 import {
   decodeProjectContainer,
   encodeProjectContainer,
   PROJECT_CONTAINER_VERSION,
   PROJECT_FORMAT,
-} from "@reverie/core/project";
+} from "@reveriejs/core/project";
 
 describe("Project container", () => {
   it("round-trips deterministic sparse Raster bytes including negative coordinates and transparent RGB", () => {

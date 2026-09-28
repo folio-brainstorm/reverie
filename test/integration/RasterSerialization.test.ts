@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import { Raster, World } from "@reverie/core";
+import { Raster, World } from "@reveriejs/core";
 import {
   getRasterTilePixels,
   getRasterTileVersion,
-} from "@reverie/core/rendering/internal";
+} from "@reveriejs/core/rendering/internal";
 import {
   deserializeRaster,
   parseDocument,
   parseRaster,
   serializeDocument,
   serializeRaster,
-} from "@reverie/core/document";
+} from "@reveriejs/core/document";
 
 describe("Raster serialization", () => {
   it("round-trips exact RGBA8 bytes, including transparent RGB channels", () => {

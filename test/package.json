@@ -1,5 +1,5 @@
 {
-  "name": "@reverie/test",
+  "name": "@reveriejs/test",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@reverie/core": "workspace:*"
+    "@reveriejs/core": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^7.0.2",

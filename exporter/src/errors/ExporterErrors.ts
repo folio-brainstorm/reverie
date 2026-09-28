@@ -1,4 +1,4 @@
-import { createReverieErrorBase } from "@reverie/core";
+import { createReverieErrorBase } from "@reveriejs/core";
 
 import type { ExporterErrorCode } from "../interfaces/errors/ExporterErrorCode.js";
 

@@ -6,8 +6,8 @@ import {
   Raster,
   ReverieRangeError,
   Stroke,
-} from "@reverie/core";
-import type { Brush, StampCommand, WorldPoint } from "@reverie/core";
+} from "@reveriejs/core";
+import type { Brush, StampCommand, WorldPoint } from "@reveriejs/core";
 
 const COLOR = { r: 84, g: 153, b: 255, a: 255 };
 

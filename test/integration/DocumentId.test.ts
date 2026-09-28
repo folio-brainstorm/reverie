@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { World } from "@reverie/core";
+import { World } from "@reveriejs/core";
 
 describe("Document identity fallback", () => {
   afterEach(() => {

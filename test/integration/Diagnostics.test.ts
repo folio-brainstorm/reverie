@@ -9,14 +9,14 @@ import {
 import {
   DiagnosticCodes,
   ErrorCodes,
-} from "@reverie/core";
+} from "@reveriejs/core";
 import type {
   Diagnostic,
   DiagnosticCode,
   DiagnosticReporter,
   DiagnosticSeverity,
   WorldConfig,
-} from "@reverie/core";
+} from "@reveriejs/core";
 import {
   DEFAULT_WORLD_TILE_SIZE,
   defaultWorldConfig,

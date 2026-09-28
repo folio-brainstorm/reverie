@@ -8,9 +8,9 @@ import {
   Raster,
   SelectionMask,
   Stroke,
-} from "@reverie/core";
-import type { Brush, StampCommand } from "@reverie/core";
-import { ExportRenderer } from "@reverie/exporter";
+} from "@reveriejs/core";
+import type { Brush, StampCommand } from "@reveriejs/core";
+import { ExportRenderer } from "@reveriejs/exporter";
 
 import {
   DrawingScheduler,

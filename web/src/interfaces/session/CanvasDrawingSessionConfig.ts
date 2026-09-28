@@ -6,8 +6,8 @@ import type {
   RasterLayer,
   SelectionMask,
   World,
-} from "@reverie/core";
-import type { CanvasRenderer } from "@reverie/canvas-renderer";
+} from "@reveriejs/core";
+import type { CanvasRenderer } from "@reveriejs/canvas-renderer";
 
 import type { DrawingScheduler } from "../../scheduler/DrawingScheduler.js";
 

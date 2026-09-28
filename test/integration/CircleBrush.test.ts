@@ -6,8 +6,8 @@ import {
   Raster,
   ReverieRangeError,
   ReverieTypeError,
-} from "@reverie/core";
-import type { Brush, CircleBrushConfig, RGBAColor } from "@reverie/core";
+} from "@reveriejs/core";
+import type { Brush, CircleBrushConfig, RGBAColor } from "@reveriejs/core";
 
 const OPAQUE_GREEN: RGBAColor = { r: 0, g: 255, b: 0, a: 255 };
 

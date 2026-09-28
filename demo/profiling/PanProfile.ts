@@ -1,7 +1,7 @@
-import { Camera, CircleBrush, World } from "@reverie/core";
-import { getRasterTileVersion } from "@reverie/core/rendering/internal";
-import { CanvasRenderer } from "@reverie/canvas-renderer";
-import { CanvasDrawingSession } from "@reverie/web";
+import { Camera, CircleBrush, World } from "@reveriejs/core";
+import { getRasterTileVersion } from "@reveriejs/core/rendering/internal";
+import { CanvasRenderer } from "@reveriejs/canvas-renderer";
+import { CanvasDrawingSession } from "@reveriejs/web";
 
 import type { PanProfileFrame } from "./interfaces/PanProfileFrame";
 import tapPanMethod from "./TapPanMethod";

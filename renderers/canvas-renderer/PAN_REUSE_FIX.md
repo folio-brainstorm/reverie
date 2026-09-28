@@ -53,9 +53,9 @@ a fresh renderer at zoom 1, 0.5, and 0.25, including settled refinement.
 - Commit-wide `pnpm build`: passed.
 - Commit-wide `pnpm test`: 1,411 tests passed (983 Core/integration, 134 Web,
   93 Canvas renderer, and 201 exporter). This command does not run browser tests.
-- `pnpm --filter @reverie/canvas-renderer typecheck`: passed.
-- `pnpm --filter @reverie/canvas-renderer test`: 93 passed.
-- `pnpm --filter @reverie/canvas-renderer build`: passed; rebuilt for profiling.
+- `pnpm --filter @reveriejs/canvas-renderer typecheck`: passed.
+- `pnpm --filter @reveriejs/canvas-renderer test`: 93 passed.
+- `pnpm --filter @reveriejs/canvas-renderer build`: passed; rebuilt for profiling.
 - Targeted Chromium and Firefox pixel/refinement tests: 8 passed.
 - Full browser suite: 22 passed, 4 failed. The failures are the previously
   observed old-pixels-until-completion assertion in both browsers, Firefox's
@@ -63,7 +63,7 @@ a fresh renderer at zoom 1, 0.5, and 0.25, including settled refinement.
   hash. Their assertions were not weakened or updated by this fix. The final
   projection simplification was subsequently checked with the targeted browser
   tests; the full suite was not repeated after that simplification.
-- `pnpm --filter @reverie/demo exec tsc -p profiling/tsconfig.json`: passed for
+- `pnpm --filter @reveriejs/demo exec tsc -p profiling/tsconfig.json`: passed for
   local instrumentation.
 
 Production changes are confined to this package and its private implementation;

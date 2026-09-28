@@ -1,4 +1,4 @@
-import { resolvePaintMode, SelectionMask, Stroke } from "@reverie/core";
+import { resolvePaintMode, SelectionMask, Stroke } from "@reveriejs/core";
 import type {
   Brush,
   Camera,
@@ -6,11 +6,11 @@ import type {
   Raster,
   RasterLayer,
   World,
-} from "@reverie/core";
-import { DocumentHistory } from "@reverie/core/history";
-import type { RasterHistoryTransaction } from "@reverie/core/history";
-import type { CanvasRenderer } from "@reverie/canvas-renderer";
-import type { RenderQualityMode } from "@reverie/core/rendering";
+} from "@reveriejs/core";
+import { DocumentHistory } from "@reveriejs/core/history";
+import type { RasterHistoryTransaction } from "@reveriejs/core/history";
+import type { CanvasRenderer } from "@reveriejs/canvas-renderer";
+import type { RenderQualityMode } from "@reveriejs/core/rendering";
 
 import { WebErrorDefinitions } from "../errors/WebErrorDefinitions.js";
 import { WebError, WebRangeError, WebTypeError } from "../errors/WebErrors.js";

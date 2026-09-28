@@ -1,5 +1,5 @@
 {
-  "name": "@reverie/exporter",
+  "name": "@reveriejs/exporter",
   "version": "1.0.0",
   "description": "Export a fixed size RGBA buffer or encoded image file.",
   "license": "Apache-2.0",
@@ -38,7 +38,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@reverie/core": "workspace:*",
+    "@reveriejs/core": "workspace:*",
     "@stacksjs/ts-webp": "^0.1.3",
     "fflate": "^0.8.3",
     "jpeg-js": "^0.4.4"

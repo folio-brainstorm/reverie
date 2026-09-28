@@ -1,6 +1,6 @@
-import type { Raster } from "@reverie/core";
-import { ExportRenderer } from "@reverie/exporter";
-import type { ExportRegion, ExportResult } from "@reverie/exporter";
+import type { Raster } from "@reveriejs/core";
+import { ExportRenderer } from "@reveriejs/exporter";
+import type { ExportRegion, ExportResult } from "@reveriejs/exporter";
 
 const RGBA_CHANNEL_COUNT = 4;
 

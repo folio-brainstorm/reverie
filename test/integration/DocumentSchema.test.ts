@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { Raster, RasterLayer, ReverieError, World } from "@reverie/core";
+import { Raster, RasterLayer, ReverieError, World } from "@reveriejs/core";
 import {
   CURRENT_DOCUMENT_VERSION,
   DOCUMENT_COMPATIBILITY,
@@ -11,12 +11,12 @@ import {
   migrateDocument,
   parseDocument,
   serializeDocument,
-} from "@reverie/core/document";
+} from "@reveriejs/core/document";
 import type {
   DocumentMigration,
   DocumentSchemaValidator,
   ReverieDocumentV1,
-} from "@reverie/core/document";
+} from "@reveriejs/core/document";
 
 describe("Versioned document schema", () => {
   it("serializes bounded World metadata with negative bounds, stable IDs, and layer order", () => {

@@ -1,4 +1,4 @@
-import { Camera, CircleBrush, World } from "@reverie/core";
+import { Camera, CircleBrush, World } from "@reveriejs/core";
 import type {
   Brush,
   LayerBlendMode,
@@ -6,10 +6,10 @@ import type {
   RasterLayer,
   SelectionMask,
   WorldBounds,
-} from "@reverie/core";
-import type { RenderQualityMode } from "@reverie/core/rendering";
-import type { ExportRegion } from "@reverie/exporter";
-import { CanvasRenderer } from "@reverie/canvas-renderer";
+} from "@reveriejs/core";
+import type { RenderQualityMode } from "@reveriejs/core/rendering";
+import type { ExportRegion } from "@reveriejs/exporter";
+import { CanvasRenderer } from "@reveriejs/canvas-renderer";
 
 import { WebErrorDefinitions } from "../errors/WebErrorDefinitions.js";
 import { WebError, WebRangeError, WebTypeError } from "../errors/WebErrors.js";

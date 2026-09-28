@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createReverieErrorBase,
   ReverieError,
-} from "@reverie/core";
+} from "@reveriejs/core";
 import type {
   CodedError,
   ErrorCodeCatalog,
@@ -12,7 +12,7 @@ import type {
   ReverieErrorBaseConstructor,
   ReverieErrorConstructor,
   TemplateArguments,
-} from "@reverie/core";
+} from "@reveriejs/core";
 
 const CUSTOM_ERROR_DEFINITION = {
   code: "EC_EXTENSION_0001",

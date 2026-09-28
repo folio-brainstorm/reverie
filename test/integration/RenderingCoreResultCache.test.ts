@@ -1,5 +1,5 @@
-import { Raster, ReverieRangeError, World } from "@reverie/core";
-import { RenderingCore } from "@reverie/core/rendering";
+import { Raster, ReverieRangeError, World } from "@reveriejs/core";
+import { RenderingCore } from "@reveriejs/core/rendering";
 import { describe, expect, it } from "vitest";
 
 describe("RenderingCore result cache", () => {

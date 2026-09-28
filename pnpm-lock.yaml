@@ -36,16 +36,16 @@ importers:
 
   demo:
     dependencies:
-      '@reverie/canvas-renderer':
+      '@reveriejs/canvas-renderer':
         specifier: workspace:*
         version: link:../renderers/canvas-renderer
-      '@reverie/core':
+      '@reveriejs/core':
         specifier: workspace:*
         version: link:../core
-      '@reverie/exporter':
+      '@reveriejs/exporter':
         specifier: workspace:*
         version: link:../exporter
-      '@reverie/web':
+      '@reveriejs/web':
         specifier: workspace:*
         version: link:../web
       react:
@@ -73,7 +73,7 @@ importers:
 
   exporter:
     dependencies:
-      '@reverie/core':
+      '@reveriejs/core':
         specifier: workspace:*
         version: link:../core
       '@stacksjs/ts-webp':
@@ -95,7 +95,7 @@ importers:
 
   renderers/canvas-renderer:
     dependencies:
-      '@reverie/core':
+      '@reveriejs/core':
         specifier: workspace:*
         version: link:../../core
     devDependencies:
@@ -114,7 +114,7 @@ importers:
 
   test:
     dependencies:
-      '@reverie/core':
+      '@reveriejs/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -127,13 +127,13 @@ importers:
 
   web:
     dependencies:
-      '@reverie/canvas-renderer':
+      '@reveriejs/canvas-renderer':
         specifier: workspace:*
         version: link:../renderers/canvas-renderer
-      '@reverie/core':
+      '@reveriejs/core':
         specifier: workspace:*
         version: link:../core
-      '@reverie/exporter':
+      '@reveriejs/exporter':
         specifier: workspace:*
         version: link:../exporter
     devDependencies:

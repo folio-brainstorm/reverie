@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { Stroke } from "@reverie/core";
-import type { Brush, StampCommand } from "@reverie/core";
+import { Stroke } from "@reveriejs/core";
+import type { Brush, StampCommand } from "@reveriejs/core";
 
 describe("Stroke stamp direction", () => {
   it.each([

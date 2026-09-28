@@ -1,4 +1,4 @@
-import type { RenderRegion } from "@reverie/core/rendering";
+import type { RenderRegion } from "@reveriejs/core/rendering";
 
 import type { PresentationCacheContext } from "./PresentationCacheContext.js";
 

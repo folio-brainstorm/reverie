@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { RenderRegion } from "@reverie/core/rendering";
-import type { RenderRequestIdentity } from "@reverie/core/rendering/internal";
+import type { RenderRegion } from "@reveriejs/core/rendering";
+import type { RenderRequestIdentity } from "@reveriejs/core/rendering/internal";
 
 import PresentationState from "../src/canvas/PresentationState.js";
 

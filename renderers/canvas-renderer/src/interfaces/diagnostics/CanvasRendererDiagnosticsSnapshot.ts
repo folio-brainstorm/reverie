@@ -1,7 +1,7 @@
 import type {
   RenderingCoreDiagnosticsSnapshot,
   TimingMetric,
-} from "@reverie/core/rendering";
+} from "@reveriejs/core/rendering";
 
 /** Detached measurements for the latest Canvas render call and its core. */
 export interface CanvasRendererDiagnosticsSnapshot extends RenderingCoreDiagnosticsSnapshot {

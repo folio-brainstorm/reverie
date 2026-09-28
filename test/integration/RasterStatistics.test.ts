@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { Raster, World } from "@reverie/core";
+import { Raster, World } from "@reveriejs/core";
 
 const TRANSPARENT = { r: 0, g: 0, b: 0, a: 0 };
 const HIDDEN_RED = { r: 255, g: 0, b: 0, a: 0 };

@@ -1,4 +1,4 @@
-import type { RenderSource } from "@reverie/core/rendering";
+import type { RenderSource } from "@reveriejs/core/rendering";
 
 /** Dependencies used by an export renderer for every explicit export pass. */
 export type ExportRendererConfig = RenderSource;

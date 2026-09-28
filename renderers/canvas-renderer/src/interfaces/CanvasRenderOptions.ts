@@ -1,4 +1,4 @@
-import type { RenderQualityMode } from "@reverie/core/rendering";
+import type { RenderQualityMode } from "@reveriejs/core/rendering";
 
 /** Optional host policy for one explicit Canvas render pass. */
 export interface CanvasRenderOptions {

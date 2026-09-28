@@ -1,6 +1,6 @@
-import type { World } from "@reverie/core";
+import type { World } from "@reveriejs/core";
 
-import { importProject } from "@reverie/core/project";
+import { importProject } from "@reveriejs/core/project";
 
 /**
  * Reads a browser Blob and imports its `.reverie` bytes as a new independent World.

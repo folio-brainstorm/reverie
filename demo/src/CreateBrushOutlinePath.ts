@@ -1,5 +1,5 @@
-import { Rasterizers } from "@reverie/core";
-import type { PixelCoord, ScreenPoint } from "@reverie/core";
+import { Rasterizers } from "@reveriejs/core";
+import type { PixelCoord, ScreenPoint } from "@reveriejs/core";
 
 import type { BrushMode } from "./interfaces/brush/BrushMode";
 

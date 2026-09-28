@@ -1,4 +1,4 @@
-import type { ErrorDefinition } from "@reverie/core";
+import type { ErrorDefinition } from "@reveriejs/core";
 
 /** Web-owned message templates paired with stable Web error codes. */
 export const WebErrorDefinitions = {

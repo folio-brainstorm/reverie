@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { Raster } from "@reverie/core";
-import type { Renderer as RootRenderer } from "@reverie/core";
+import { Raster } from "@reveriejs/core";
+import type { Renderer as RootRenderer } from "@reveriejs/core";
 import {
   getRasterTilePixels,
   getRasterTileVersion,
   getRasterTileView,
-} from "@reverie/core/rendering/internal";
-import type { Renderer, TileCoord } from "@reverie/core/rendering";
+} from "@reveriejs/core/rendering/internal";
+import type { Renderer, TileCoord } from "@reveriejs/core/rendering";
 
 const TILE_SIZE = 2;
 

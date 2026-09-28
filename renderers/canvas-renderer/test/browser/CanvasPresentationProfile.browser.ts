@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { Camera, World } from "@reverie/core";
+import { Camera, World } from "@reveriejs/core";
 
 import { CanvasRenderer } from "../../index.js";
 import CanvasBackend from "../../src/canvas/CanvasBackend.js";

@@ -14,7 +14,7 @@ import {
   LAYER_BLEND_MODES,
   PixelBrush,
   SelectionMask,
-} from "@reverie/core";
+} from "@reveriejs/core";
 import type {
   Brush,
   BrushImage,
@@ -26,16 +26,16 @@ import type {
   RGBAColor,
   ScreenPoint,
   WorldPoint,
-} from "@reverie/core";
-import type { ExportFormat, ExportRegion } from "@reverie/exporter";
+} from "@reveriejs/core";
+import type { ExportFormat, ExportRegion } from "@reveriejs/exporter";
 import {
   ReverieCanvas,
   downloadProject,
   importProjectFile,
   PROJECT_FILE_EXTENSION,
   PROJECT_MIME_TYPE,
-} from "@reverie/web";
-import type { ReverieDownloadOptions } from "@reverie/web";
+} from "@reveriejs/web";
+import type { ReverieDownloadOptions } from "@reveriejs/web";
 
 import { createBrushOutlinePath } from "./CreateBrushOutlinePath";
 import { createSelectionRect } from "./CreateSelectionRect";

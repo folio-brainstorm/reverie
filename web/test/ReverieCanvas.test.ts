@@ -8,14 +8,14 @@ import {
   SelectionMask,
   Stroke,
   World,
-} from "@reverie/core";
-import type { StampCommand } from "@reverie/core";
+} from "@reveriejs/core";
+import type { StampCommand } from "@reveriejs/core";
 import {
   ExportRenderer,
   JPEGEncoder,
   PNGEncoder,
   WebPEncoder,
-} from "@reverie/exporter";
+} from "@reveriejs/exporter";
 
 import {
   CanvasDrawingSession,

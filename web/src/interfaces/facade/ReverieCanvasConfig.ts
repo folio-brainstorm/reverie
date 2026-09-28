@@ -1,5 +1,5 @@
-import type { Brush, PaintMode, SelectionMask, World } from "@reverie/core";
-import type { CanvasRendererConfig } from "@reverie/canvas-renderer";
+import type { Brush, PaintMode, SelectionMask, World } from "@reveriejs/core";
+import type { CanvasRendererConfig } from "@reveriejs/canvas-renderer";
 
 /** Configuration for a complete browser drawing surface. */
 export interface ReverieCanvasConfig {

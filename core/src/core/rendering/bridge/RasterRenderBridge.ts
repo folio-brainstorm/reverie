@@ -20,7 +20,7 @@ const TILE_WRITE_NOTIFIERS = new WeakMap<
  * Registers the private TileStore owned by a Raster instance.
  *
  * This is a package-internal integration hook and is not exported through an
- * `@reverie/core` package entry point.
+ * `@reveriejs/core` package entry point.
  *
  * @param raster - Raster that owns the store.
  * @param tileStore - Private sparse storage owned by the Raster.
@@ -36,7 +36,7 @@ export function registerRasterTileStore(
  * Registers the private RGBA8 storage owned by a Tile instance.
  *
  * This is a package-internal integration hook and is not exported through an
- * `@reverie/core` package entry point.
+ * `@reveriejs/core` package entry point.
  *
  * @param tile - Tile that owns the pixel storage.
  * @param pixels - Mutable storage that remains owned exclusively by the Tile.
