@@ -10,7 +10,7 @@ import type {
 import { DocumentHistory } from "@reverie/core/history";
 import type { RasterHistoryTransaction } from "@reverie/core/history";
 import type { CanvasRenderer } from "@reverie/canvas-renderer";
-import type { RenderQualityMode } from "@reverie/core/renderer";
+import type { RenderQualityMode } from "@reverie/core/rendering";
 
 import { WebErrorDefinitions } from "../errors/WebErrorDefinitions.js";
 import { WebError, WebRangeError, WebTypeError } from "../errors/WebErrors.js";
@@ -578,13 +578,16 @@ export class CanvasDrawingSession {
     this.addPointerSamples(event);
   }
 
-  /** Ends pointerup or pointercancel input and releases capture when retained. */
+  /** Accepts the final pointerup input, then ends either pointer lifecycle. */
   private endPointerStroke(event: PointerEvent): void {
     if (event.pointerId !== this.activePointerId) {
       return;
     }
 
     event.preventDefault();
+    if (event.type === "pointerup") {
+      this.addPointerSamples(event);
+    }
     this.finishActiveStroke(true);
   }
 
@@ -602,7 +605,11 @@ export class CanvasDrawingSession {
     const bounds = this.canvas.getBoundingClientRect();
     const coalescedEvents = event.getCoalescedEvents?.() ?? [];
     const pointerEvents =
-      coalescedEvents.length > 0 ? coalescedEvents : [event];
+      coalescedEvents.length === 0
+        ? [event]
+        : event.type === "pointerup"
+          ? [...coalescedEvents, event]
+          : coalescedEvents;
 
     for (const pointerEvent of pointerEvents) {
       const strokeInput = resolvePointerStrokeInput(pointerEvent);
@@ -619,6 +626,11 @@ export class CanvasDrawingSession {
       });
     }
 
+    this.enqueuePendingStamps(stroke);
+  }
+
+  /** Schedules generated commands in their original stroke order. */
+  private enqueuePendingStamps(stroke: Stroke): void {
     while (stroke.hasPendingStamps) {
       const stamp = stroke.nextStamp();
 
@@ -655,6 +667,7 @@ export class CanvasDrawingSession {
     }
 
     stroke.end();
+    this.enqueuePendingStamps(stroke);
     transaction.close();
     this.activeStroke = null;
     this.activeStrokeSelection = null;

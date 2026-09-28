@@ -1,9 +1,7 @@
-import type {
-  RenderRegionSet,
-  RenderRequestIdentity,
-} from "@reverie/core/renderer";
+import type { RenderRegionSet } from "@reverie/core/rendering";
+import type { RenderRequestIdentity } from "@reverie/core/rendering/internal";
 import type { WorldRect } from "@reverie/core";
-import type { TileCoord } from "@reverie/core/renderer";
+import type { TileCoord } from "@reverie/core/rendering";
 
 import type { CachedPresentationRegion } from "../interfaces/presentation/CachedPresentationRegion.js";
 import type { PendingFrame } from "../interfaces/presentation/PendingFrame.js";

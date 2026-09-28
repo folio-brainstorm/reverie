@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { Camera, CircleBrush, Raster, World } from "@reverie/core";
-import { RenderingCore } from "@reverie/core/renderer";
+import { RenderingCore } from "@reverie/core/rendering";
 
 import { CanvasRenderer } from "../../index.js";
 

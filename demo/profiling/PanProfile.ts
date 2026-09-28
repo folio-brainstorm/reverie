@@ -1,5 +1,5 @@
 import { Camera, CircleBrush, World } from "@reverie/core";
-import { getRasterTileVersion } from "@reverie/core/renderer";
+import { getRasterTileVersion } from "@reverie/core/rendering/internal";
 import { CanvasRenderer } from "@reverie/canvas-renderer";
 import { CanvasDrawingSession } from "@reverie/web";
 

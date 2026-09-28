@@ -10,9 +10,13 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./renderer": {
-      "types": "./dist/src/core/renderer/index.d.ts",
-      "import": "./dist/src/core/renderer/index.js"
+    "./rendering": {
+      "types": "./dist/src/core/rendering/index.d.ts",
+      "import": "./dist/src/core/rendering/index.js"
+    },
+    "./rendering/internal": {
+      "types": "./dist/src/core/rendering/internal.d.ts",
+      "import": "./dist/src/core/rendering/internal.js"
     },
     "./history": {
       "types": "./dist/src/core/history/index.d.ts",

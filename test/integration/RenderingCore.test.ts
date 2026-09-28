@@ -5,14 +5,16 @@ import {
   World,
 } from "@reverie/core";
 import {
-  compositeRgbaSourceOverInPlace,
-  getRasterTileView,
   RenderingCore,
   type RenderContext,
   type RendererBackend,
   type RenderRegionSet,
   type RenderTarget,
-} from "@reverie/core/renderer";
+} from "@reverie/core/rendering";
+import {
+  compositeRgbaSourceOverInPlace,
+  getRasterTileView,
+} from "@reverie/core/rendering/internal";
 import { describe, expect, it, vi } from "vitest";
 
 const context: RenderContext = {};

@@ -1,7 +1,5 @@
-import type {
-  RenderRegion,
-  RenderRequestIdentity,
-} from "@reverie/core/renderer";
+import type { RenderRegion } from "@reverie/core/rendering";
+import type { RenderRequestIdentity } from "@reverie/core/rendering/internal";
 
 import type { PresentationCacheContext } from "./PresentationCacheContext.js";
 

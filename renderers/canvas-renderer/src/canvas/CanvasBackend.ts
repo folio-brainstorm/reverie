@@ -1,5 +1,5 @@
 import type { Camera, WorldBounds, WorldRect } from "@reverie/core";
-import type { RenderRegion, RenderTarget } from "@reverie/core/renderer";
+import type { RenderRegion, RenderTarget } from "@reverie/core/rendering";
 
 import { RendererErrorDefinitions } from "../errors/RendererErrorDefinitions.js";
 import {

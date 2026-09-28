@@ -1,5 +1,5 @@
-import { captureRasterStampTiles } from "@reverie/core/renderer";
-import type { TileCoord } from "@reverie/core/renderer";
+import { captureRasterStampTiles } from "@reverie/core/rendering/internal";
+import type { TileCoord } from "@reverie/core/rendering";
 
 import type { DrawingCommand } from "../interfaces/scheduler/DrawingCommand.js";
 import type { DrawingSchedulerConfig } from "../interfaces/scheduler/DrawingSchedulerConfig.js";

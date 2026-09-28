@@ -6,13 +6,13 @@ import {
   getRasterTilePixels,
   getRasterTileVersion,
   getRasterTileView,
-} from "@reverie/core/renderer";
-import type { Renderer, TileCoord } from "@reverie/core/renderer";
+} from "@reverie/core/rendering/internal";
+import type { Renderer, TileCoord } from "@reverie/core/rendering";
 
 const TILE_SIZE = 2;
 
 describe("Raster renderer bridge", () => {
-  it("is available through the dedicated core renderer entry point", () => {
+  it("is available through the dedicated internal rendering entry point", () => {
     const coord: TileCoord = { x: 0, y: 0 };
     const renderer: Renderer = {
       render: () => undefined,

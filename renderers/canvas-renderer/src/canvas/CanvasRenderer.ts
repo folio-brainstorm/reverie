@@ -1,20 +1,22 @@
 import type { Camera, WorldRect } from "@reverie/core";
+import { RenderingCore } from "@reverie/core/rendering";
 import {
   intersectRenderRegion,
-  RenderingCore,
   resolveRenderSource,
-} from "@reverie/core/renderer";
+} from "@reverie/core/rendering/internal";
 import type {
   RenderContinuation,
   RenderQualityMode,
   RenderRegion,
   RenderRegionSet,
-  RenderRequestIdentity,
   Renderer,
   RenderSource,
-  RenderSourceSnapshot,
   TileCoord,
-} from "@reverie/core/renderer";
+} from "@reverie/core/rendering";
+import type {
+  RenderRequestIdentity,
+  RenderSourceSnapshot,
+} from "@reverie/core/rendering/internal";
 
 import { RendererErrorDefinitions } from "../errors/RendererErrorDefinitions.js";
 import {

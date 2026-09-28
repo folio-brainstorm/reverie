@@ -18,7 +18,8 @@ const server = await createServer({
   optimizeDeps: {
     exclude: [
       "@reverie/core",
-      "@reverie/core/renderer",
+      "@reverie/core/rendering",
+      "@reverie/core/rendering/internal",
       "@reverie/canvas-renderer",
       "@reverie/web",
       "@reverie/exporter",

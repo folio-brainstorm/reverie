@@ -80,4 +80,14 @@ export class StrokeResampler {
     this.distanceSinceLastOutput =
       trailingDistance <= tolerance ? 0 : trailingDistance;
   }
+
+  /** Emits the final input only when a nonempty path tail remains unprocessed. */
+  flush(visit: (sample: StrokeSample) => void): void {
+    if (this.lastInputSample === null || this.distanceSinceLastOutput === 0) {
+      return;
+    }
+
+    visit(copyStrokeSample(this.lastInputSample));
+    this.distanceSinceLastOutput = 0;
+  }
 }

@@ -1,6 +1,6 @@
 import type { WorldRect } from "@reverie/core";
-import type { RenderQualityMode } from "@reverie/core/renderer";
-import type { RenderResultClass } from "@reverie/core/renderer";
+import type { RenderQualityMode } from "@reverie/core/rendering";
+import type { RenderResultClass } from "@reverie/core/rendering/internal";
 
 /** View and actual output resolution that make retained pixels safe to reuse. */
 export interface PresentationCacheContext {

@@ -266,9 +266,13 @@ export class Stroke {
     return command;
   }
 
-  /** Marks this stroke as ended; repeated calls have no additional effect. */
+  /** Processes the final resampler tail, then closes this stroke to new input. */
   end(): void {
+    if (this.hasEnded) {
+      return;
+    }
     this.hasEnded = true;
+    this.resampler.flush((sample) => this.acceptProcessedSample(sample));
   }
 
   /**
