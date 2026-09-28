@@ -186,14 +186,53 @@ export default async function runPanProfile(
         previousVisible = currentVisible;
       }),
     );
+    let observedCase: Record<string, unknown> | undefined;
     try {
+      const initialStartedAt = performance.now();
       do {
         renderer.render({
           quality: startsInteractive ? "interactive" : "full",
         });
       } while (renderer.hasPendingRender);
+      const initialElapsedMs = performance.now() - initialStartedAt;
       const initialSnapshot = renderer.diagnostics.getSnapshot();
       const initialRetention = retainedPixels(renderer);
+      const initialRenderDurations = frames.map(
+        (frame) => frame.metrics.totalMs,
+      );
+      const initial = {
+        elapsedMs: initialElapsedMs,
+        calls: frames.length,
+        renderDurationsMs: initialRenderDurations,
+        generatedRegions: frames.reduce(
+          (sum, frame) => sum + frame.snapshot.regions.generatedCount,
+          0,
+        ),
+        resolved: frames.reduce(
+          (sum, frame) => sum + (frame.metrics.resolved ?? 0),
+          0,
+        ),
+        composed: frames.reduce(
+          (sum, frame) => sum + (frame.metrics.composed ?? 0),
+          0,
+        ),
+        lodCalls: frames.reduce(
+          (sum, frame) => sum + (frame.metrics.lodCalls ?? 0),
+          0,
+        ),
+        lodMs: frames.reduce(
+          (sum, frame) => sum + (frame.metrics.lodMs ?? 0),
+          0,
+        ),
+        uploads: frames.reduce(
+          (sum, frame) => sum + frame.snapshot.presentation.uploadedRegionCount,
+          0,
+        ),
+        draws: frames.reduce(
+          (sum, frame) => sum + frame.snapshot.presentation.drawnRegionCount,
+          0,
+        ),
+      };
       frames.length = 0;
       phase = "pan";
       const trace: unknown = Reflect.get(globalThis, "__reveriePanTrace");
@@ -227,18 +266,24 @@ export default async function runPanProfile(
         throw new Error(
           "The LOD measurement hook did not observe the expected minification work.",
         );
-      cases.push({
+      observedCase = {
         zoom,
         startsInteractive,
+        initial,
         panElapsedMs,
         initialSnapshot,
         panSnapshot,
-        retention: { initial: initialRetention, pan: panRetention, final: retainedPixels(renderer) },
+        retention: {
+          initial: initialRetention,
+          pan: panRetention,
+          final: retainedPixels(renderer),
+        },
         finalSnapshot: renderer.diagnostics.getSnapshot(),
         maxGenerationPerVariant: Math.max(0, ...generationByTile.values()),
         generationByTile: Object.fromEntries(generationByTile),
         frames,
-      });
+      };
+      cases.push(observedCase);
       console.info(
         `Pan profile completed zoom=${zoom}, startsInteractive=${startsInteractive}, render calls=${frames.length}`,
       );
@@ -246,6 +291,12 @@ export default async function runPanProfile(
       session.dispose();
       for (const dispose of restore.reverse()) dispose();
       renderer.dispose();
+      if (observedCase !== undefined) {
+        observedCase.disposed = {
+          retention: retainedPixels(renderer),
+          resultCache: renderer.diagnostics.getSnapshot().resultCache,
+        };
+      }
       Reflect.deleteProperty(globalThis, "__reveriePanLod");
       canvas.remove();
     }
@@ -271,20 +322,26 @@ export default async function runPanProfile(
 function retainedPixels(renderer: CanvasRenderer): Record<string, number> {
   const presentation = requireObject(renderer, "presentationState");
   const retained: unknown = Reflect.get(presentation, "cachedRegions");
-  if (!(retained instanceof Map)) throw new Error("Missing presentation cache.");
+  if (!(retained instanceof Map))
+    throw new Error("Missing presentation cache.");
   const buffers = new Set<Uint8Array>();
   for (const entry of retained.values()) {
     const cached: unknown = entry;
-    if (typeof cached !== "object" || cached === null) throw new Error("Invalid cached result.");
+    if (typeof cached !== "object" || cached === null)
+      throw new Error("Invalid cached result.");
     const region = requireObject(cached, "region");
     const pixels: unknown = Reflect.get(region, "pixels");
-    if (!(pixels instanceof Uint8Array)) throw new Error("Invalid retained pixels.");
+    if (!(pixels instanceof Uint8Array))
+      throw new Error("Invalid retained pixels.");
     buffers.add(pixels);
   }
   return {
     entries: retained.size,
     uniquePixelBuffers: buffers.size,
-    pixelBytes: [...buffers].reduce((total, pixels) => total + pixels.byteLength, 0),
+    pixelBytes: [...buffers].reduce(
+      (total, pixels) => total + pixels.byteLength,
+      0,
+    ),
   };
 }
 
