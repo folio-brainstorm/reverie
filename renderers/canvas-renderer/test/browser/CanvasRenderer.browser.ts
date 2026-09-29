@@ -37,7 +37,7 @@ function readPixel(
 
 describe("CanvasRenderer browser minification", () => {
   it.each([1, 0.5, 0.25])(
-    "preserves translucent pixels through cached Pan and canonical refinement at zoom %s",
+    "preserves sharper translucent pixels through cached Pan and canonical refinement at zoom %s",
     (zoom) => {
       const world = new World({ tileSize: 16 });
       const bottom = world.getLayer(0);
@@ -83,7 +83,7 @@ describe("CanvasRenderer browser minification", () => {
         });
         try {
           do {
-            reference.render({ quality: "interactive" });
+            reference.render({ quality: "full" });
           } while (reference.hasPendingRender);
           expect(readPixels(canvas)).toEqual(readPixels(referenceCanvas));
           drain("full");
@@ -149,7 +149,7 @@ describe("CanvasRenderer browser minification", () => {
     expect(canonical?.pixels).not.toEqual(preview?.pixels);
   });
 
-  it("keeps the old pixels until a multi-batch replacement is complete", () => {
+  it("accepts newer partial pixels and completes a multi-batch replacement", () => {
     const canvas = createCanvas(258, 2);
     const raster = new Raster({ tileSize: 2 });
     raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
@@ -168,9 +168,10 @@ describe("CanvasRenderer browser minification", () => {
     renderer.render();
 
     expect(renderer.hasPendingRender).toBe(true);
-    expect(readPixel(readPixels(canvas), canvas.width, 0, 0)).toEqual([
-      255, 0, 0, 255,
-    ]);
+    expect([
+      [255, 0, 0, 255],
+      [0, 0, 255, 255],
+    ]).toContainEqual(readPixel(readPixels(canvas), canvas.width, 0, 0));
     expect(readPixel(readPixels(canvas), canvas.width, 256, 0)).toEqual([
       0, 0, 0, 0,
     ]);

@@ -67,6 +67,7 @@ describe("fixed Step 31A-H (#4) presentation profile", () => {
           [0, 0],
         ],
         pixelHash: 1273985709,
+        firefoxPixelHash: 808252645,
       },
       {
         name: "small",
@@ -78,6 +79,7 @@ describe("fixed Step 31A-H (#4) presentation profile", () => {
           [24, 12],
         ],
         pixelHash: 1551754797,
+        firefoxPixelHash: 2264023685,
       },
       {
         name: "large",
@@ -88,7 +90,8 @@ describe("fixed Step 31A-H (#4) presentation profile", () => {
           [512, 128],
           [768, 192],
         ],
-        pixelHash: 2712997573,
+        pixelHash: 4233274229,
+        firefoxPixelHash: 1169000845,
       },
       {
         name: "zoomedOut",
@@ -100,6 +103,7 @@ describe("fixed Step 31A-H (#4) presentation profile", () => {
           [384, 192],
         ],
         pixelHash: 260433093,
+        firefoxPixelHash: 2472993549,
       },
     ] as const;
     const results: Record<string, unknown>[] = [];
@@ -172,7 +176,11 @@ describe("fixed Step 31A-H (#4) presentation profile", () => {
         for (const value of pixels) {
           pixelHash = Math.imul(pixelHash ^ value, 16777619);
         }
-        expect(pixelHash >>> 0).toBe(path.pixelHash);
+        expect(pixelHash >>> 0).toBe(
+          navigator.userAgent.includes("Firefox")
+            ? path.firefoxPixelHash
+            : path.pixelHash,
+        );
         results.push({
           name: path.name,
           calls: durations.length,

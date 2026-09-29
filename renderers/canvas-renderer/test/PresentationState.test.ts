@@ -13,7 +13,7 @@ function createRegion(x: number, red: number): RenderRegion {
 }
 
 describe("PresentationState", () => {
-  it("retains a smaller preview beside canonical pixels and selects it for interactive projection", () => {
+  it("retains a smaller preview beside canonical pixels and projects the sharper region", () => {
     const state = new PresentationState();
     const canonical = { ...createRegion(0, 60), pixels: new Uint8Array(16) };
     const preview = {
@@ -39,7 +39,7 @@ describe("PresentationState", () => {
 
     expect(state.getReusableRegions(interactive)).toEqual([preview]);
     expect(state.getReusableRegions(full)).toEqual([canonical]);
-    expect(state.getProvisionalRegions(interactive)).toEqual([preview]);
+    expect(state.getProvisionalRegions(interactive)).toEqual([canonical]);
     expect(state.getProvisionalRegions(full)).toEqual([canonical]);
     expect(state.retainedRegionCount).toBe(2);
     expect(state.getZoneCounts(full.viewport, full.viewport)).toEqual({
@@ -79,7 +79,9 @@ describe("PresentationState", () => {
       };
       state.addWarmRegions([preview], context);
       expect(state.retainedRegionCount).toBe(2);
-      expect(state.getReusableRegions(context)).toEqual([preview]);
+      expect(state.getReusableRegions(context)).toEqual(
+        outputTileSize === 2 ? [preview] : [],
+      );
       expect(state.getReusableRegions(full)).toEqual([canonical]);
     }
     state.retainSourceChanges("1", [{ x: 0, y: 0 }], 2);
@@ -141,7 +143,7 @@ describe("PresentationState", () => {
     state.begin(next, interactive, state.getReusableRegions(interactive));
     expect(
       state.append({ identity: next, regions: [] })?.frame.regions,
-    ).toEqual([preview]);
+    ).toEqual([canonical]);
     // A complete empty result removes every cached variant at that coordinate.
     state.begin({ ...next, requestId: 4 }, full);
     state.append({ identity: { ...next, requestId: 4 }, regions: [] });
@@ -346,5 +348,183 @@ describe("PresentationState", () => {
 
     expect(commit?.removedBounds).toEqual([oldB.bounds]);
     expect(state.visibleFrame?.regions).toEqual([newA]);
+  });
+
+  it("rejects a 64px cached tile projected to 193px and keeps a denser provisional tile", () => {
+    const state = new PresentationState();
+    const full = {
+      bounds: { x: 0, y: 0, width: 256, height: 256 },
+      pixels: new Uint8Array(256 * 256 * 4),
+    };
+    const preview = { ...full, pixels: new Uint8Array(64 * 64 * 4) };
+    const context = {
+      viewport: { x: 50, y: 0, width: 512, height: 512 },
+      sourceRevision: "0",
+      scaleKey: "0.75",
+      panX: 50,
+      panY: 0,
+      quality: "interactive" as const,
+      outputTileSize: 64,
+    };
+    state.addWarmRegions([preview], context);
+    expect(state.getReusableRegions(context)).toEqual([]);
+    expect(state.getProvisionalRegions(context)).toEqual([]);
+
+    state.addWarmRegions([full], {
+      ...context,
+      quality: "full",
+      outputTileSize: 256,
+    });
+    expect(state.getProvisionalRegions(context)).toEqual([full]);
+  });
+
+  it("accepts the two-times boundary at negative coordinates but rejects a larger projection", () => {
+    const state = new PresentationState();
+    const region = {
+      bounds: { x: -256, y: -256, width: 256, height: 256 },
+      pixels: new Uint8Array(128 * 128 * 4),
+    };
+    const context = {
+      viewport: { x: -256.5, y: -256.5, width: 256, height: 256 },
+      sourceRevision: "0",
+      scaleKey: "1",
+      panX: -256.5,
+      panY: -256.5,
+      quality: "interactive" as const,
+      outputTileSize: 128,
+    };
+    state.addWarmRegions([region], context);
+    expect(state.getProvisionalRegions(context)).toEqual([region]);
+    expect(
+      state.getProvisionalRegions({ ...context, scaleKey: "1.01" }),
+    ).toEqual([]);
+  });
+
+  it("preserves a sharper same-revision tile during provisional and completed interactive work", () => {
+    const state = new PresentationState();
+    const full = {
+      bounds: { x: 0, y: 0, width: 256, height: 256 },
+      pixels: new Uint8Array(256 * 256 * 4).fill(255),
+    };
+    const preview = { ...full, pixels: new Uint8Array(128 * 128 * 4).fill(80) };
+    const context = {
+      viewport: { x: 50, y: 0, width: 512, height: 512 },
+      sourceRevision: "0",
+      scaleKey: "0.75",
+      panX: 50,
+      panY: 0,
+      quality: "interactive" as const,
+      outputTileSize: 128,
+    };
+    const first = { requestId: 1, viewportKey: "first", sourceRevision: "0" };
+    state.begin(first, { ...context, quality: "full", outputTileSize: 256 });
+    state.append({ identity: first, regions: [full] });
+
+    const second = { requestId: 2, viewportKey: "second", sourceRevision: "0" };
+    const partial = {
+      identity: second,
+      regions: [preview],
+      continuation: { isRenderContinuation: true as const, identity: second },
+    };
+    state.begin(second, context);
+    expect(state.append(partial)).toBeNull();
+    expect(state.applyProvisional(partial)).toEqual([]);
+    expect(state.visibleFrame?.regions).toEqual([full]);
+    expect(
+      state.append({ identity: second, regions: [] })?.frame.regions,
+    ).toEqual([full]);
+
+    const third = { requestId: 3, viewportKey: "third", sourceRevision: "0" };
+    const tooSmall = {
+      ...full,
+      pixels: new Uint8Array(64 * 64 * 4).fill(40),
+    };
+    state.begin(third, { ...context, outputTileSize: 64 });
+    expect(
+      state.append({ identity: third, regions: [tooSmall] })?.frame.regions,
+    ).toEqual([full]);
+  });
+
+  it("allows a newer edited revision to replace an older sharper tile", () => {
+    const state = new PresentationState();
+    const full = {
+      bounds: { x: 0, y: 0, width: 256, height: 256 },
+      pixels: new Uint8Array(256 * 256 * 4).fill(255),
+    };
+    const edited = { ...full, pixels: new Uint8Array(128 * 128 * 4).fill(80) };
+    const context = {
+      viewport: { x: 50, y: 0, width: 512, height: 512 },
+      sourceRevision: "0",
+      scaleKey: "0.75",
+      panX: 50,
+      panY: 0,
+      quality: "full" as const,
+      outputTileSize: 256,
+    };
+    const first = { requestId: 1, viewportKey: "first", sourceRevision: "0" };
+    state.begin(first, context);
+    state.append({ identity: first, regions: [full] });
+
+    const second = { requestId: 2, viewportKey: "second", sourceRevision: "1" };
+    const partial = {
+      identity: second,
+      regions: [edited],
+      continuation: { isRenderContinuation: true as const, identity: second },
+    };
+    state.begin(second, {
+      ...context,
+      sourceRevision: "1",
+      quality: "interactive",
+      outputTileSize: 128,
+    });
+    expect(state.append(partial)).toBeNull();
+    expect(state.applyProvisional(partial)).toEqual([edited]);
+    expect(
+      state.append({ identity: second, regions: [] })?.frame.regions,
+    ).toEqual([edited]);
+    expect(
+      state.getProvisionalRegions({ ...context, sourceRevision: "1" }),
+    ).toEqual([edited]);
+  });
+
+  it("lets a newer source revision displace stale coverage even when its preview is sparse", () => {
+    const state = new PresentationState();
+    const full = {
+      bounds: { x: 0, y: 0, width: 256, height: 256 },
+      pixels: new Uint8Array(256 * 256 * 4).fill(255),
+    };
+    const edited = { ...full, pixels: new Uint8Array(64 * 64 * 4).fill(80) };
+    const context = {
+      viewport: { x: 50, y: 0, width: 512, height: 512 },
+      sourceRevision: "0",
+      scaleKey: "0.75",
+      panX: 50,
+      panY: 0,
+      quality: "full" as const,
+      outputTileSize: 256,
+    };
+    const first = { requestId: 1, viewportKey: "first", sourceRevision: "0" };
+    state.begin(first, context);
+    state.append({ identity: first, regions: [full] });
+    const second = { requestId: 2, viewportKey: "second", sourceRevision: "1" };
+    const nextContext = {
+      ...context,
+      sourceRevision: "1",
+      quality: "interactive" as const,
+      outputTileSize: 64,
+    };
+    state.addWarmRegions([edited], nextContext);
+    expect(state.getProvisionalRegions(nextContext)).toEqual([edited]);
+    const partial = {
+      identity: second,
+      regions: [edited],
+      continuation: { isRenderContinuation: true as const, identity: second },
+    };
+    state.begin(second, nextContext);
+    state.append(partial);
+    expect(state.applyProvisional(partial)).toEqual([edited]);
+    expect(
+      state.append({ identity: second, regions: [] })?.frame.regions,
+    ).toEqual([edited]);
   });
 });

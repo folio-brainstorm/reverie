@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { Camera, Raster, World } from "@reveriejs/core";
-import { deserializeDocument, serializeDocument } from "@reveriejs/core/document";
+import {
+  deserializeDocument,
+  serializeDocument,
+} from "@reveriejs/core/document";
 import { RenderingCore } from "@reveriejs/core/rendering";
 import type { Renderer } from "@reveriejs/core/rendering";
 
@@ -512,7 +515,7 @@ describe("CanvasRenderer World composition", () => {
     }
   });
 
-  it("chooses cheaper interactive output under movement pressure and refines when settled", () => {
+  it("keeps one interactive LOD under movement pressure and refines when settled", () => {
     const clock = vi.spyOn(performance, "now").mockReturnValue(0);
     try {
       const { canvas } = createCanvasFixture(128, 128);
@@ -532,7 +535,8 @@ describe("CanvasRenderer World composition", () => {
       renderer.render({ quality: "interactive", prefetch: true });
       const pressured = renderer.diagnostics.getSnapshot();
       expect(pressured.coverage.pressure).toBe("high");
-      expect(pressured.coverage.interactiveOutputTileSize).toBe(32);
+      expect(pressured.coverage.interactiveOutputTileSize).toBe(64);
+      expect(pressured.tiles.generatedPixelBytes).toBe(64 * 64 * 4);
       expect(pressured.coverage.prefetchCompletedCount).toBe(0);
       expect(pressured.tiles.renderedCount).toBe(1);
 

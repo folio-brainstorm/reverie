@@ -9,6 +9,11 @@ import type { PresentationCacheContext } from "../interfaces/presentation/Presen
 import type { PresentationCommit } from "../interfaces/presentation/PresentationCommit.js";
 import type { PresentationFrame } from "../interfaces/presentation/PresentationFrame.js";
 
+import {
+  getPresentationScale,
+  hasSufficientPresentationDensity,
+} from "./PresentationDensity.js";
+
 /** Accumulates requests while admitting safe completed regions provisionally. */
 export default class PresentationState {
   private currentVisibleIdentity: RenderRequestIdentity | null = null;
@@ -16,6 +21,7 @@ export default class PresentationState {
     string,
     RenderRegionSet["regions"][number]
   >();
+  private currentVisibleRevisions = new Map<string, string>();
   private currentPendingFrame: PendingFrame | null = null;
   private readonly cachedRegions = new Map<string, CachedPresentationRegion>();
 
@@ -70,6 +76,7 @@ export default class PresentationState {
     this.cancelPending();
     this.currentVisibleIdentity = null;
     this.currentVisibleRegions.clear();
+    this.currentVisibleRevisions.clear();
     this.cachedRegions.clear();
   }
 
@@ -83,6 +90,7 @@ export default class PresentationState {
     this.cancelPending();
     this.currentVisibleIdentity = null;
     this.currentVisibleRegions.clear();
+    this.currentVisibleRevisions.clear();
   }
 
   /**
@@ -103,10 +111,15 @@ export default class PresentationState {
         PresentationState.intersects(region.bounds, viewport, margin),
       ),
     );
+    this.currentVisibleRevisions = new Map(
+      [...this.currentVisibleRevisions].filter(([key]) =>
+        this.currentVisibleRegions.has(key),
+      ),
+    );
   }
 
   /**
-   * Returns only previously generated pixels matching the requested output.
+   * Reuses exact requested output when its actual presentation is sufficiently dense.
    * @param context - Source, viewport, and output size required for reuse.
    * @returns Final pixels that the next Core request may skip.
    */
@@ -118,6 +131,7 @@ export default class PresentationState {
       if (
         cached.sourceRevision !== context.sourceRevision ||
         cached.outputTileSize !== context.outputTileSize ||
+        !hasSufficientPresentationDensity(cached.region, context) ||
         (context.resultClass !== "approximate" &&
           cached.region.resultClass === "approximate") ||
         !PresentationState.intersects(cached.region.bounds, context.viewport, 0)
@@ -140,13 +154,15 @@ export default class PresentationState {
   ): RenderRegionSet["regions"] {
     const selected = new Map<string, CachedPresentationRegion>();
     for (const cached of this.cachedRegions.values()) {
+      const key = PresentationState.getRegionKey(cached.region);
       if (
         cached.sourceRevision !== context.sourceRevision ||
+        (!hasSufficientPresentationDensity(cached.region, context) &&
+          !this.hasOlderVisibleRegion(key, context.sourceRevision)) ||
         !PresentationState.intersects(cached.region.bounds, context.viewport, 0)
       ) {
         continue;
       }
-      const key = PresentationState.getRegionKey(cached.region);
       const previous = selected.get(key);
       if (
         previous === undefined ||
@@ -173,8 +189,7 @@ export default class PresentationState {
       const cached = this.cachedRegions.get(key);
       if (
         cached?.sourceRevision === context.sourceRevision &&
-        ((context.quality !== "interactive" &&
-          cached.outputTileSize > context.outputTileSize) ||
+        (cached.outputTileSize > context.outputTileSize ||
           (cached.outputTileSize === context.outputTileSize &&
             cached.region.resultClass !== "approximate" &&
             region.resultClass === "approximate"))
@@ -303,7 +318,15 @@ export default class PresentationState {
       if (PresentationState.isVisuallyEmpty(region)) {
         continue;
       }
+      if (
+        (!hasSufficientPresentationDensity(region, context) &&
+          !this.hasOlderVisibleRegion(key, context.sourceRevision)) ||
+        this.shouldKeepVisibleRegion(key, region, context)
+      ) {
+        continue;
+      }
       this.currentVisibleRegions.set(key, region);
+      this.currentVisibleRevisions.set(key, context.sourceRevision);
       this.addWarmRegions([region], context);
       regions.push(region);
     }
@@ -344,6 +367,15 @@ export default class PresentationState {
       .filter(([key]) => !pendingFrame.regions.has(key))
       .map(([, region]) => region.bounds);
     const cacheContext = pendingFrame.cacheContext;
+    const nextRegions = new Map(pendingFrame.regions);
+    if (cacheContext !== undefined) {
+      for (const [key, region] of nextRegions) {
+        if (this.shouldKeepVisibleRegion(key, region, cacheContext)) {
+          const visible = this.currentVisibleRegions.get(key);
+          if (visible !== undefined) nextRegions.set(key, visible);
+        }
+      }
+    }
     if (cacheContext !== undefined) {
       for (const [key, cached] of this.cachedRegions) {
         if (
@@ -361,19 +393,25 @@ export default class PresentationState {
       }
       this.addWarmRegions([...pendingFrame.regions.values()], cacheContext);
     }
-    this.currentVisibleRegions = pendingFrame.regions;
+    this.currentVisibleRegions = nextRegions;
+    this.currentVisibleRevisions = new Map(
+      [...nextRegions.keys()].map((key) => [
+        key,
+        pendingFrame.identity.sourceRevision,
+      ]),
+    );
     this.currentVisibleIdentity = pendingFrame.identity;
     this.currentPendingFrame = null;
     return {
       frame: {
         identity: pendingFrame.identity,
-        regions: [...pendingFrame.regions.values()],
+        regions: [...nextRegions.values()],
       },
       removedBounds,
     };
   }
 
-  /** Prefers matching output, then canonical fallback, then higher resolution. */
+  /** Prefers the densest valid coverage, then canonical pixels at equal size. */
   private static prefersProjection(
     candidate: CachedPresentationRegion,
     previous: CachedPresentationRegion,
@@ -382,16 +420,46 @@ export default class PresentationState {
     const isCandidateApproximate =
       candidate.region.resultClass === "approximate";
     const isPreviousApproximate = previous.region.resultClass === "approximate";
-    const isCandidateExact =
-      candidate.outputTileSize === context.outputTileSize &&
-      (context.resultClass === "approximate" || !isCandidateApproximate);
-    const isPreviousExact =
-      previous.outputTileSize === context.outputTileSize &&
-      (context.resultClass === "approximate" || !isPreviousApproximate);
-    if (isCandidateExact !== isPreviousExact) return isCandidateExact;
+    const candidateScale = getPresentationScale(candidate.region, context);
+    const previousScale = getPresentationScale(previous.region, context);
+    if (candidateScale !== previousScale) {
+      return candidateScale < previousScale;
+    }
     if (isCandidateApproximate !== isPreviousApproximate)
       return !isCandidateApproximate;
-    return candidate.outputTileSize > previous.outputTileSize;
+    return false;
+  }
+
+  /** Finds stale coverage that must yield to completed newer source pixels. */
+  private hasOlderVisibleRegion(key: string, sourceRevision: string): boolean {
+    return (
+      this.currentVisibleRegions.has(key) &&
+      this.currentVisibleRevisions.get(key) !== sourceRevision
+    );
+  }
+
+  /** Preserves sharper pixels only when their source revision still matches. */
+  private shouldKeepVisibleRegion(
+    key: string,
+    candidate: RenderRegionSet["regions"][number],
+    context: PresentationCacheContext,
+  ): boolean {
+    if (this.currentVisibleRevisions.get(key) !== context.sourceRevision)
+      return false;
+    const visible = this.currentVisibleRegions.get(key);
+    if (
+      visible === undefined ||
+      !hasSufficientPresentationDensity(visible, context)
+    )
+      return false;
+    const visibleScale = getPresentationScale(visible, context);
+    const candidateScale = getPresentationScale(candidate, context);
+    return (
+      visibleScale < candidateScale ||
+      (visibleScale === candidateScale &&
+        visible.resultClass !== "approximate" &&
+        candidate.resultClass === "approximate")
+    );
   }
 
   /** Uses half-open intersections so a Tile touching an edge is outside it. */
