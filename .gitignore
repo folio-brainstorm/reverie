@@ -54,3 +54,4 @@ coverage/
 ocr-scan.**.txt
 .vitest
 **/profiling/results
+**/investigations/**
