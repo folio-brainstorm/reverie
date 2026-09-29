@@ -33,6 +33,7 @@ import CanvasBackend from "./CanvasBackend.js";
 import CanvasDiagnostics from "./CanvasDiagnostics.js";
 import CoveragePolicy from "./CoveragePolicy.js";
 import PresentationState from "./PresentationState.js";
+import { MAX_INTERACTIVE_PRESENTATION_SCALE } from "./PresentationDensity.js";
 
 const PRESSURE_VISIBLE_TILE_THRESHOLD = 64;
 const PRESSURE_VELOCITY_THRESHOLD = 1.5;
@@ -250,7 +251,22 @@ export class CanvasRenderer<
       quality === "interactive" &&
       (visibleTileEstimate > PRESSURE_VISIBLE_TILE_THRESHOLD ||
         coverage.velocityPixelsPerMs >= PRESSURE_VELOCITY_THRESHOLD);
-    const renderScale = hasCoveragePressure ? scale / 2 : scale;
+    // Movement pressure remains diagnostic; it must not add a second LOD drop.
+    let renderScale = scale;
+    if (quality === "interactive") {
+      const minimumOutputSize = Math.min(
+        tileSize,
+        (tileSize * scale) / MAX_INTERACTIVE_PRESENTATION_SCALE,
+      );
+      while (
+        this.renderingCore.resolveOutputTileSize(tileSize, {
+          scale: renderScale,
+          quality,
+        }) < minimumOutputSize
+      ) {
+        renderScale *= 2;
+      }
+    }
     this.currentRenderScale = renderScale;
     const renderContext = { scale: renderScale, quality };
     const outputTileSize = this.renderingCore.resolveOutputTileSize(
@@ -261,6 +277,8 @@ export class CanvasRenderer<
       viewport,
       sourceRevision,
       scaleKey: String(scale),
+      panX: this.camera.panX,
+      panY: this.camera.panY,
       quality,
       outputTileSize,
       resultClass:

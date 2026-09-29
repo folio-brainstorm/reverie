@@ -7,6 +7,9 @@ export interface PresentationCacheContext {
   readonly viewport: WorldRect;
   readonly sourceRevision: string;
   readonly scaleKey: string;
+  /** Camera origin needed to measure actual snapped device-space bounds. */
+  readonly panX?: number;
+  readonly panY?: number;
   readonly quality: RenderQualityMode;
   readonly outputTileSize: number;
   readonly resultClass?: RenderResultClass;

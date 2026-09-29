@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { Camera, Raster, World } from "@reveriejs/core";
-import { deserializeDocument, serializeDocument } from "@reveriejs/core/document";
+import {
+  deserializeDocument,
+  serializeDocument,
+} from "@reveriejs/core/document";
 import { RenderingCore } from "@reveriejs/core/rendering";
 import type { Renderer } from "@reveriejs/core/rendering";
 
@@ -70,8 +73,53 @@ function createCanvasFixture(width = 4, height = 4) {
 }
 
 describe("CanvasRenderer World composition", () => {
+  it("skips Core generation for a sufficient full-quality region during interactive pan", () => {
+    const { canvas, context, tileContexts } = createCanvasFixture(96, 96);
+    const world = new World({
+      tileSize: 128,
+      bounds: { x: 0, y: 0, width: 128, height: 128 },
+    });
+    const raster = world.getLayer(0).raster;
+    raster.setPixel({ x: 64, y: 64 }, { r: 255, g: 0, b: 0, a: 255 });
+    const camera = new Camera({ zoom: 0.75 });
+    const renderer = new CanvasRenderer({ canvas, camera, world });
+
+    renderer.render({ quality: "full" });
+    expect(renderer.diagnostics.getSnapshot().quality?.outputTileSize).toBe(
+      128,
+    );
+    expect(renderer.hasPendingRender).toBe(false);
+    const before = renderer.diagnostics.getSnapshot();
+    camera.setPan(1, 0);
+    renderer.render({ quality: "interactive" });
+    const after = renderer.diagnostics.getSnapshot();
+
+    expect(after.quality?.outputTileSize).toBe(64);
+    expect(
+      after.reuse.generationHitCount - before.reuse.generationHitCount,
+    ).toBe(1);
+    expect(after.tiles.renderedCount).toBe(0);
+    expect(after.tiles.generatedPixelBytes).toBe(0);
+    expect(after.presentation.uploadedRegionCount).toBe(0);
+    expect(context.drawImage).toHaveBeenCalledTimes(2);
+    expect(tileContexts).toHaveLength(1);
+    expect(tileContexts[0]?.putImageData).toHaveBeenCalledOnce();
+
+    raster.setPixel({ x: 64, y: 64 }, { r: 0, g: 255, b: 0, a: 255 });
+    renderer.markSourceChanged([{ x: 0, y: 0 }]);
+    renderer.render({ quality: "interactive" });
+    expect(renderer.diagnostics.getSnapshot().tiles.generatedPixelBytes).toBe(
+      64 * 64 * 4,
+    );
+
+    raster.setPixel({ x: 64, y: 64 }, { r: 0, g: 0, b: 0, a: 0 });
+    renderer.markSourceChanged([{ x: 0, y: 0 }]);
+    renderer.render({ quality: "interactive" });
+    expect(renderer.diagnostics.getSnapshot().zones.visibleCount).toBe(0);
+  });
+
   it.each(["world", "raster"] as const)(
-    "makes progress beyond the batch limit during continuous %s Pan after a full render",
+    "reuses full-quality %s pixels during continuous Pan beyond the batch limit",
     (sourceKind) => {
       const clock = vi.spyOn(performance, "now").mockReturnValue(0);
       const { canvas, context } = createCanvasFixture(600, 8);
@@ -106,10 +154,10 @@ describe("CanvasRenderer World composition", () => {
         expect(renderer.hasPendingRender).toBe(false);
         expect(
           renderer.diagnostics.getSnapshot().world.approximateGeneratedCount,
-        ).toBe(sourceKind === "world" ? 129 : 0);
+        ).toBe(0);
         expect(
           renderer.diagnostics.getSnapshot().progressive.cancelledRequestCount,
-        ).toBe(1);
+        ).toBe(0);
         vi.mocked(context.drawImage).mockClear();
 
         camera.panBy(0.25, 0);
@@ -295,7 +343,7 @@ describe("CanvasRenderer World composition", () => {
 
     camera.setZoom(0.5);
     renderer.render();
-    expect(renderer.diagnostics.getSnapshot().tiles.renderedCount).toBe(1);
+    expect(renderer.diagnostics.getSnapshot().tiles.renderedCount).toBe(0);
     expect(renderer.diagnostics.getSnapshot().quality?.outputTileSize).toBe(64);
     expect(
       renderer.diagnostics.getSnapshot().reuse.generationHitCount,
@@ -512,7 +560,7 @@ describe("CanvasRenderer World composition", () => {
     }
   });
 
-  it("chooses cheaper interactive output under movement pressure and refines when settled", () => {
+  it("keeps one interactive LOD under movement pressure and refines when settled", () => {
     const clock = vi.spyOn(performance, "now").mockReturnValue(0);
     try {
       const { canvas } = createCanvasFixture(128, 128);
@@ -532,7 +580,8 @@ describe("CanvasRenderer World composition", () => {
       renderer.render({ quality: "interactive", prefetch: true });
       const pressured = renderer.diagnostics.getSnapshot();
       expect(pressured.coverage.pressure).toBe("high");
-      expect(pressured.coverage.interactiveOutputTileSize).toBe(32);
+      expect(pressured.coverage.interactiveOutputTileSize).toBe(64);
+      expect(pressured.tiles.generatedPixelBytes).toBe(64 * 64 * 4);
       expect(pressured.coverage.prefetchCompletedCount).toBe(0);
       expect(pressured.tiles.renderedCount).toBe(1);
 
@@ -546,7 +595,7 @@ describe("CanvasRenderer World composition", () => {
     }
   });
 
-  it("projects full-quality warm pixels during interactive pan before generating its lower resolution", () => {
+  it("reuses full-quality warm pixels during interactive pan", () => {
     const { canvas, context, tileCanvases } = createCanvasFixture(4, 4);
     const raster = new Raster({ tileSize: 4 });
     raster.setPixel({ x: 0, y: 0 }, { r: 1, g: 0, b: 0, a: 255 });
@@ -568,7 +617,7 @@ describe("CanvasRenderer World composition", () => {
           (call) => call[0] === tileCanvases[1] && call[1] === 0,
         ),
     ).toBe(true);
-    expect(renderer.diagnostics.getSnapshot().tiles.renderedCount).toBe(1);
+    expect(renderer.diagnostics.getSnapshot().tiles.renderedCount).toBe(0);
     expect(
       renderer.diagnostics.getSnapshot().reuse.presentationHitCount,
     ).toBeGreaterThan(0);
