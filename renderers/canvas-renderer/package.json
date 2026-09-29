@@ -1,6 +1,6 @@
 {
   "name": "@reveriejs/canvas-renderer",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Rendering backends for the Rêverie raster painting engine",
   "license": "Apache-2.0",
   "repository": {
