@@ -13,6 +13,116 @@ function createRegion(x: number, red: number): RenderRegion {
 }
 
 describe("PresentationState", () => {
+  it("reuses a larger same-revision canonical region for an interactive request", () => {
+    const state = new PresentationState();
+    const region: RenderRegion = {
+      bounds: { x: 0, y: 0, width: 128, height: 128 },
+      pixels: new Uint8Array(128 * 128 * 4).fill(255),
+    };
+    const full = {
+      viewport: { x: 0, y: 0, width: 128, height: 128 },
+      sourceRevision: "1",
+      scaleKey: "0.75",
+      panX: 0,
+      panY: 0,
+      quality: "full" as const,
+      outputTileSize: 128,
+      resultClass: "canonical" as const,
+    };
+    const interactive = {
+      ...full,
+      quality: "interactive" as const,
+      outputTileSize: 64,
+      resultClass: "approximate" as const,
+    };
+    state.addWarmRegions([region], full);
+
+    expect(state.getReusableRegions(interactive)).toEqual([region]);
+    const identity = {
+      requestId: 1,
+      viewportKey: "panned",
+      sourceRevision: "1",
+    };
+    state.begin(identity, interactive, state.getReusableRegions(interactive));
+    expect(state.append({ identity, regions: [] })?.frame.regions).toEqual([
+      region,
+    ]);
+    expect(state.getReusableRegions(full)).toEqual([region]);
+    const smallerPreview: RenderRegion = {
+      ...region,
+      pixels: new Uint8Array(64 * 64 * 4),
+      resultClass: "approximate",
+    };
+    state.addWarmRegions([smallerPreview], interactive);
+    expect(state.getReusableRegions(interactive)).toEqual([region]);
+    expect(
+      state.getReusableRegions({
+        ...interactive,
+        viewport: { x: 128, y: 0, width: 128, height: 128 },
+      }),
+    ).toEqual([]);
+  });
+
+  it("rejects stale, insufficient, and semantically incompatible retained regions", () => {
+    const state = new PresentationState();
+    const bounds = { x: 0, y: 0, width: 128, height: 128 };
+    const canonical: RenderRegion = {
+      bounds,
+      pixels: new Uint8Array(32 * 32 * 4),
+    };
+    const approximate: RenderRegion = {
+      bounds,
+      pixels: new Uint8Array(128 * 128 * 4),
+      resultClass: "approximate",
+    };
+    const context = {
+      viewport: bounds,
+      sourceRevision: "1",
+      scaleKey: "1.02",
+      panX: 0,
+      panY: 0,
+      quality: "interactive" as const,
+      outputTileSize: 64,
+      resultClass: "approximate" as const,
+    };
+    state.addWarmRegions([canonical], { ...context, quality: "full" });
+    expect(state.getReusableRegions(context)).toEqual([]);
+
+    state.addWarmRegions([approximate], context);
+    expect(
+      state.getReusableRegions({
+        ...context,
+        quality: "full",
+        resultClass: "canonical",
+        outputTileSize: 128,
+      }),
+    ).toEqual([]);
+    expect(
+      state.getReusableRegions({ ...context, sourceRevision: "2" }),
+    ).toEqual([]);
+  });
+
+  it("does not use a smaller canonical result to skip full-quality output", () => {
+    const state = new PresentationState();
+    const region: RenderRegion = {
+      bounds: { x: 0, y: 0, width: 128, height: 128 },
+      pixels: new Uint8Array(64 * 64 * 4),
+    };
+    const context = {
+      viewport: region.bounds,
+      sourceRevision: "0",
+      scaleKey: "0.5",
+      quality: "full" as const,
+      outputTileSize: 64,
+      resultClass: "canonical" as const,
+    };
+    state.addWarmRegions([region], context);
+
+    expect(
+      state.getReusableRegions({ ...context, outputTileSize: 128 }),
+    ).toEqual([]);
+  });
+
   it("retains a smaller preview beside canonical pixels and projects the sharper region", () => {
     const state = new PresentationState();
     const canonical = { ...createRegion(0, 60), pixels: new Uint8Array(16) };
@@ -37,7 +147,7 @@ describe("PresentationState", () => {
     state.addWarmRegions([canonical], full);
     state.addWarmRegions([preview], interactive);
 
-    expect(state.getReusableRegions(interactive)).toEqual([preview]);
+    expect(state.getReusableRegions(interactive)).toEqual([canonical]);
     expect(state.getReusableRegions(full)).toEqual([canonical]);
     expect(state.getProvisionalRegions(interactive)).toEqual([canonical]);
     expect(state.getProvisionalRegions(full)).toEqual([canonical]);
@@ -79,9 +189,7 @@ describe("PresentationState", () => {
       };
       state.addWarmRegions([preview], context);
       expect(state.retainedRegionCount).toBe(2);
-      expect(state.getReusableRegions(context)).toEqual(
-        outputTileSize === 2 ? [preview] : [],
-      );
+      expect(state.getReusableRegions(context)).toEqual([canonical]);
       expect(state.getReusableRegions(full)).toEqual([canonical]);
     }
     state.retainSourceChanges("1", [{ x: 0, y: 0 }], 2);
@@ -136,7 +244,7 @@ describe("PresentationState", () => {
     expect(state.applyProvisional(batch)).toEqual([]);
     expect(state.visibleFrame?.regions).toEqual([canonical]);
     state.cancelPending();
-    expect(state.getReusableRegions(interactive)).toEqual([preview]);
+    expect(state.getReusableRegions(interactive)).toEqual([canonical]);
     expect(state.getReusableRegions(full)).toEqual([canonical]);
 
     const next = { ...identity, requestId: 3, viewportKey: "next" };
@@ -394,7 +502,11 @@ describe("PresentationState", () => {
       outputTileSize: 128,
     };
     state.addWarmRegions([region], context);
+    expect(state.getReusableRegions(context)).toEqual([region]);
     expect(state.getProvisionalRegions(context)).toEqual([region]);
+    expect(state.getReusableRegions({ ...context, scaleKey: "1.01" })).toEqual(
+      [],
+    );
     expect(
       state.getProvisionalRegions({ ...context, scaleKey: "1.01" }),
     ).toEqual([]);

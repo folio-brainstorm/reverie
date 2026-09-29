@@ -6,5 +6,6 @@ import type { PresentationCacheContext } from "./PresentationCacheContext.js";
 export interface CachedPresentationRegion {
   readonly region: RenderRegion;
   readonly sourceRevision: PresentationCacheContext["sourceRevision"];
+  /** Actual square pixel-buffer edge, which may exceed a later request's size. */
   readonly outputTileSize: PresentationCacheContext["outputTileSize"];
 }

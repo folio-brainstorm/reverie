@@ -119,18 +119,23 @@ export default class PresentationState {
   }
 
   /**
-   * Reuses exact requested output when its actual presentation is sufficiently dense.
-   * @param context - Source, viewport, and output size required for reuse.
+   * Reuses same-revision pixels at sufficient actual presentation density.
+   * Canonical pixels may satisfy approximate interactive work; approximate
+   * pixels cannot satisfy canonical work. Full-quality work also requires at
+   * least its requested output size, even when a smaller tile would present
+   * within the interactive 2x density limit.
+   * @param context - Source, viewport, and output quality required for reuse.
    * @returns Final pixels that the next Core request may skip.
    */
   getReusableRegions(
     context: PresentationCacheContext,
   ): RenderRegionSet["regions"] {
-    const reusable = new Map<string, RenderRegionSet["regions"][number]>();
+    const reusable = new Map<string, CachedPresentationRegion>();
     for (const cached of this.cachedRegions.values()) {
       if (
         cached.sourceRevision !== context.sourceRevision ||
-        cached.outputTileSize !== context.outputTileSize ||
+        (context.quality === "full" &&
+          cached.outputTileSize < context.outputTileSize) ||
         !hasSufficientPresentationDensity(cached.region, context) ||
         (context.resultClass !== "approximate" &&
           cached.region.resultClass === "approximate") ||
@@ -139,13 +144,15 @@ export default class PresentationState {
         continue;
       }
       const key = PresentationState.getRegionKey(cached.region);
-      // Canonical pixels may satisfy interactive requests at the same size.
       const previous = reusable.get(key);
-      if (previous === undefined || previous.resultClass === "approximate") {
-        reusable.set(key, cached.region);
+      if (
+        previous === undefined ||
+        PresentationState.prefersProjection(cached, previous, context)
+      ) {
+        reusable.set(key, cached);
       }
     }
-    return [...reusable.values()];
+    return [...reusable.values()].map((cached) => cached.region);
   }
 
   /** Returns same-source pixels that can be projected as temporary coverage. */
@@ -185,12 +192,13 @@ export default class PresentationState {
     context: PresentationCacheContext,
   ): void {
     for (const region of regions) {
+      const outputTileSize = Math.sqrt(region.pixels.length / 4);
       const key = `${PresentationState.getRegionKey(region)}:${context.quality}`;
       const cached = this.cachedRegions.get(key);
       if (
         cached?.sourceRevision === context.sourceRevision &&
-        (cached.outputTileSize > context.outputTileSize ||
-          (cached.outputTileSize === context.outputTileSize &&
+        (cached.outputTileSize > outputTileSize ||
+          (cached.outputTileSize === outputTileSize &&
             cached.region.resultClass !== "approximate" &&
             region.resultClass === "approximate"))
       ) {
@@ -199,7 +207,7 @@ export default class PresentationState {
       this.cachedRegions.set(key, {
         region,
         sourceRevision: context.sourceRevision,
-        outputTileSize: context.outputTileSize,
+        outputTileSize,
       });
     }
   }
