@@ -1763,8 +1763,75 @@ describe("CanvasRenderer rendering", () => {
 
     const drawCalls = vi.mocked(context.drawImage).mock.calls;
     expect(drawCalls).toHaveLength(2);
-    expect(drawCalls[0]?.slice(1)).toEqual([-1.5, 0, 3, 3]);
-    expect(drawCalls[1]?.slice(1)).toEqual([1.5, 0, 3, 3]);
+    expect(drawCalls[0]?.slice(1)).toEqual([-2, 0, 4, 3]);
+    expect(drawCalls[1]?.slice(1)).toEqual([2, 0, 3, 3]);
+  });
+
+  it("shares symmetric snapped boundaries between draw and clear paths", () => {
+    const { canvas, context } = createCanvasFixture(4, 4);
+    const core = new RenderingCore();
+    const backend = new CanvasBackend(
+      canvas,
+      new Camera({ zoom: 0.25 }),
+      null,
+      new CanvasDiagnostics(core, false),
+    );
+    const regions = [-2, 0].map((x) => ({
+      bounds: { x, y: 0, width: 2, height: 2 },
+      pixels: new Uint8Array(16).fill(255),
+    }));
+    backend.present(
+      {
+        identity: { requestId: 1, viewportKey: "test", sourceRevision: "0" },
+        regions,
+      },
+      backend.target,
+    );
+    expect(
+      vi.mocked(context.drawImage).mock.calls.map((call) => call.slice(1)),
+    ).toEqual([
+      [-1, 0, 1, 1],
+      [0, 0, 1, 1],
+    ]);
+
+    vi.mocked(context.clearRect).mockClear();
+    backend.presentRegions(regions);
+    expect(vi.mocked(context.clearRect).mock.calls).toEqual([
+      [-1, 0, 1, 1],
+      [0, 0, 1, 1],
+    ]);
+    vi.mocked(context.clearRect).mockClear();
+    backend.clearRegions(regions.map((region) => region.bounds));
+    expect(vi.mocked(context.clearRect).mock.calls).toEqual([
+      [-1, 0, 1, 1],
+      [0, 0, 1, 1],
+    ]);
+  });
+
+  it("skips regions with zero snapped width or height", () => {
+    const { canvas, context, ownerDocument } = createCanvasFixture(1, 1);
+    const core = new RenderingCore();
+    const backend = new CanvasBackend(
+      canvas,
+      new Camera({ zoom: 0.05 }),
+      null,
+      new CanvasDiagnostics(core, false),
+    );
+    const regions = [
+      {
+        bounds: { x: 0, y: 8, width: 8, height: 8 },
+        pixels: new Uint8Array(8 * 8 * 4).fill(255),
+      },
+      {
+        bounds: { x: 8, y: 0, width: 8, height: 8 },
+        pixels: new Uint8Array(8 * 8 * 4).fill(255),
+      },
+    ];
+    backend.presentRegions(regions);
+    backend.clearRegions(regions.map((region) => region.bounds));
+    expect(context.drawImage).not.toHaveBeenCalled();
+    expect(context.clearRect).not.toHaveBeenCalled();
+    expect(ownerDocument.createElement).not.toHaveBeenCalled();
   });
 
   it("draws only tiles intersecting the visible half-open range", () => {
@@ -1896,7 +1963,7 @@ describe("CanvasRenderer rendering", () => {
     const renderer = new CanvasRenderer({
       canvas,
       raster,
-      camera: new Camera({ zoom: 0.25 }),
+      camera: new Camera({ zoom: 0.5 }),
     });
 
     renderer.render();

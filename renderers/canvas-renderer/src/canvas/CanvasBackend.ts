@@ -8,6 +8,7 @@ import {
   RendererTypeError,
 } from "../errors/RendererErrors.js";
 import type { CanvasRegionSurface } from "../interfaces/CanvasRegionSurface.js";
+import type { CanvasDeviceBounds } from "../interfaces/CanvasDeviceBounds.js";
 import type { PresentationFrame } from "../interfaces/presentation/PresentationFrame.js";
 import CanvasDiagnostics from "./CanvasDiagnostics.js";
 
@@ -116,14 +117,7 @@ export default class CanvasBackend {
       this.context.globalCompositeOperation = "source-over";
       this.clipWorldBounds();
       for (const region of regions) {
-        const point = this.camera.worldToScreen(region.bounds);
-        const scale = this.camera.zoom * this.currentPixelRatio;
-        this.context.clearRect(
-          point.x * this.currentPixelRatio,
-          point.y * this.currentPixelRatio,
-          region.bounds.width * scale,
-          region.bounds.height * scale,
-        );
+        this.clearSnappedBounds(region.bounds);
       }
       for (const region of regions) {
         this.presentRegion(region);
@@ -149,15 +143,8 @@ export default class CanvasBackend {
     this.context.save();
     try {
       this.clipWorldBounds();
-      const scale = this.camera.zoom * this.currentPixelRatio;
       for (const region of bounds) {
-        const point = this.camera.worldToScreen(region);
-        this.context.clearRect(
-          point.x * this.currentPixelRatio,
-          point.y * this.currentPixelRatio,
-          region.width * scale,
-          region.height * scale,
-        );
+        this.clearSnappedBounds(region);
       }
     } finally {
       this.context.restore();
@@ -232,20 +219,63 @@ export default class CanvasBackend {
     if (this.worldBounds === null) {
       return;
     }
-    const point = this.camera.worldToScreen(this.worldBounds);
-    const scale = this.camera.zoom * this.currentPixelRatio;
+    const bounds = this.projectDeviceBounds(this.worldBounds);
     this.context.beginPath();
     this.context.rect(
-      point.x * this.currentPixelRatio,
-      point.y * this.currentPixelRatio,
-      this.worldBounds.width * scale,
-      this.worldBounds.height * scale,
+      bounds.left,
+      bounds.top,
+      bounds.right - bounds.left,
+      bounds.bottom - bounds.top,
     );
     this.context.clip();
   }
 
+  /** Projects each shared world edge independently into backing pixels. */
+  private projectDeviceBounds(bounds: WorldRect): CanvasDeviceBounds {
+    const scale = this.camera.zoom * this.currentPixelRatio;
+    return {
+      left: (bounds.x - this.camera.panX) * scale,
+      top: (bounds.y - this.camera.panY) * scale,
+      right: (bounds.x + bounds.width - this.camera.panX) * scale,
+      bottom: (bounds.y + bounds.height - this.camera.panY) * scale,
+    };
+  }
+
+  /** Snaps shared edges, so adjacent regions derive exactly matching edges. */
+  private projectSnappedBounds(bounds: WorldRect): CanvasDeviceBounds {
+    const projected = this.projectDeviceBounds(bounds);
+    return {
+      left: CanvasBackend.snapDeviceBoundary(projected.left),
+      top: CanvasBackend.snapDeviceBoundary(projected.top),
+      right: CanvasBackend.snapDeviceBoundary(projected.right),
+      bottom: CanvasBackend.snapDeviceBoundary(projected.bottom),
+    };
+  }
+
+  /** Rounds ties away from zero to keep negative positions symmetric. */
+  private static snapDeviceBoundary(value: number): number {
+    return value < 0 ? -Math.floor(-value + 0.5) : Math.floor(value + 0.5);
+  }
+
+  /** Clears the same snapped area used to draw a region. */
+  private clearSnappedBounds(bounds: WorldRect): void {
+    const device = this.projectSnappedBounds(bounds);
+    const width = device.right - device.left;
+    const height = device.bottom - device.top;
+    if (width <= 0 || height <= 0) {
+      return;
+    }
+    this.context.clearRect(device.left, device.top, width, height);
+  }
+
   /** Uploads and projects one already-composited pixel region. */
   private presentRegion(region: RenderRegion): void {
+    const device = this.projectSnappedBounds(region.bounds);
+    const width = device.right - device.left;
+    const height = device.bottom - device.top;
+    if (width <= 0 || height <= 0) {
+      return;
+    }
     const surface = this.getRegionSurface(region);
     if (surface.lastValidatedPixels === region.pixels) {
       this.diagnostics.recordIdentityReuse();
@@ -268,15 +298,13 @@ export default class CanvasBackend {
       surface.lastValidatedPixels = region.pixels;
     }
 
-    const point = this.camera.worldToScreen(region.bounds);
-    const scale = this.camera.zoom * this.currentPixelRatio;
     const drawStartedAt = this.diagnostics.hasTimings ? performance.now() : 0;
     this.context.drawImage(
       surface.canvas,
-      point.x * this.currentPixelRatio,
-      point.y * this.currentPixelRatio,
-      region.bounds.width * scale,
-      region.bounds.height * scale,
+      device.left,
+      device.top,
+      width,
+      height,
     );
     this.diagnostics.recordPresented(1);
     if (this.diagnostics.hasTimings) {
