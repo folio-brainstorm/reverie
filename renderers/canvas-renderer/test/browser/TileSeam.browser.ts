@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { Camera, Raster } from "@reveriejs/core";
+import { Camera, Raster, World } from "@reveriejs/core";
 import { RenderingCore } from "@reveriejs/core/rendering";
 
 import { CanvasRenderer } from "../../index.js";
@@ -14,7 +14,7 @@ const COLORS = [
   [255, 255, 0, 255],
 ] as const;
 
-function createScene(edgeAlpha = 255): Raster {
+function createScene(edgeAlpha = 255, originX = 0, originY = 0): Raster {
   const raster = new Raster({ tileSize: 8 });
   for (let y = 0; y < 16; y += 1) {
     for (let x = 0; x < 16; x += 1) {
@@ -23,7 +23,7 @@ function createScene(edgeAlpha = 255): Raster {
         throw new Error("Expected a test tile color.");
       }
       raster.setPixel(
-        { x, y },
+        { x: x + originX, y: y + originY },
         {
           r: color[0],
           g: color[1],
@@ -45,8 +45,7 @@ function sample(canvas: HTMLCanvasElement, x: number, y: number): number[] {
 }
 
 describe("tile seam diagnostic", () => {
-  it("probes real Canvas pixels", () => {
-    const isFirefox = navigator.userAgent.includes("Firefox");
+  it("keeps four opaque Tiles covered across zoom, DPR and translation", () => {
     for (const [zoom, dpr, pan] of [
       [2, 1, 0],
       [1.5, 1, 0],
@@ -75,16 +74,14 @@ describe("tile seam diagnostic", () => {
         scale: zoom * dpr,
         quality: "full",
       });
-      if (isFirefox && zoom === 0.45) {
-        expect(seam[3]).toBeLessThan(255);
+      expect(seam[3]).toBe(255);
+      if (zoom === 0.45) {
         expect(outputSize).toBe(dpr === 1 ? 4 : 8);
         if (dpr === 1 && pan === 0) {
-          expect(sample(canvas, 3, 2)).toEqual([120, 134, 0, 194]);
-          expect(sample(canvas, 2, 3)).toEqual([120, 0, 134, 194]);
-          expect(seam).toEqual([121, 114, 73, 176]);
+          expect(sample(canvas, 3, 2)).toEqual([255, 0, 0, 255]);
+          expect(sample(canvas, 2, 3)).toEqual([255, 0, 0, 255]);
+          expect(seam).toEqual([255, 0, 0, 255]);
         }
-      } else {
-        expect(seam[3]).toBe(255);
       }
       renderer.dispose();
     }
@@ -276,10 +273,54 @@ describe("tile seam diagnostic", () => {
       alphas.push(seam[3] ?? 0);
       backend.dispose();
     }
-    if (navigator.userAgent.includes("Firefox")) {
-      expect(alphas).toEqual([176, 130]);
-    } else {
-      expect(alphas).toEqual([255, 255]);
+    expect(alphas).toEqual([255, 255]);
+  });
+
+  it("keeps negative Tile coordinates continuous across zero", () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 8;
+    canvas.height = 8;
+    const renderer = new CanvasRenderer({
+      canvas,
+      raster: createScene(255, -8, -8),
+      camera: new Camera({ zoom: 0.45, panX: -4, panY: -4 }),
+    });
+    do {
+      renderer.render();
+    } while (renderer.hasPendingRender);
+    expect(sample(canvas, 1, 1)).toEqual([255, 0, 0, 255]);
+    expect(sample(canvas, 2, 1)).toEqual([0, 255, 0, 255]);
+    expect(sample(canvas, 1, 2)).toEqual([0, 0, 255, 255]);
+    expect(sample(canvas, 2, 2)).toEqual([255, 255, 0, 255]);
+    renderer.dispose();
+  });
+
+  it("clips snapped Tile drawing to exact World bounds", () => {
+    const world = new World({
+      tileSize: 8,
+      bounds: { x: 0, y: 0, width: 8, height: 8 },
+    });
+    for (let y = 0; y < 8; y += 1) {
+      for (let x = 0; x < 8; x += 1) {
+        world
+          .getLayer(0)
+          .raster.setPixel({ x, y }, { r: 255, g: 0, b: 0, a: 255 });
+      }
     }
+    const canvas = document.createElement("canvas");
+    canvas.width = 8;
+    canvas.height = 8;
+    const renderer = new CanvasRenderer({
+      canvas,
+      world,
+      camera: new Camera({ zoom: 0.45 }),
+    });
+    do {
+      renderer.render();
+    } while (renderer.hasPendingRender);
+    expect(sample(canvas, 2, 2)).toEqual([255, 0, 0, 255]);
+    expect(sample(canvas, 4, 2)).toEqual([0, 0, 0, 0]);
+    expect(sample(canvas, 2, 4)).toEqual([0, 0, 0, 0]);
+    renderer.dispose();
   });
 });
