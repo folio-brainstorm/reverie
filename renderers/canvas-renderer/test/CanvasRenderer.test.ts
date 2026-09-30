@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { Camera, Raster, World } from "@reveriejs/core";
+import { Camera, Raster, View, World } from "@reveriejs/core";
 import {
   deserializeDocument,
   serializeDocument,
@@ -27,6 +27,7 @@ function createRenderingContext(): CanvasRenderingContext2D {
     rect: vi.fn(),
     clip: vi.fn(),
     clearRect: vi.fn(),
+    setTransform: vi.fn(),
     createImageData: vi.fn((width: number, height: number) => ({
       colorSpace: "srgb",
       data: new Uint8ClampedArray(width * height * 4),
@@ -1441,7 +1442,7 @@ describe("CanvasRenderer World composition", () => {
     world.addLayer();
     world.addLayer();
     const camera = new Camera();
-    const visible = vi.spyOn(camera, "visibleWorldRect");
+    const visible = vi.spyOn(camera, "visibleWorldBounds");
     new CanvasRenderer({ canvas, camera, world }).render();
     expect(visible).toHaveBeenCalledOnce();
   });
@@ -2070,5 +2071,34 @@ describe("CanvasRenderer rendering", () => {
     expect(context.clearRect).toHaveBeenCalledWith(0, 0, 4, 4);
     expect(context.drawImage).not.toHaveBeenCalled();
     expect(ownerDocument.createElement).not.toHaveBeenCalled();
+  });
+});
+
+describe("CanvasRenderer View binding", () => {
+  it("shares one projection through the view and camera properties", () => {
+    const { canvas } = createCanvasFixture();
+    const view = new View({ rotation: 0.2 });
+    const renderer = new CanvasRenderer({
+      canvas,
+      raster: new Raster({ tileSize: 4 }),
+      view,
+    });
+    expect(renderer.view).toBe(view);
+    expect(renderer.camera).toBe(view);
+    renderer.render();
+    renderer.dispose();
+  });
+
+  it("rejects missing and conflicting projections at runtime", () => {
+    const { canvas } = createCanvasFixture();
+    const raster = new Raster({ tileSize: 4 });
+    for (const config of [
+      { canvas, raster },
+      { canvas, raster, view: new View(), camera: new Camera() },
+    ]) {
+      expect(() => Reflect.construct(CanvasRenderer, [config])).toThrow(
+        RendererErrorDefinitions.INVALID_VIEW_CONFIG.code,
+      );
+    }
   });
 });

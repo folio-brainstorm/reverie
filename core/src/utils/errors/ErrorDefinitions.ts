@@ -64,6 +64,27 @@ export const ErrorDefinitions = {
         "Camera viewport `$param` must be non-negative, but received `$received`.",
     },
   },
+  VIEW: {
+    INVALID_NUMBER_TYPE: {
+      code: "EC_VIEW_0001",
+      template:
+        "Invalid type for View `$param`: expected `number`, but received `$received`.",
+    },
+    NON_FINITE_NUMBER: {
+      code: "EC_VIEW_0002",
+      template:
+        "View `$param` must be a finite number, but received `$received`.",
+    },
+    INVALID_ZOOM: {
+      code: "EC_VIEW_0003",
+      template: "View zoom must be a positive finite number.",
+    },
+    INVALID_VIEWPORT_SIZE: {
+      code: "EC_VIEW_0004",
+      template:
+        "View viewport `$param` must be non-negative, but received `$received`.",
+    },
+  },
   RENDERING: {
     INVALID_REQUEST: {
       code: "EC_RENDERING_0001",

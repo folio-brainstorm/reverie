@@ -1,4 +1,4 @@
-import type { Camera, WorldRect } from "@reveriejs/core";
+import type { Camera, View, WorldRect } from "@reveriejs/core";
 import { RenderingCore } from "@reveriejs/core/rendering";
 import {
   intersectRenderRegion,
@@ -64,8 +64,13 @@ export class CanvasRenderer<
     return this.source.world;
   }
 
-  /** Camera used as the world-to-screen projection for every frame. */
-  readonly camera: Camera;
+  /** Shared world-to-screen projection used for every frame. */
+  readonly view: View;
+
+  /** Legacy alias returning the same projection instance. */
+  get camera(): Camera {
+    return this.view;
+  }
 
   private readonly source: RenderSourceSnapshot<Config>;
   private readonly renderSource: RenderSource;
@@ -90,6 +95,8 @@ export class CanvasRenderer<
   private lastMotionX: number | null = null;
   private lastMotionY: number | null = null;
   private lastMotionTime = 0;
+  private lastMotionZoom = 1;
+  private lastMotionRotation = 0;
   private velocityPixelsPerMs = 0;
   private directionX: -1 | 0 | 1 = 0;
   private directionY: -1 | 0 | 1 = 0;
@@ -114,8 +121,8 @@ export class CanvasRenderer<
    *
    * The renderer does not own the lifecycle of any supplied dependency.
    *
-   * @param config - Canvas output, exactly one source, and Camera to observe.
-   * @throws {RendererTypeError} Both rendering sources or neither are supplied.
+   * @param config - Canvas output, exactly one source, and View or legacy Camera.
+   * @throws {RendererTypeError} Sources or projections are missing or conflict.
    */
   constructor(config: Config) {
     this.source = resolveRenderSource(config, () =>
@@ -123,7 +130,16 @@ export class CanvasRenderer<
     );
     this.renderSource = CanvasRenderer.toRenderSource(this.source);
     this.canvas = config.canvas;
-    this.camera = config.camera;
+    const view = config.view ?? config.camera;
+    if (
+      view === undefined ||
+      (config.view !== undefined && config.camera !== undefined)
+    ) {
+      throw RendererTypeError.from(
+        RendererErrorDefinitions.INVALID_VIEW_CONFIG,
+      );
+    }
+    this.view = view;
     this.renderingCore = new RenderingCore({
       ...(config.diagnostics === undefined
         ? {}
@@ -139,7 +155,7 @@ export class CanvasRenderer<
     this.diagnostics = this.diagnosticCollector;
     this.backend = new CanvasBackend(
       config.canvas,
-      config.camera,
+      this.view,
       this.world?.bounds ?? null,
       this.diagnosticCollector,
     );
@@ -224,13 +240,14 @@ export class CanvasRenderer<
       return;
     }
 
-    const scale = this.camera.zoom * this.pixelRatio;
-    const viewportKey = CanvasRenderer.createViewportKey(
+    const scale = this.view.zoom * this.pixelRatio;
+    const viewportKey = `${CanvasRenderer.createViewportKey(
       viewport,
       scale,
-      this.camera.panX,
-      this.camera.panY,
-    );
+      this.view.panX,
+      this.view.panY,
+    )}:${this.view.rotation}:${this.canvas.width}:${this.canvas.height}:${this.pixelRatio}`;
+    if (this.lastPresentedViewportKey !== viewportKey) this.cancelPending();
     const sourceRevision = String(this.sourceVersion);
     const tileSize =
       "raster" in this.renderSource
@@ -239,7 +256,7 @@ export class CanvasRenderer<
     this.updateMotion(quality);
     const coverage = CoveragePolicy.resolve(
       tileSize,
-      this.camera.zoom,
+      this.view.zoom,
       this.velocityPixelsPerMs,
       this.directionX,
       this.directionY,
@@ -277,8 +294,9 @@ export class CanvasRenderer<
       viewport,
       sourceRevision,
       scaleKey: String(scale),
-      panX: this.camera.panX,
-      panY: this.camera.panY,
+      rotation: this.view.rotation,
+      panX: this.view.panX,
+      panY: this.view.panY,
       quality,
       outputTileSize,
       resultClass:
@@ -470,7 +488,7 @@ export class CanvasRenderer<
       this.diagnosticCollector.setZoneState(0, 0, 0);
       return;
     }
-    const viewport = this.camera.visibleWorldRect({
+    const viewport = this.view.visibleWorldBounds({
       width: width / this.pixelRatio,
       height: height / this.pixelRatio,
     });
@@ -483,13 +501,7 @@ export class CanvasRenderer<
       "raster" in this.renderSource
         ? this.renderSource.raster.tileSize
         : this.renderSource.world.tileSize;
-    const coverage = CoveragePolicy.resolve(
-      tileSize,
-      this.camera.zoom,
-      0,
-      0,
-      0,
-    );
+    const coverage = CoveragePolicy.resolve(tileSize, this.view.zoom, 0, 0, 0);
     this.cancelPending();
     this.presentationState.retainNear(
       viewport,
@@ -655,11 +667,16 @@ export class CanvasRenderer<
   /** Samples host camera movement only when its position changes. */
   private updateMotion(quality: RenderQualityMode): void {
     const now = performance.now();
-    const panX = this.camera.panX;
-    const panY = this.camera.panY;
+    const panX = this.view.panX;
+    const panY = this.view.panY;
     const deltaX = this.lastMotionX === null ? 0 : panX - this.lastMotionX;
     const deltaY = this.lastMotionY === null ? 0 : panY - this.lastMotionY;
-    if (quality === "full") {
+    const hasProjectionChanged =
+      this.lastMotionZoom !== this.view.zoom ||
+      this.lastMotionRotation !== this.view.rotation;
+    this.lastMotionZoom = this.view.zoom;
+    this.lastMotionRotation = this.view.rotation;
+    if (quality === "full" || hasProjectionChanged) {
       this.velocityPixelsPerMs = 0;
       this.directionX = 0;
       this.directionY = 0;
@@ -667,7 +684,7 @@ export class CanvasRenderer<
       const elapsedMs = Math.max(16, now - this.lastMotionTime);
       this.velocityPixelsPerMs = Math.min(
         100,
-        (Math.hypot(deltaX, deltaY) * this.camera.zoom) / elapsedMs,
+        (Math.hypot(deltaX, deltaY) * this.view.zoom) / elapsedMs,
       );
       this.directionX =
         Math.abs(deltaX) >= Math.abs(deltaY) ? (deltaX > 0 ? 1 : -1) : 0;
@@ -772,7 +789,7 @@ export class CanvasRenderer<
     }
 
     const viewport = intersectRenderRegion(
-      this.camera.visibleWorldRect({
+      this.view.visibleWorldBounds({
         width: width / this.pixelRatio,
         height: height / this.pixelRatio,
       }),

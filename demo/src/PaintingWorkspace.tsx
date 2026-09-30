@@ -128,6 +128,7 @@ export function PaintingWorkspace({
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
   const [cameraZoom, setCameraZoom] = useState(1);
+  const [rotation, setRotation] = useState(0);
   const [brushSize, setBrushSize] = useState(INITIAL_BRUSH_SIZE);
   const [brushOpacity, setBrushOpacity] = useState(INITIAL_BRUSH_OPACITY);
   const [brushSpacing, setBrushSpacing] = useState(INITIAL_BRUSH_SPACING);
@@ -209,10 +210,8 @@ export function PaintingWorkspace({
         brushSettingsRef.current.mode,
       ),
     );
-    indicator.setAttribute(
-      "transform",
-      `matrix(${camera.zoom} 0 0 ${camera.zoom} ${-camera.panX * camera.zoom} ${-camera.panY * camera.zoom})`,
-    );
+    const matrix = camera.getTransform();
+    indicator.setAttribute("transform", `matrix(${matrix.a} ${matrix.b} ${matrix.c} ${matrix.d} ${matrix.e} ${matrix.f})`);
     indicator.setAttribute("visibility", "visible");
   };
 
@@ -227,6 +226,7 @@ export function PaintingWorkspace({
         setPanX(camera.panX);
         setPanY(camera.panY);
         setCameraZoom(camera.zoom);
+        setRotation(camera.rotation);
       });
     });
   };
@@ -373,7 +373,9 @@ export function PaintingWorkspace({
         fitZoom,
         canvasSize,
       );
-      reverie.camera.setZoom(fitZoom);
+      reverie.camera.setRotation(0);
+    setRotation(0);
+    reverie.camera.setZoom(fitZoom);
       reverie.camera.setPan(centeredPan.x, centeredPan.y);
       reverie.render();
       setPanX(centeredPan.x);
@@ -883,6 +885,8 @@ export function PaintingWorkspace({
       fitZoom,
       canvasSize,
     );
+    reverie.camera.setRotation(0);
+    setRotation(0);
     reverie.camera.setZoom(fitZoom);
     reverie.camera.setPan(centeredPan.x, centeredPan.y);
     reverie.render();
@@ -956,10 +960,7 @@ export function PaintingWorkspace({
     if (previousPosition === null || reverie === null) return;
     event.preventDefault();
     const { camera } = reverie;
-    camera.panBy(
-      -(event.clientX - previousPosition.x) / camera.zoom,
-      -(event.clientY - previousPosition.y) / camera.zoom,
-    );
+    camera.panByScreen(event.clientX - previousPosition.x, event.clientY - previousPosition.y);
     lastPanPositionRef.current = { x: event.clientX, y: event.clientY };
     reverie.requestViewRender("interactive");
     publishCameraView();
@@ -976,30 +977,34 @@ export function PaintingWorkspace({
     reverieRef.current?.requestViewRender("full");
   };
 
-  const drawingLeft = -panX * cameraZoom;
-  const drawingTop = -panY * cameraZoom;
+  const cosine = Math.cos(rotation) * cameraZoom;
+  const sine = Math.sin(rotation) * cameraZoom;
+  const translateX = -panX * cosine + panY * sine;
+  const translateY = -panX * sine - panY * cosine;
+  const worldOverlayTransform = `matrix(${cosine} ${sine} ${-sine} ${cosine} ${translateX} ${translateY})`;
   const drawingSurfaceStyle: CSSProperties = {
-    left: drawingLeft,
-    top: drawingTop,
-    width: drawingWidth * cameraZoom,
-    height: drawingHeight * cameraZoom,
-    backgroundPosition: `0 0, 0 ${cameraZoom}px, ${cameraZoom}px -${cameraZoom}px, -${cameraZoom}px 0`,
-    backgroundSize: `${cameraZoom * 2}px ${cameraZoom * 2}px`,
+    left: 0,
+    top: 0,
+    width: drawingWidth,
+    height: drawingHeight,
+    transformOrigin: "0 0",
+    transform: `matrix(${cosine}, ${sine}, ${-sine}, ${cosine}, ${translateX}, ${translateY})`,
+    backgroundPosition: "0 0, 0 1px, 1px -1px, -1px 0",
+    backgroundSize: "2px 2px",
   };
-  const visibleLeft = clamp(drawingLeft, 0, viewportSize.width);
-  const visibleTop = clamp(drawingTop, 0, viewportSize.height);
-  const visibleRight = clamp(
-    drawingLeft + drawingWidth * cameraZoom,
-    0,
-    viewportSize.width,
-  );
-  const visibleBottom = clamp(
-    drawingTop + drawingHeight * cameraZoom,
-    0,
-    viewportSize.height,
-  );
+  const corners = [[0, 0], [drawingWidth, 0], [drawingWidth, drawingHeight], [0, drawingHeight]];
   const canvasStyle: CSSProperties = {
-    clipPath: `polygon(${visibleLeft}px ${visibleTop}px, ${visibleRight}px ${visibleTop}px, ${visibleRight}px ${visibleBottom}px, ${visibleLeft}px ${visibleBottom}px)`,
+    clipPath: `polygon(${corners.map(([x = 0, y = 0]) => `${cosine * x - sine * y + translateX}px ${sine * x + cosine * y + translateY}px`).join(", ")} )`,
+  };
+  const rotateView = (degrees: number): void => {
+    const reverie = reverieRef.current;
+    const frame = canvasFrameRef.current;
+    if (reverie === null || frame === null) return;
+    const bounds = frame.getBoundingClientRect();
+    reverie.view.rotateAt({x: bounds.width / 2, y: bounds.height / 2}, degrees * Math.PI / 180);
+    reverie.requestViewRender("interactive");
+    publishCameraView();
+    if (lastPointerPositionRef.current !== null) updateBrushIndicator(lastPointerPositionRef.current);
   };
   const zoomPercentage = Math.round(
     (cameraZoom /
@@ -1007,7 +1012,6 @@ export function PaintingWorkspace({
       100,
   );
   const displayedSelectionRect = selectionPreviewRect ?? selectionRect;
-  const worldOverlayTransform = `matrix(${cameraZoom} 0 0 ${cameraZoom} ${-panX * cameraZoom} ${-panY * cameraZoom})`;
 
   return (
     <main className="workspace-shell" aria-busy={!isCanvasReady}>
@@ -1209,6 +1213,24 @@ export function PaintingWorkspace({
                 : `${selectionRect.width} × ${selectionRect.height} at ${selectionRect.x}, ${selectionRect.y}`}
             </p>
             <p className="tool-group-label">Canvas</p>
+            <label className="spacing-control">
+              Rotation <output>{Math.round(rotation * 180 / Math.PI)}°</output>
+              <input
+                aria-label="Rotation"
+                type="range"
+                min="-180"
+                max="180"
+                step="1"
+                value={Math.round(rotation * 180 / Math.PI)}
+                onChange={(event) => rotateView(Number(event.currentTarget.value))}
+                onPointerUp={() => reverieRef.current?.requestViewRender("full")}
+                onKeyUp={() => reverieRef.current?.requestViewRender("full")}
+                onBlur={() => reverieRef.current?.requestViewRender("full")}
+              />
+            </label>
+            <button type="button" onClick={() => { rotateView(0); reverieRef.current?.requestViewRender("full"); }}>
+              Reset rotation
+            </button>
             <button type="button" onClick={resetView}>
               Reset view
             </button>

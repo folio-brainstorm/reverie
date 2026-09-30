@@ -2,6 +2,10 @@ import type { ErrorDefinition } from "@reveriejs/core";
 
 /** Web-owned message templates paired with stable Web error codes. */
 export const WebErrorDefinitions = {
+  INVALID_VIEW_CONFIG: {
+    code: "EC_WEB_0040",
+    template: "Supply exactly one projection: view or camera.",
+  },
   LAYER_CHANGE_WHILE_DISPOSED: {
     code: "EC_WEB_0022",
     template:

@@ -6,6 +6,7 @@ import type {
   RasterLayer,
   SelectionMask,
   WorldBounds,
+  View,
 } from "@reveriejs/core";
 import type { RenderQualityMode } from "@reveriejs/core/rendering";
 import type { ExportRegion } from "@reveriejs/exporter";
@@ -34,7 +35,12 @@ export class ReverieCanvas {
   readonly world: World;
 
   /** Camera used by both pointer conversion and rendering. */
-  readonly camera: Camera;
+  readonly view: View;
+
+  /** Legacy alias returning the same projection instance. */
+  get camera(): Camera {
+    return this.view;
+  }
 
   /** Session selection, intentionally separate from the World document model. */
   private currentActiveLayer: RasterLayer;
@@ -96,11 +102,11 @@ export class ReverieCanvas {
   constructor(config: ReverieCanvasConfig) {
     this.world = ReverieCanvas.resolveWorld(config);
     this.currentActiveLayer = this.world.getLayer(0);
-    this.camera = new Camera();
+    this.view = config.view ?? new Camera();
     this.renderer = new CanvasRenderer({
       canvas: config.canvas,
       world: this.world,
-      camera: this.camera,
+      view: this.view,
       ...(config.diagnostics === undefined
         ? {}
         : { diagnostics: config.diagnostics }),
@@ -110,7 +116,7 @@ export class ReverieCanvas {
       raster: this.activeLayer.raster,
       layer: this.activeLayer,
       world: this.world,
-      camera: this.camera,
+      view: this.view,
       renderer: this.renderer,
       brush: config.brush ?? ReverieCanvas.createDefaultBrush(),
       ...(config.paintMode === undefined

@@ -39,7 +39,7 @@ This file applies to the entire repository. All new and modified code must follo
 - Preserve the existing ESM convention: relative imports within `core/` must include the emitted `.js` extension, for example `import Foo from "./Foo.js"`.
 - Import from another package through its public entry point. Do not reach across packages into another package's `src/` directory. If a test genuinely needs an internal implementation, prefer exposing it through an explicit public or test-only entry point.
 - Dependencies used only as types must use `import type` or `export type` to avoid unnecessary runtime dependencies.
-- Any addition, removal, or signature change to a public API must be reflected in the package entry point, tests, and relevant documentation.
+- Do not modify the README.md file.
 
 ## Type Organization
 
