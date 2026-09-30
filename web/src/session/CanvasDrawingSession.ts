@@ -2,6 +2,7 @@ import { resolvePaintMode, SelectionMask, Stroke } from "@reveriejs/core";
 import type {
   Brush,
   Camera,
+  View,
   PaintMode,
   Raster,
   RasterLayer,
@@ -38,8 +39,13 @@ export class CanvasDrawingSession {
     return this.currentRaster;
   }
 
-  /** Camera converting CSS-pixel input into continuous world positions. */
-  readonly camera: Camera;
+  /** Shared View converting CSS-pixel input into continuous world positions. */
+  readonly view: View;
+
+  /** Legacy alias returning the same projection instance. */
+  get camera(): Camera {
+    return this.view;
+  }
 
   /** Optional bounded layer used to execute stamps into {@link raster}. */
   private currentLayer: RasterLayer | undefined;
@@ -147,7 +153,7 @@ export class CanvasDrawingSession {
    *
    * @param config - Canvas, models, renderer, brush, and optional runtime hooks.
    * @throws {WebError} The optional layer does not own the supplied Raster.
-   * @throws {WebTypeError} The maximum DPR is not a number.
+   * @throws {WebTypeError} The maximum DPR is not a number, or projections are missing/conflicting.
    * @throws {WebRangeError} Maximum DPR or the initial uint32 stroke sequence is invalid.
    */
   constructor(config: CanvasDrawingSessionConfig) {
@@ -183,7 +189,14 @@ export class CanvasDrawingSession {
 
     this.canvas = config.canvas;
     this.currentRaster = config.raster;
-    this.camera = config.camera;
+    const view = config.view ?? config.camera;
+    if (
+      view === undefined ||
+      (config.view !== undefined && config.camera !== undefined)
+    ) {
+      throw WebTypeError.from(WebErrorDefinitions.INVALID_VIEW_CONFIG);
+    }
+    this.view = view;
     this.currentLayer = config.layer;
     this.renderer = config.renderer;
     this.currentBrush = config.brush;
@@ -615,7 +628,7 @@ export class CanvasDrawingSession {
       const strokeInput = resolvePointerStrokeInput(pointerEvent);
 
       stroke.addSample({
-        position: this.camera.screenToWorld({
+        position: this.view.screenToWorld({
           x: pointerEvent.clientX - bounds.left,
           y: pointerEvent.clientY - bounds.top,
         }),

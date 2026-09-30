@@ -2,6 +2,10 @@ import type { ErrorDefinition } from "@reveriejs/core";
 
 /** Renderer-owned message templates paired with stable renderer error codes. */
 export const RendererErrorDefinitions = {
+  INVALID_VIEW_CONFIG: {
+    code: "EC_RENDERER_0008",
+    template: "Supply exactly one projection: view or camera.",
+  },
   INVALID_RENDER_SOURCE: {
     code: "EC_RENDERER_0004",
     template: "Supply exactly one rendering source: Raster or World.",

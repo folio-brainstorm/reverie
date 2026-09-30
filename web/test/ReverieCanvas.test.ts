@@ -8,6 +8,7 @@ import {
   SelectionMask,
   Stroke,
   World,
+  View,
 } from "@reveriejs/core";
 import type { StampCommand } from "@reveriejs/core";
 import {
@@ -1999,6 +2000,7 @@ function createRenderingContext(): CanvasRenderingContext2D {
     clip(): void {},
     imageSmoothingEnabled: false,
     clearRect(): void {},
+    setTransform(): void {},
     drawImage(): void {},
     createImageData(width: number, height: number): ImageData {
       return {
@@ -2011,3 +2013,80 @@ function createRenderingContext(): CanvasRenderingContext2D {
     putImageData(): void {},
   } as unknown as CanvasRenderingContext2D;
 }
+
+describe("ReverieCanvas shared View", () => {
+  it("uses the supplied instance for facade, renderer and input without history changes", () => {
+    const runtime = createCanvasRuntime(16, 16);
+    const view = new View({ rotation: Math.PI / 2 });
+    const reverie = new ReverieCanvas({ canvas: runtime.canvas, view });
+    try {
+      expect(reverie.view).toBe(view);
+      expect(reverie.camera).toBe(view);
+      expect(reverie.renderer.view).toBe(view);
+      expect(reverie.session.view).toBe(view);
+      expect(reverie.session.camera).toBe(view);
+      view.rotateAt({ x: 8, y: 8 }, -0.7);
+      view.zoomAt({ x: 8, y: 8 }, 2);
+      reverie.render();
+      expect(reverie.canUndo).toBe(false);
+    } finally {
+      reverie.dispose();
+    }
+  });
+});
+
+it("maps rotated pointer input into the correct world pixel", () => {
+  const runtime = createCanvasRuntime(16, 16);
+  const view = new View({ panX: 0, panY: 8, rotation: Math.PI / 2 });
+  const reverie = new ReverieCanvas({
+    canvas: runtime.canvas,
+    width: 16,
+    height: 16,
+    view,
+  });
+  const pointer = {
+    button: 0,
+    pointerId: 1,
+    clientX: 5.5,
+    clientY: 1.5,
+    timeStamp: 1,
+  };
+  try {
+    runtime.canvas.dispatchPointer("pointerdown", pointer);
+    runtime.runNextFrame();
+    runtime.canvas.dispatchPointer("pointerup", { ...pointer, timeStamp: 2 });
+    expect(reverie.activeLayer.raster.getPixel({ x: 1, y: 2 })).toEqual({
+      r: 0,
+      g: 0,
+      b: 0,
+      a: 255,
+    });
+    expect(reverie.activeLayer.raster.getPixel({ x: 5, y: 1 }).a).toBe(0);
+    expect(reverie.canUndo).toBe(true);
+  } finally {
+    reverie.dispose();
+  }
+});
+
+it("rejects missing and conflicting Session projections", () => {
+  const runtime = createCanvasRuntime();
+  const reverie = new ReverieCanvas({ canvas: runtime.canvas });
+  const base = {
+    canvas: runtime.canvas,
+    raster: reverie.activeLayer.raster,
+    renderer: reverie.renderer,
+    brush: reverie.brush,
+  };
+  try {
+    for (const config of [
+      base,
+      { ...base, view: new View(), camera: reverie.camera },
+    ]) {
+      expect(() => Reflect.construct(CanvasDrawingSession, [config])).toThrow(
+        WebErrorDefinitions.INVALID_VIEW_CONFIG.code,
+      );
+    }
+  } finally {
+    reverie.dispose();
+  }
+});

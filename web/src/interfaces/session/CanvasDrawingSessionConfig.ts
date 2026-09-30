@@ -1,6 +1,6 @@
 import type {
   Brush,
-  Camera,
+  ViewBinding,
   PaintMode,
   Raster,
   RasterLayer,
@@ -12,7 +12,7 @@ import type { CanvasRenderer } from "@reveriejs/canvas-renderer";
 import type { DrawingScheduler } from "../../scheduler/DrawingScheduler.js";
 
 /** Dependencies and callbacks for browser drawing orchestration. */
-export interface CanvasDrawingSessionConfig {
+interface CanvasDrawingSessionDependencies {
   /** Canvas receiving pointer input and rendered backing pixels. */
   readonly canvas: HTMLCanvasElement;
 
@@ -24,9 +24,6 @@ export interface CanvasDrawingSessionConfig {
 
   /** Optional World whose Layer mutations share this Session's History. */
   readonly world?: World;
-
-  /** Camera whose zoom remains CSS pixels per world unit. */
-  readonly camera: Camera;
 
   /** Canvas renderer observing the supplied Raster and Camera. */
   readonly renderer: CanvasRenderer;
@@ -61,3 +58,7 @@ export interface CanvasDrawingSessionConfig {
   /** Called after an active Stroke ends for any pointer-lifecycle reason. */
   readonly onStrokeEnd?: () => void;
 }
+
+/** Drawing dependencies with exactly one shared projection. */
+export type CanvasDrawingSessionConfig = CanvasDrawingSessionDependencies &
+  ViewBinding;

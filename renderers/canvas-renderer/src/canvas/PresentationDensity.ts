@@ -20,6 +20,11 @@ export function getPresentationScale(
 ): number {
   const sourceSize = Math.sqrt(region.pixels.length / 4);
   const scale = Number(context.scaleKey);
+  if (context.rotation !== undefined && context.rotation !== 0) {
+    return (
+      (Math.max(region.bounds.width, region.bounds.height) * scale) / sourceSize
+    );
+  }
   const panX = context.panX ?? context.viewport.x;
   const panY = context.panY ?? context.viewport.y;
   const left = snapDeviceBoundary((region.bounds.x - panX) * scale);

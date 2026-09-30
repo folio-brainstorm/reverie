@@ -96,8 +96,11 @@ importers:
   renderers/canvas-renderer:
     dependencies:
       '@reveriejs/core':
-        specifier: workspace:*
+        specifier: workspace:>=1.0.1
         version: link:../../core
+      '@reveriejs/web':
+        specifier: workspace:>=1.0.1
+        version: link:../../web
     devDependencies:
       '@vitest/browser-playwright':
         specifier: 5.0.0
@@ -131,7 +134,7 @@ importers:
         specifier: workspace:*
         version: link:../renderers/canvas-renderer
       '@reveriejs/core':
-        specifier: workspace:*
+        specifier: workspace:>=1.0.1
         version: link:../core
       '@reveriejs/exporter':
         specifier: workspace:*

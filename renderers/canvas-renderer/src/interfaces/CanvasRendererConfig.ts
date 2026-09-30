@@ -1,4 +1,4 @@
-import type { Camera } from "@reveriejs/core";
+import type { ViewBinding } from "@reveriejs/core";
 import type { RenderSource } from "@reveriejs/core/rendering";
 
 import type { CanvasDiagnosticsOptions } from "./diagnostics/CanvasDiagnosticsOptions.js";
@@ -8,9 +8,6 @@ interface CanvasRendererDependencies {
   /** Canvas whose backing buffer receives the rendered raster. */
   canvas: HTMLCanvasElement;
 
-  /** Camera that projects world coordinates into screen coordinates. */
-  camera: Camera;
-
   /** Enables optional stage timing and 60-call rolling statistics. */
   readonly diagnostics?: CanvasDiagnosticsOptions;
 
@@ -19,4 +16,6 @@ interface CanvasRendererDependencies {
 }
 
 /** Exactly one rendering source: an independent Raster or a composed World. */
-export type CanvasRendererConfig = CanvasRendererDependencies & RenderSource;
+export type CanvasRendererConfig = CanvasRendererDependencies &
+  RenderSource &
+  ViewBinding;

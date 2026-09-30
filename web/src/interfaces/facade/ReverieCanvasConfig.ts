@@ -1,10 +1,19 @@
-import type { Brush, PaintMode, SelectionMask, World } from "@reveriejs/core";
+import type {
+  Brush,
+  PaintMode,
+  SelectionMask,
+  View,
+  World,
+} from "@reveriejs/core";
 import type { CanvasRendererConfig } from "@reveriejs/canvas-renderer";
 
 /** Configuration for a complete browser drawing surface. */
 export interface ReverieCanvasConfig {
   /** Canvas receiving pointer input and rendered pixels. */
   readonly canvas: HTMLCanvasElement;
+
+  /** Shared renderer-independent projection; defaults to a compatible Camera. */
+  readonly view?: View;
 
   /** Existing World to attach without changing its document state. */
   readonly world?: World;

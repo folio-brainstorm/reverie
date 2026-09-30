@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { Camera, CircleBrush, Raster, World } from "@reveriejs/core";
+import { Camera, CircleBrush, Raster, View, World } from "@reveriejs/core";
 import { RenderingCore } from "@reveriejs/core/rendering";
 
 import { CanvasRenderer } from "../../index.js";
@@ -345,4 +345,148 @@ describe("CanvasRenderer browser minification", () => {
       0.04,
     );
   });
+});
+
+describe("CanvasRenderer rotated presentation", () => {
+  it.each([1, 1.25, 1.5])(
+    "preserves translucent adjacent tiles, clips the World and clears removals at DPR %s",
+    (ratio) => {
+      const world = new World({
+        tileSize: 4,
+        bounds: { x: 0, y: 0, width: 8, height: 8 },
+      });
+      const raster = world.getLayer(0).raster;
+      for (let y = 0; y < 8; y++)
+        for (let x = 0; x < 8; x++)
+          raster.setPixel({ x, y }, { r: 255, g: 0, b: 0, a: 128 });
+      const canvas = createCanvas(40 * ratio, 40 * ratio);
+      const view = new View({ zoom: 3, panX: -2, panY: -2 });
+      const renderer = new CanvasRenderer({ canvas, world, view });
+      renderer.resize(canvas.width, canvas.height, ratio);
+      const drain = (): void => {
+        do {
+          renderer.render();
+        } while (renderer.hasPendingRender);
+      };
+      try {
+        drain();
+        view.rotateAt({ x: 20, y: 20 }, Math.PI / 4);
+        drain();
+        expect(renderer.diagnostics.getSnapshot().tiles.renderedCount).toBe(0);
+        const pixels = readPixels(canvas);
+        // Test pixel centers well inside and outside the transformed document.
+        // All interior samples include shared tile boundaries and must retain alpha.
+        let inside = 0;
+        let outside = 0;
+        for (let y = 0; y < canvas.height; y++)
+          for (let x = 0; x < canvas.width; x++) {
+            const point = view.screenToWorld({
+              x: (x + 0.5) / ratio,
+              y: (y + 0.5) / ratio,
+            });
+            const alpha = readPixel(pixels, canvas.width, x, y)[3];
+            if (
+              point.x > 0.5 &&
+              point.x < 7.5 &&
+              point.y > 0.5 &&
+              point.y < 7.5
+            ) {
+              expect(alpha).toBe(128);
+              inside++;
+            } else if (
+              point.x < -0.5 ||
+              point.x > 8.5 ||
+              point.y < -0.5 ||
+              point.y > 8.5
+            ) {
+              expect(alpha).toBe(0);
+              outside++;
+            }
+          }
+        expect(inside).toBeGreaterThan(0);
+        expect(outside).toBeGreaterThan(0);
+        raster.clear();
+        renderer.invalidate();
+        drain();
+        expect(readPixels(canvas).every((value) => value === 0)).toBe(true);
+      } finally {
+        renderer.dispose();
+      }
+    },
+  );
+
+  it("reprojects a changed angle with identical coverage and returns to the zero-angle path", () => {
+    const raster = new Raster({ tileSize: 4 });
+    raster.setPixel({ x: 1, y: 2 }, { r: 0, g: 255, b: 0, a: 255 });
+    const canvas = createCanvas(24, 24);
+    const view = new View({ zoom: 3, panX: -2, panY: -2 });
+    const renderer = new CanvasRenderer({ canvas, raster, view });
+    try {
+      renderer.render();
+      const original = readPixels(canvas);
+      view.rotateAt({ x: 12, y: 12 }, Math.PI / 2);
+      renderer.render();
+      expect(readPixels(canvas)).not.toEqual(original);
+      view.rotateAt({ x: 12, y: 12 }, 0);
+      renderer.render();
+      expect(readPixels(canvas)).toEqual(original);
+    } finally {
+      renderer.dispose();
+    }
+  });
+});
+
+it("cancels rotated progressive work, retains completed tiles and erases without damaging neighbors", () => {
+  const world = new World({
+    tileSize: 2,
+    bounds: { x: 0, y: 0, width: 24, height: 24 },
+  });
+  const raster = world.getLayer(0).raster;
+  for (let y = 0; y < 24; y++)
+    for (let x = 0; x < 24; x++)
+      raster.setPixel({ x, y }, { r: x * 10, g: y * 10, b: 50, a: 128 });
+  const canvas = createCanvas(24, 24);
+  const view = new View();
+  const renderer = new CanvasRenderer({ canvas, world, view });
+  const referenceCanvas = createCanvas(24, 24);
+  const reference = new CanvasRenderer({
+    canvas: referenceCanvas,
+    world,
+    view,
+  });
+  const drain = (target: CanvasRenderer): void => {
+    for (let batch = 0; batch < 10; batch++) {
+      target.render();
+      if (!target.hasPendingRender) return;
+    }
+    throw new Error("Expected the frame to finish within ten batches");
+  };
+  try {
+    renderer.render();
+    expect(renderer.hasPendingRender).toBe(true);
+    view.rotateAt({ x: 12, y: 12 }, Math.PI / 2);
+    renderer.render();
+    expect(
+      renderer.diagnostics.getSnapshot().progressive.cancelledRequestCount,
+    ).toBe(1);
+    expect(
+      renderer.diagnostics.getSnapshot().reuse.presentationHitCount,
+    ).toBeGreaterThan(0);
+    drain(renderer);
+    drain(reference);
+    expect(readPixels(canvas)).toEqual(readPixels(referenceCanvas));
+    for (let y = 10; y < 12; y++)
+      for (let x = 10; x < 12; x++)
+        raster.setPixel({ x, y }, { r: 0, g: 0, b: 0, a: 0 });
+    renderer.markSourceChanged([{ x: 5, y: 5 }]);
+    reference.invalidate();
+    drain(renderer);
+    drain(reference);
+    expect(readPixels(canvas)).toEqual(readPixels(referenceCanvas));
+    expect(readPixel(readPixels(canvas), 24, 12, 10)[3]).toBe(0);
+    expect(readPixel(readPixels(canvas), 24, 13, 12)[3]).toBe(128);
+  } finally {
+    renderer.dispose();
+    reference.dispose();
+  }
 });

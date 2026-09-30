@@ -1,4 +1,4 @@
-import type { Camera, WorldBounds, WorldRect } from "@reveriejs/core";
+import type { View, WorldBounds, WorldRect } from "@reveriejs/core";
 import type { RenderRegion, RenderTarget } from "@reveriejs/core/rendering";
 
 import { RendererErrorDefinitions } from "../errors/RendererErrorDefinitions.js";
@@ -20,7 +20,7 @@ export default class CanvasBackend {
   readonly canvas: HTMLCanvasElement;
 
   /** Camera used only to project already-resolved region bounds to Canvas. */
-  readonly camera: Camera;
+  readonly camera: View;
 
   private readonly renderTarget: RenderTarget = {};
   private readonly context: CanvasRenderingContext2D;
@@ -28,6 +28,8 @@ export default class CanvasBackend {
   private readonly diagnostics: CanvasDiagnostics;
   private readonly regionSurfaces = new Map<string, CanvasRegionSurface>();
   private currentPixelRatio = 1;
+  private readonly rotatedRegions = new Map<string, RenderRegion>();
+  private compositionCanvas: HTMLCanvasElement | null = null;
 
   /** Backing pixels used for each CSS pixel in the current viewport. */
   get pixelRatio(): number {
@@ -49,7 +51,7 @@ export default class CanvasBackend {
    */
   constructor(
     canvas: HTMLCanvasElement,
-    camera: Camera,
+    camera: View,
     worldBounds: WorldBounds | null,
     diagnostics: CanvasDiagnostics,
   ) {
@@ -73,6 +75,11 @@ export default class CanvasBackend {
    * @param target - Backend-owned output target for this presentation pass.
    */
   present(frame: PresentationFrame, _target: RenderTarget): void {
+    if (this.camera.rotation !== 0) {
+      this.rotatedRegions.clear();
+      this.presentRegions(frame.regions);
+      return;
+    }
     const startedAt = this.diagnostics.hasTimings ? performance.now() : 0;
     const { width, height } = this.canvas;
 
@@ -103,6 +110,12 @@ export default class CanvasBackend {
 
   /** Replaces only regions supplied by a progressive Core batch. */
   presentRegions(regions: readonly RenderRegion[]): void {
+    if (this.camera.rotation !== 0) {
+      for (const region of regions)
+        this.rotatedRegions.set(CanvasBackend.boundsKey(region.bounds), region);
+      this.presentRotated();
+      return;
+    }
     const startedAt = this.diagnostics.hasTimings ? performance.now() : 0;
     this.configureSmoothing();
     if (this.canvas.width === 0 || this.canvas.height === 0) {
@@ -132,6 +145,12 @@ export default class CanvasBackend {
 
   /** Clears coverage omitted by a completed replacement without uploading pixels. */
   clearRegions(bounds: readonly WorldRect[]): void {
+    if (this.camera.rotation !== 0) {
+      for (const region of bounds)
+        this.rotatedRegions.delete(CanvasBackend.boundsKey(region));
+      this.presentRotated();
+      return;
+    }
     if (
       bounds.length === 0 ||
       this.canvas.width === 0 ||
@@ -156,6 +175,8 @@ export default class CanvasBackend {
 
   /** Clears the output when an operation invalidates every cached region. */
   clear(): void {
+    this.rotatedRegions.clear();
+    this.context.setTransform(1, 0, 0, 1, 0, 0);
     const startedAt = this.diagnostics.hasTimings ? performance.now() : 0;
     this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.configureSmoothing();
@@ -193,6 +214,8 @@ export default class CanvasBackend {
   /** Releases offscreen Canvas upload surfaces retained by this backend. */
   dispose(): void {
     this.regionSurfaces.clear();
+    this.rotatedRegions.clear();
+    this.compositionCanvas = null;
   }
 
   /**
@@ -269,8 +292,11 @@ export default class CanvasBackend {
   }
 
   /** Uploads and projects one already-composited pixel region. */
-  private presentRegion(region: RenderRegion): void {
-    const device = this.projectSnappedBounds(region.bounds);
+  private presentRegion(
+    region: RenderRegion,
+    context: CanvasRenderingContext2D = this.context,
+    device: CanvasDeviceBounds = this.projectSnappedBounds(region.bounds),
+  ): void {
     const width = device.right - device.left;
     const height = device.bottom - device.top;
     if (width <= 0 || height <= 0) {
@@ -299,17 +325,92 @@ export default class CanvasBackend {
     }
 
     const drawStartedAt = this.diagnostics.hasTimings ? performance.now() : 0;
-    this.context.drawImage(
-      surface.canvas,
-      device.left,
-      device.top,
-      width,
-      height,
-    );
+    context.drawImage(surface.canvas, device.left, device.top, width, height);
     this.diagnostics.recordPresented(1);
     if (this.diagnostics.hasTimings) {
       this.diagnostics.recordDraw(performance.now() - drawStartedAt);
     }
+  }
+
+  /** Rebuilds a seam-free world-aligned image before projecting it once. */
+  private presentRotated(): void {
+    this.context.setTransform(1, 0, 0, 1, 0, 0);
+    this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    if (this.canvas.width === 0 || this.canvas.height === 0) return;
+    const scale = this.camera.zoom * this.pixelRatio;
+    const bounds = this.camera.visibleWorldBounds({
+      width: this.canvas.width / this.pixelRatio,
+      height: this.canvas.height / this.pixelRatio,
+    });
+    const left = Math.floor(bounds.x * scale);
+    const top = Math.floor(bounds.y * scale);
+    const width = Math.ceil((bounds.x + bounds.width) * scale) - left;
+    const height = Math.ceil((bounds.y + bounds.height) * scale) - top;
+    const canvas =
+      this.compositionCanvas ??
+      this.canvas.ownerDocument.createElement("canvas");
+    this.compositionCanvas = canvas;
+    if (canvas.width !== width) canvas.width = width;
+    if (canvas.height !== height) canvas.height = height;
+    const context = canvas.getContext(CONTEXT_IDENTIFIER);
+    if (context === null)
+      throw RendererError.from(
+        RendererErrorDefinitions.FAILED_TO_ACQUIRE_RENDERING_CONTEXT,
+      );
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.clearRect(0, 0, width, height);
+    context.imageSmoothingEnabled = scale < 1;
+    context.imageSmoothingQuality = "high";
+    for (const region of this.rotatedRegions.values()) {
+      const r = region.bounds;
+      this.presentRegion(region, context, {
+        left: CanvasBackend.snapDeviceBoundary(r.x * scale) - left,
+        top: CanvasBackend.snapDeviceBoundary(r.y * scale) - top,
+        right: CanvasBackend.snapDeviceBoundary((r.x + r.width) * scale) - left,
+        bottom:
+          CanvasBackend.snapDeviceBoundary((r.y + r.height) * scale) - top,
+      });
+    }
+    const matrix = this.camera.getTransform();
+    const ratio = this.pixelRatio;
+    this.context.save();
+    try {
+      this.context.setTransform(
+        matrix.a * ratio,
+        matrix.b * ratio,
+        matrix.c * ratio,
+        matrix.d * ratio,
+        matrix.e * ratio,
+        matrix.f * ratio,
+      );
+      this.context.globalAlpha = 1;
+      this.context.globalCompositeOperation = "source-over";
+      this.context.imageSmoothingEnabled = false;
+      if (this.worldBounds !== null) {
+        this.context.beginPath();
+        this.context.rect(
+          this.worldBounds.x,
+          this.worldBounds.y,
+          this.worldBounds.width,
+          this.worldBounds.height,
+        );
+        this.context.clip();
+      }
+      this.context.drawImage(
+        canvas,
+        left / scale,
+        top / scale,
+        width / scale,
+        height / scale,
+      );
+    } finally {
+      this.context.restore();
+    }
+  }
+
+  /** Identifies the active placement independently of raster resolution. */
+  private static boundsKey(bounds: WorldRect): string {
+    return `${bounds.x}:${bounds.y}:${bounds.width}:${bounds.height}`;
   }
 
   /** Returns a reusable Canvas upload surface matching one region's geometry. */

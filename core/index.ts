@@ -4,6 +4,7 @@ export { SelectionMask } from "./src/core/selection/index.js";
 export { RasterLayer, World, isLayerBlendMode } from "./src/core/world/index.js";
 export { LAYER_BLEND_MODES } from "./src/config/world/LayerBlendModes.js";
 export { Camera } from "./src/core/camera/index.js";
+export { View } from "./src/core/view/View.js";
 export {
   BrushImage,
   CircleBrush,
@@ -125,3 +126,8 @@ export type { RenderQualityMode } from "./src/interfaces/renderer/RenderQualityM
 export type { RenderRequest } from "./src/interfaces/renderer/RenderRequest.js";
 export type { RenderRegion } from "./src/interfaces/renderer/RenderRegion.js";
 export type { RenderRegionSet } from "./src/interfaces/renderer/RenderRegionSet.js";
+
+export type { ViewConfig } from "./src/interfaces/view/ViewConfig.js";
+export type { ViewTransform } from "./src/interfaces/view/ViewTransform.js";
+export type { WorldQuad } from "./src/interfaces/view/WorldQuad.js";
+export type { ViewBinding } from "./src/interfaces/view/ViewBinding.js";
