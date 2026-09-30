@@ -8,14 +8,6 @@ type: Feature
 
 ---
 
----
-name: Feature Request
-about: Propose a new feature or capability for Rêverie
-title: "[Feature] "
-labels: ["feature"]
-assignees: []
----
-
 ## Summary
 
 Briefly describe the feature.
