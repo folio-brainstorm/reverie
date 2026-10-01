@@ -1,6 +1,6 @@
-import { decode as decodeWebp } from "@stacksjs/ts-webp";
+import decodeWebp from "@jsquash/webp/decode.js";
 import { decode as decodeJpeg } from "jpeg-js";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import {
   ExporterErrorDefinitions,
@@ -11,6 +11,10 @@ import {
   WebPEncoder,
 } from "../index.js";
 import type { ExportResult } from "../index.js";
+
+import { initializeWebpDecoder } from "./InitializeWebpDecoder.js";
+
+beforeAll(initializeWebpDecoder);
 
 const RGBA_CHANNEL_COUNT = 4;
 
@@ -271,7 +275,7 @@ describe("large image geometry", () => {
       height: 1080,
     });
 
-    const decodedWebp = decodeWebp(webp.data);
+    const decodedWebp = await decodeWebp(new Uint8Array(webp.data).buffer);
     expect({ width: decodedWebp.width, height: decodedWebp.height }).toEqual({
       width: 1920,
       height: 1080,

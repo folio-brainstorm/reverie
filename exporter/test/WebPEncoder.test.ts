@@ -1,5 +1,5 @@
-import { decode as decodeWebp } from "@stacksjs/ts-webp";
-import { describe, expect, it } from "vitest";
+import decodeWebp from "@jsquash/webp/decode.js";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import {
   ExporterErrorDefinitions,
@@ -7,6 +7,8 @@ import {
   WebPEncoder,
 } from "../index.js";
 import type { ExportResult, WebPEncodeOptions } from "../index.js";
+
+import { initializeWebpDecoder } from "./InitializeWebpDecoder.js";
 
 const RGBA_CHANNEL_COUNT = 4;
 
@@ -73,6 +75,17 @@ function createDetailedBitmap(size: number): ExportResult {
   return { width: size, height: size, pixels };
 }
 
+/** Builds an opaque color whose chroma exposes incorrect VP8 transform strides. */
+function createSolidBitmap(width: number, height: number): ExportResult {
+  const pixels = new Uint8ClampedArray(width * height * RGBA_CHANNEL_COUNT);
+
+  for (let offset = 0; offset < pixels.length; offset += RGBA_CHANNEL_COUNT) {
+    pixels.set([220, 40, 90, 255], offset);
+  }
+
+  return { width, height, pixels };
+}
+
 /**
  * Reads a four-character code out of a WebP file.
  *
@@ -93,25 +106,15 @@ function readFourCc(bytes: Uint8Array, offset: number): string {
  * Decodes a WebP file back into RGBA8 pixels.
  *
  * @param bytes - Complete WebP file.
- * @returns The decoded geometry, pixels, and alpha presence.
+ * @returns The decoded geometry and RGBA8 pixels.
  */
-function decodeToPixels(bytes: Uint8Array): {
-  width: number;
-  height: number;
-  pixels: Uint8Array;
-  hasAlpha: boolean;
-} {
-  const decoded = decodeWebp(bytes);
-
-  return {
-    width: decoded.width,
-    height: decoded.height,
-    pixels: decoded.data,
-    hasAlpha: decoded.hasAlpha,
-  };
+async function decodeToPixels(bytes: Uint8Array): Promise<ImageData> {
+  return decodeWebp(new Uint8Array(bytes).buffer);
 }
 
 describe("WebPEncoder", () => {
+  beforeAll(initializeWebpDecoder);
+
   it("reports the WebP media type and extension", async () => {
     const encoded = await new WebPEncoder().encode(createBitmap(8, 8));
 
@@ -128,29 +131,80 @@ describe("WebPEncoder", () => {
     expect(readFourCc(encoded.data, 8)).toBe(WEBP_FORM_TAG);
   });
 
-  it("round-trips pixels and alpha exactly by default", async () => {
-    const image = createBitmap(11, 7);
-    const encoded = await new WebPEncoder().encode(image);
-    const decoded = decodeToPixels(encoded.data);
+  it.each([
+    [1, 1],
+    [3, 5],
+    [11, 7],
+    [17, 19],
+    [64, 48],
+  ])(
+    "round-trips %i × %i pixels and alpha exactly by default",
+    async (width, height) => {
+      const image = createBitmap(width, height);
+      const encoded = await new WebPEncoder().encode(image);
+      const decoded = await decodeToPixels(encoded.data);
 
-    expect(readFourCc(encoded.data, CHUNK_FOUR_CC_OFFSET)).toBe(VP8L_FOUR_CC);
-    expect(decoded.hasAlpha).toBe(true);
-    expect(decoded.width).toBe(11);
-    expect(decoded.height).toBe(7);
-    expect(Array.from(decoded.pixels)).toEqual(Array.from(image.pixels));
-  });
+      expect(readFourCc(encoded.data, CHUNK_FOUR_CC_OFFSET)).toBe(VP8L_FOUR_CC);
+      expect(decoded.width).toBe(width);
+      expect(decoded.height).toBe(height);
+      expect(Array.from(decoded.data)).toEqual(Array.from(image.pixels));
+    },
+  );
+
+  it.each([
+    [8, 8, 0.92],
+    [16, 16, 0.92],
+    [17, 19, 0.92],
+    [64, 48, 0.92],
+    [127, 65, 0.92],
+    [8, 8, 1],
+    [16, 16, 1],
+    [17, 19, 1],
+    [64, 48, 1],
+    [127, 65, 1],
+  ])(
+    "preserves solid color throughout a lossy %i × %i image at quality %s",
+    async (width, height, quality) => {
+      const image = createSolidBitmap(width, height);
+      const encoded = await new WebPEncoder().encode(image, {
+        lossless: false,
+        quality,
+      });
+      const decoded = await decodeToPixels(encoded.data);
+
+      expect(decoded.width).toBe(width);
+      expect(decoded.height).toBe(height);
+      expect(decoded.data.length).toBe(image.pixels.length);
+      for (
+        let offset = 0;
+        offset < image.pixels.length;
+        offset += RGBA_CHANNEL_COUNT
+      ) {
+        // YUV conversion and quantization allow small RGB rounding differences.
+        for (let channel = 0; channel < 3; channel += 1) {
+          expect(
+            Math.abs(
+              (decoded.data[offset + channel] ?? 0) -
+                (image.pixels[offset + channel] ?? 0),
+            ),
+          ).toBeLessThanOrEqual(3);
+        }
+        expect(decoded.data[offset + 3]).toBe(255);
+      }
+    },
+  );
 
   it("preserves transparent pixels without flattening their color", async () => {
     const image = createBitmap(8, 8);
     const encoded = await new WebPEncoder().encode(image, { lossless: true });
-    const decoded = decodeToPixels(encoded.data);
+    const decoded = await decodeToPixels(encoded.data);
 
-    expect(Array.from(decoded.pixels.subarray(0, RGBA_CHANNEL_COUNT))).toEqual([
+    expect(Array.from(decoded.data.subarray(0, RGBA_CHANNEL_COUNT))).toEqual([
       0, 0, 0, 0,
     ]);
     expect(
       Array.from(
-        decoded.pixels.subarray(RGBA_CHANNEL_COUNT * 4, RGBA_CHANNEL_COUNT * 5),
+        decoded.data.subarray(RGBA_CHANNEL_COUNT * 4, RGBA_CHANNEL_COUNT * 5),
       ),
     ).toEqual(
       Array.from(
@@ -159,14 +213,82 @@ describe("WebPEncoder", () => {
     );
   });
 
-  it("emits a lossy VP8 bitstream without alpha when requested", async () => {
-    const encoded = await new WebPEncoder().encode(createBitmap(16, 16), {
+  it("emits a lossy VP8 bitstream for an opaque bitmap", async () => {
+    const encoded = await new WebPEncoder().encode(createSolidBitmap(16, 16), {
       lossless: false,
     });
-    const decoded = decodeToPixels(encoded.data);
+    const decoded = await decodeToPixels(encoded.data);
 
     expect(readFourCc(encoded.data, CHUNK_FOUR_CC_OFFSET)).toBe(VP8_FOUR_CC);
-    expect(decoded.hasAlpha).toBe(false);
+    expect(
+      decoded.data
+        .filter((_, index) => index % 4 === 3)
+        .every((alpha) => alpha === 255),
+    ).toBe(true);
+  });
+
+  it.each([
+    [16, 16],
+    [17, 19],
+  ])(
+    "preserves alpha exactly in a lossy %i × %i bitmap",
+    async (width, height) => {
+      const image = createBitmap(width, height);
+      const encoded = await new WebPEncoder().encode(image, {
+        lossless: false,
+      });
+      const decoded = await decodeToPixels(encoded.data);
+
+      expect(readFourCc(encoded.data, CHUNK_FOUR_CC_OFFSET)).toBe("VP8X");
+      expect(decoded.width).toBe(width);
+      expect(decoded.height).toBe(height);
+      expect(
+        Array.from(decoded.data.filter((_, index) => index % 4 === 3)),
+      ).toEqual(Array.from(image.pixels.filter((_, index) => index % 4 === 3)));
+    },
+  );
+
+  it("captures pixels before the caller reuses the buffer during async encoding", async () => {
+    const image = createBitmap(17, 19);
+    const expected = Array.from(image.pixels);
+    const pending = new WebPEncoder().encode(image);
+    image.pixels.fill(255);
+    const decoded = await decodeToPixels((await pending).data);
+
+    expect(Array.from(decoded.data)).toEqual(expected);
+  });
+
+  it("encodes a pixel view with a nonzero byte offset", async () => {
+    const image = createBitmap(17, 19);
+    const backing = new Uint8ClampedArray(image.pixels.length + 16).fill(77);
+    backing.set(image.pixels, 7);
+    const pixels = backing.subarray(7, 7 + image.pixels.length);
+    const before = Array.from(backing);
+    const encoded = await new WebPEncoder().encode({ ...image, pixels });
+
+    expect(Array.from((await decodeToPixels(encoded.data)).data)).toEqual(
+      Array.from(image.pixels),
+    );
+    expect(Array.from(backing)).toEqual(before);
+  });
+
+  it("keeps concurrent exports independent", async () => {
+    const images = [
+      createBitmap(3, 5),
+      createBitmap(17, 19),
+      createSolidBitmap(16, 16),
+    ];
+    const encoder = new WebPEncoder();
+    const encoded = await Promise.all(
+      images.map((image) => encoder.encode(image)),
+    );
+
+    for (const [index, result] of encoded.entries()) {
+      const decoded = await decodeToPixels(result.data);
+      expect(Array.from(decoded.data)).toEqual(
+        Array.from(images[index]?.pixels ?? []),
+      );
+    }
   });
 
   it("applies the lossy quality option", async () => {

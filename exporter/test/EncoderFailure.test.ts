@@ -21,11 +21,9 @@ vi.mock("jpeg-js", () => ({
   },
 }));
 
-vi.mock("@stacksjs/ts-webp", () => ({
-  encode: () => {
-    throw backendFailure;
-  },
-  decode: () => {
+vi.mock("@jsquash/webp/encode.js", () => ({
+  init: async () => {},
+  default: async () => {
     throw backendFailure;
   },
 }));

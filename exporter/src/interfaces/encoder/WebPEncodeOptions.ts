@@ -12,9 +12,8 @@ export interface WebPEncodeOptions {
   /**
    * Whether to encode losslessly. Defaults to `true`.
    *
-   * Lossless output preserves the alpha channel exactly. The lossy path cannot
-   * carry alpha, so it flattens transparent pixels onto the color channels
-   * already present in the bitmap.
+   * Lossless output preserves every RGBA channel exactly, including color in
+   * transparent pixels. Both lossless and lossy output preserve alpha exactly.
    */
   lossless?: boolean;
 }
