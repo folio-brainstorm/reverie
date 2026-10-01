@@ -92,12 +92,15 @@ export class DownloadTestRuntime {
       },
     });
 
-    vi.stubGlobal("URL", {
-      createObjectURL: (blob: Blob): string => this.registerObjectUrl(blob),
-      revokeObjectURL: (objectUrl: string): void => {
+    // Keep the URL constructor available for codec asset resolution.
+    vi.spyOn(URL, "createObjectURL").mockImplementation((blob: Blob): string =>
+      this.registerObjectUrl(blob),
+    );
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(
+      (objectUrl: string): void => {
         this.revokedObjectUrls.push(objectUrl);
       },
-    });
+    );
   }
 
   /** Makes the next anchor click throw, simulating a blocked download. */

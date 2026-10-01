@@ -15,6 +15,7 @@ import {
 } from "./DownloadTestRuntime.js";
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 

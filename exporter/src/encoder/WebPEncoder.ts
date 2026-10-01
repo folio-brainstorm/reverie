@@ -19,9 +19,9 @@ import { resolveNormalizedQuality } from "./internal/option/ResolveNormalizedQua
  * Encodes dense RGBA8 bitmaps as WebP files.
  *
  * The encoder is stateless and read-only. Encoding is lossless by default,
- * which reproduces the alpha channel exactly; requesting lossy output trades
- * that alpha channel for a smaller file, because the lossy WebP bitstream has
- * no way to carry it.
+ * which reproduces all RGBA channels exactly. Lossy output compresses color
+ * channels while preserving alpha exactly. The libwebp WASM backend initializes
+ * lazily on the first export.
  *
  * @example
  * const image = await new WebPEncoder().encode(bitmap, {
@@ -64,7 +64,7 @@ export class WebPEncoder implements ImageEncoder<WebPEncodeOptions> {
 
     try {
       return {
-        data: encodeWebpBytes(image, quality, lossless),
+        data: await encodeWebpBytes(image, quality, lossless),
         mimeType: WEBP_MIME_TYPE,
         extension: WEBP_EXTENSION,
       };
