@@ -428,16 +428,19 @@ export class ReverieCanvas {
    * the runtime `Buffer` shim automatically, so callers never need to reach for
    * `JPEGEncoder.installJpegJsBufferShim()` themselves.
    *
-   * @param options - Format, optional filename, optional region, and encoder options.
+   * @param options - Format, optional filename, region, integer scale in `1..16`
+   * (default `1`), and encoder options. Scaling preserves pixels without interpolation.
    * @returns A promise resolving once the browser download has been triggered.
    * @throws {WebError} This facade has been disposed.
    * @throws {WebRangeError} The World is unbounded and no `region` was supplied.
-   * @throws {ExporterRangeError} The region is unusable or an encoder option is
+   * @throws {ExporterTypeError} The scale has an invalid runtime type.
+   * @throws {ExporterRangeError} The region, scale, output size or an encoder option is
    * outside its supported range.
    * @throws {ExporterError} The format backend failed to encode the bitmap.
    *
    * @example
    * await reverie.download({ format: "png", filename: "drawing" });
+   * await reverie.download({ format: "png", filename: "drawing-4x", scale: 4 });
    */
   async download(options: ReverieDownloadOptions): Promise<void> {
     this.assertUsable();

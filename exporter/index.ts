@@ -17,5 +17,6 @@ export type { PNGCompressionLevel } from "./src/encoder/index.js";
 export type { PNGEncodeOptions } from "./src/encoder/index.js";
 export type { WebPEncodeOptions } from "./src/encoder/index.js";
 export type { ExportRegion } from "./src/interfaces/renderer/ExportRegion.js";
+export type { ExportRenderOptions } from "./src/interfaces/renderer/ExportRenderOptions.js";
 export type { ExportRendererConfig } from "./src/interfaces/renderer/ExportRendererConfig.js";
 export type { ExportResult } from "./src/interfaces/renderer/ExportResult.js";

@@ -13,6 +13,8 @@ import {
 import type { StampCommand } from "@reveriejs/core";
 import {
   ExportRenderer,
+  ExporterErrorDefinitions,
+  ExporterRangeError,
   JPEGEncoder,
   PNGEncoder,
   WebPEncoder,
@@ -957,6 +959,95 @@ describe("CanvasDrawingSession deterministic stroke seeds", () => {
 });
 
 describe("ReverieCanvas export and download", () => {
+  it.each(["png", "jpeg", "webp"] as const)(
+    "downloads %s with exact scaled bitmap dimensions and pixel blocks",
+    async (format) => {
+      const runtime = createCanvasRuntime(2, 1);
+      const reverie = new ReverieCanvas({
+        canvas: runtime.canvas,
+        width: 2,
+        height: 1,
+      });
+      const raster = reverie.world.getLayer(0).raster;
+      raster.setPixel({ x: 0, y: 0 }, { r: 10, g: 20, b: 30, a: 128 });
+      const encoders = {
+        png: vi.spyOn(PNGEncoder.prototype, "encode"),
+        jpeg: vi.spyOn(JPEGEncoder.prototype, "encode"),
+        webp: vi.spyOn(WebPEncoder.prototype, "encode"),
+      };
+      const encodeSpy = encoders[format].mockResolvedValue({
+        data: new Uint8Array([1]),
+        mimeType: `image/${format}`,
+        extension: format === "jpeg" ? "jpg" : format,
+      });
+      await reverie.download({ format, scale: 3 });
+      await flushScheduledTimers();
+      const expectedRow = [
+        10, 20, 30, 128, 10, 20, 30, 128, 10, 20, 30, 128, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0,
+      ];
+      expect(encodeSpy).toHaveBeenCalledWith(
+        {
+          width: 6,
+          height: 3,
+          pixels: Uint8ClampedArray.from([
+            ...expectedRow,
+            ...expectedRow,
+            ...expectedRow,
+          ]),
+        },
+        {},
+      );
+      expect(reverie.world.bounds).toEqual({ x: 0, y: 0, width: 2, height: 1 });
+      expect(raster.getPixel({ x: 0, y: 0 })).toEqual({
+        r: 10,
+        g: 20,
+        b: 30,
+        a: 128,
+      });
+      reverie.dispose();
+    },
+  );
+
+  it.each([1, 16])("accepts download scale boundary %sx", async (scale) => {
+    const runtime = createCanvasRuntime(1, 1);
+    const reverie = new ReverieCanvas({
+      canvas: runtime.canvas,
+      width: 1,
+      height: 1,
+    });
+    const encodeSpy = vi.spyOn(PNGEncoder.prototype, "encode");
+    await reverie.download({ format: "png", scale });
+    await flushScheduledTimers();
+    expect(encodeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ width: scale, height: scale }),
+      {},
+    );
+    reverie.dispose();
+  });
+
+  it.each([0, -1, 1.5, 17, Number.NaN, Infinity])(
+    "rejects invalid download scale %s before encoding or allocating download resources",
+    async (scale) => {
+      const runtime = createCanvasRuntime(1, 1);
+      const reverie = new ReverieCanvas({
+        canvas: runtime.canvas,
+        width: 1,
+        height: 1,
+      });
+      const encodeSpy = vi.spyOn(PNGEncoder.prototype, "encode");
+      await expect(reverie.download({ format: "png", scale })).rejects.toThrow(
+        ExporterRangeError,
+      );
+      await expect(reverie.download({ format: "png", scale })).rejects.toThrow(
+        ExporterErrorDefinitions.INVALID_EXPORT_SCALE.code,
+      );
+      expect(encodeSpy).not.toHaveBeenCalled();
+      expect(runtime.downloads.createdObjectUrls).toHaveLength(0);
+      reverie.dispose();
+    },
+  );
+
   it("downloads the whole fixed World as PNG by default", async () => {
     const runtime = createCanvasRuntime();
     const reverie = new ReverieCanvas({
@@ -970,12 +1061,10 @@ describe("ReverieCanvas export and download", () => {
     await reverie.download({ format: "png" });
     await flushScheduledTimers();
 
-    expect(renderSpy).toHaveBeenCalledWith({
-      x: 0,
-      y: 0,
-      width: 1920,
-      height: 1080,
-    });
+    expect(renderSpy).toHaveBeenCalledWith(
+      { x: 0, y: 0, width: 1920, height: 1080 },
+      {},
+    );
     expect(encodeSpy).toHaveBeenCalledWith(
       expect.objectContaining({ width: 1920, height: 1080 }),
       {},
@@ -1009,12 +1098,10 @@ describe("ReverieCanvas export and download", () => {
     await reverie.download({ format: "png" });
     await flushScheduledTimers();
 
-    expect(renderSpy).toHaveBeenCalledWith({
-      x: -960,
-      y: -540,
-      width: 1920,
-      height: 1080,
-    });
+    expect(renderSpy).toHaveBeenCalledWith(
+      { x: -960, y: -540, width: 1920, height: 1080 },
+      {},
+    );
 
     reverie.dispose();
   });
@@ -1042,7 +1129,7 @@ describe("ReverieCanvas export and download", () => {
     await reverie.download({ format: "png", region });
     await flushScheduledTimers();
 
-    expect(renderSpy).toHaveBeenCalledWith(region);
+    expect(renderSpy).toHaveBeenCalledWith(region, {});
     expect(region).toEqual({ x: -500, y: -500, width: 1000, height: 1000 });
 
     reverie.dispose();
