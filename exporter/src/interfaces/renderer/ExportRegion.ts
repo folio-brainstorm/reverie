@@ -2,7 +2,7 @@
  * An axis-aligned region of world pixels selected for export.
  *
  * Covered coordinates use half-open bounds: `[x, x + width)` and
- * `[y, y + height)`. One world pixel maps to exactly one exported pixel, and
+ * `[y, y + height)`. Export scaling does not change these source bounds, and
  * negative coordinates address world space to the left of or above the origin.
  */
 export interface ExportRegion {

@@ -2,6 +2,20 @@ import type { ErrorDefinition } from "@reveriejs/core";
 
 /** Exporter-owned message templates paired with stable Exporter error codes. */
 export const ExporterErrorDefinitions = {
+  INVALID_EXPORT_SCALE_TYPE: {
+    code: "EC_EXPORTER_0019",
+    template: "Export scale must be a number, but received `$received`.",
+  },
+  INVALID_EXPORT_SCALE: {
+    code: "EC_EXPORTER_0020",
+    template:
+      "Export scale must be an integer within `1..16`, but received `$received`.",
+  },
+  SCALED_OUTPUT_EXCEEDS_SAFE_RANGE: {
+    code: "EC_EXPORTER_0021",
+    template:
+      "Scaled export exceeds the safely computable range: width `$width`, height `$height`, scale `$scale`.",
+  },
   INVALID_RENDER_SOURCE: {
     code: "EC_EXPORTER_0018",
     template: "Supply exactly one export source: Raster or World.",

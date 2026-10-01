@@ -70,6 +70,7 @@ const EXPORT_REQUESTS: readonly ReverieDownloadOptions[] = [
   { format: "jpeg", filename: "reverie-export" },
   { format: "webp", filename: "reverie-export" },
 ];
+const EXPORT_SCALE_PRESETS = [1, 2, 4, 8, 16];
 const TEXT_EDITABLE_INPUT_TYPES = new Set([
   "email",
   "number",
@@ -156,6 +157,7 @@ export function PaintingWorkspace({
   );
   const [drawingError, setDrawingError] = useState<string | null>(null);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
+  const [exportScale, setExportScale] = useState(1);
   const [isLayersPanelOpen, setIsLayersPanelOpen] = useState(false);
   const [isDiagnosticsPanelOpen, setIsDiagnosticsPanelOpen] = useState(false);
   const [, setLayersRevision] = useState(0);
@@ -807,6 +809,7 @@ export function PaintingWorkspace({
       const result = exportRasterToConsole(
         reverie.activeLayer.raster,
         exportRegion,
+        { scale: exportScale },
       );
       setDrawingError(null);
       setExportStatus(
@@ -824,9 +827,12 @@ export function PaintingWorkspace({
     setDrawingError(null);
     setExportStatus(`Encoding ${EXPORT_FORMAT_LABELS[request.format]}...`);
     void reverie
-      .download(request)
+      .download({ ...request, scale: exportScale })
       .then(() => {
-        setExportStatus(`Downloaded ${EXPORT_FORMAT_LABELS[request.format]}`);
+        setExportStatus(
+          `Downloaded ${EXPORT_FORMAT_LABELS[request.format]} at ${exportScale}x · ` +
+            `${drawingWidth * exportScale} × ${drawingHeight * exportScale} px`,
+        );
       })
       .catch((error: unknown) => {
         setExportStatus(null);
@@ -1238,6 +1244,24 @@ export function PaintingWorkspace({
               Clear canvas
             </button>
             <p className="tool-group-label">Export</p>
+            <label className="export-scale-control">
+              <span>Scale</span>
+              <select
+                value={exportScale}
+                onChange={(event) =>
+                  setExportScale(Number(event.currentTarget.value))
+                }
+              >
+                {EXPORT_SCALE_PRESETS.map((scale) => (
+                  <option key={scale} value={scale}>
+                    {scale}x
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="export-output-size" aria-live="polite">
+              {drawingWidth * exportScale} × {drawingHeight * exportScale} px
+            </p>
             <div className="export-actions">
               {EXPORT_REQUESTS.map((request) => (
                 <button

@@ -1,6 +1,10 @@
 import type { Raster } from "@reveriejs/core";
 import { ExportRenderer } from "@reveriejs/exporter";
-import type { ExportRegion, ExportResult } from "@reveriejs/exporter";
+import type {
+  ExportRegion,
+  ExportRenderOptions,
+  ExportResult,
+} from "@reveriejs/exporter";
 
 const RGBA_CHANNEL_COUNT = 4;
 
@@ -13,13 +17,15 @@ const RGBA_CHANNEL_COUNT = 4;
  *
  * @param raster - Sparse raster to export without mutating it.
  * @param region - World-pixel region to export.
+ * @param options - Output multiplier validated by the exporter; defaults to `1x`.
  * @returns The exported bitmap, which the caller may keep for further use.
  */
 export function exportRasterToConsole(
   raster: Raster,
   region: ExportRegion,
+  options: ExportRenderOptions = {},
 ): ExportResult {
-  const result = new ExportRenderer({ raster }).render(region);
+  const result = new ExportRenderer({ raster }).render(region, options);
   const pixelCount = result.width * result.height;
   const visiblePixelCount = countNonTransparentPixels(result.pixels);
 

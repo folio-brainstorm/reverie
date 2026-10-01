@@ -1,6 +1,6 @@
 {
   "name": "@reveriejs/web",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Web package for the Rêverie raster painting engine",
   "license": "Apache-2.0",
   "repository": {
@@ -45,5 +45,8 @@
   "devDependencies": {
     "typescript": "^7.0.2",
     "vitest": "^5.0.0"
+  },
+  "peerDependencies": {
+    "@reveriejs/exporter": "workspace:>=1.1.0"
   }
 }

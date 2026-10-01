@@ -15,8 +15,11 @@ import {
   ExporterTypeError,
 } from "../errors/ExporterErrors.js";
 import type { ExportRegion } from "../interfaces/renderer/ExportRegion.js";
+import type { ExportRenderOptions } from "../interfaces/renderer/ExportRenderOptions.js";
 import type { ExportRendererConfig } from "../interfaces/renderer/ExportRendererConfig.js";
 import type { ExportResult } from "../interfaces/renderer/ExportResult.js";
+
+import { scaleExportResult } from "./ScaleExportResult.js";
 
 const RGBA_CHANNEL_COUNT = 4;
 
@@ -61,22 +64,30 @@ export class ExportRenderer<
    * Extracts a dense RGBA8 bitmap from one world-pixel region of the configured source.
    *
    * The region uses half-open bounds `[x, x + width)` and `[y, y + height)`, and
-   * one world pixel maps to exactly one exported pixel. Unallocated tiles and
-   * untouched pixels read as transparent black. The supplied source (Raster or
+   * each world pixel becomes a `scale × scale` block of identical RGBA bytes.
+   * Unallocated tiles and untouched pixels read as transparent black.
+   * The supplied source (Raster or
    * World, including its layers' Rasters) is never modified. The returned buffer
    * is a fresh allocation owned by the caller.
    *
    * @param region - World-pixel region to export.
-   * @returns A new row-major RGBA8 bitmap with straight alpha.
-   * @throws {ExporterTypeError} A region coordinate is not a number.
+   * @param options - Output scale: an integer in `1..16`, defaulting to `1`.
+   * @returns A new row-major RGBA8 bitmap with straight alpha and scaled dimensions.
+   * @throws {ExporterTypeError} A region coordinate or scale is not a number.
    * @throws {ExporterRangeError} A coordinate is not a safe integer, an extent is
-   * not a positive safe integer, or the region cannot be addressed safely.
+   * not a positive safe integer, scale is outside `1..16` or not an integer,
+   * or the source region or scaled output cannot be addressed safely.
    *
    * @example
    * const image = renderer.render({ x: 0, y: 0, width: 1920, height: 1080 });
    * image.pixels.length; // => 1920 * 1080 * 4
+   * const enlarged = renderer.render({ x: 0, y: 0, width: 256, height: 256 }, { scale: 4 });
+   * enlarged.width; // => 1024
    */
-  render(region: ExportRegion): ExportResult {
+  render(
+    region: ExportRegion,
+    options: ExportRenderOptions = {},
+  ): ExportResult {
     const { x, y, width, height } = region;
 
     assertSafeCoordinate(x, "x");
@@ -84,6 +95,9 @@ export class ExportRenderer<
     assertPositiveSafeInteger(width, "width");
     assertPositiveSafeInteger(height, "height");
     assertRegionWithinSafeRange(x, y, width, height);
+    const scale = options.scale === undefined ? 1 : options.scale;
+    assertExportScale(scale);
+    assertScaledOutputWithinSafeRange(width, height, scale);
 
     const pixels = new Uint8ClampedArray(width * height * RGBA_CHANNEL_COUNT);
 
@@ -105,7 +119,53 @@ export class ExportRenderer<
       copyIntersectingTiles(this.raster, { x, y, width, height }, pixels);
     }
 
-    return { width, height, pixels };
+    return scaleExportResult({ width, height, pixels }, scale);
+  }
+}
+
+/** Rejects unsupported multipliers at the export boundary for all consumers. */
+function assertExportScale(scale: unknown): void {
+  if (typeof scale !== "number") {
+    throw ExporterTypeError.from(
+      ExporterErrorDefinitions.INVALID_EXPORT_SCALE_TYPE,
+      {
+        received: typeof scale,
+      },
+    );
+  }
+  if (!Number.isSafeInteger(scale) || scale < 1 || scale > 16) {
+    throw ExporterRangeError.from(
+      ExporterErrorDefinitions.INVALID_EXPORT_SCALE,
+      {
+        received: scale,
+      },
+    );
+  }
+}
+
+/** Checks scaled dimensions and byte length before allocating even the native bitmap. */
+function assertScaledOutputWithinSafeRange(
+  width: number,
+  height: number,
+  scale: number,
+): void {
+  const outputWidth = width * scale;
+  const outputHeight = height * scale;
+  const pixelCount = outputWidth * outputHeight;
+  if (
+    !Number.isSafeInteger(outputWidth) ||
+    !Number.isSafeInteger(outputHeight) ||
+    !Number.isSafeInteger(pixelCount) ||
+    !Number.isSafeInteger(pixelCount * RGBA_CHANNEL_COUNT)
+  ) {
+    throw ExporterRangeError.from(
+      ExporterErrorDefinitions.SCALED_OUTPUT_EXCEEDS_SAFE_RANGE,
+      {
+        width,
+        height,
+        scale,
+      },
+    );
   }
 }
 

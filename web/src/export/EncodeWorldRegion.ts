@@ -15,9 +15,9 @@ import { WebTypeError } from "../errors/WebErrors.js";
  * Composes and encodes a World region without modifying its layers or Raster data.
  * @param world - Ordered document layers to compose.
  * @param region - Explicit world-pixel export region.
- * @param options - Format and encoder options.
+ * @param options - Format, output scale and encoder options.
  * @returns Encoded image bytes for the requested format.
- * @throws Region validation or encoding errors from the exporter.
+ * @throws Region, scale validation or encoding errors from the exporter.
  */
 export async function encodeWorldRegion(
   world: World,
@@ -25,7 +25,10 @@ export async function encodeWorldRegion(
   options: ReverieDownloadOptions,
 ): Promise<EncodedImage> {
   const requestedFormat = options.format;
-  const bitmap = new ExportRenderer({ world }).render(region);
+  const bitmap = new ExportRenderer({ world }).render(
+    region,
+    options.scale === undefined ? {} : { scale: options.scale },
+  );
 
   if (options.format === "png") {
     return new PNGEncoder().encode(bitmap, {
