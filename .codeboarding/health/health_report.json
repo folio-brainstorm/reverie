@@ -1,0 +1,179 @@
+{
+  "repository_name": ".codeboarding-target",
+  "timestamp": "2026-10-11T08:13:39.942832+00:00",
+  "overall_score": 0.9925475687103594,
+  "check_summaries": [
+    {
+      "check_name": "function_size",
+      "description": "Checks that functions/methods do not exceed line count thresholds",
+      "languages": [
+        "javascript",
+        "typescript"
+      ],
+      "check_type": "standard",
+      "total_entities_checked": 945,
+      "findings_count": 7,
+      "warning_count": 7,
+      "score": 0.9925925925925926,
+      "finding_groups": [
+        {
+          "severity": "warning",
+          "threshold": 150,
+          "description": "Functions exceeding 150.0 lines",
+          "entities": [
+            {
+              "entity_name": "demo.src.PaintingWorkspace.PaintingWorkspace",
+              "file_path": "demo/src/PaintingWorkspace.tsx",
+              "line_start": 95,
+              "line_end": 1600,
+              "metric_value": 1505
+            },
+            {
+              "entity_name": "demo.profiling.PanProfile.runPanProfile",
+              "file_path": "demo/profiling/PanProfile.ts",
+              "line_start": 21,
+              "line_end": 319,
+              "metric_value": 298
+            },
+            {
+              "entity_name": "renderers.canvas-renderer.src.canvas.CanvasRenderer.CanvasRenderer.renderPass",
+              "file_path": "renderers/canvas-renderer/src/canvas/CanvasRenderer.ts",
+              "line_start": 232,
+              "line_end": 449,
+              "metric_value": 217
+            },
+            {
+              "entity_name": "demo.src.DiagnosticsPanel.DiagnosticsPanel",
+              "file_path": "demo/src/DiagnosticsPanel.tsx",
+              "line_start": 11,
+              "line_end": 221,
+              "metric_value": 210
+            },
+            {
+              "entity_name": "demo.src.DiagnosticsHistoryChart.DiagnosticsHistoryChart",
+              "file_path": "demo/src/DiagnosticsHistoryChart.tsx",
+              "line_start": 126,
+              "line_end": 323,
+              "metric_value": 197
+            },
+            {
+              "entity_name": "demo.src.PaintingWorkspace.useEffect() callback",
+              "file_path": "demo/src/PaintingWorkspace.tsx",
+              "line_start": 269,
+              "line_end": 429,
+              "metric_value": 160
+            },
+            {
+              "entity_name": "core.src.core.rendering.RenderingCore.RenderingCore.resolveBatch",
+              "file_path": "core/src/core/rendering/RenderingCore.ts",
+              "line_start": 452,
+              "line_end": 610,
+              "metric_value": 158
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "check_name": "circular_dependencies",
+      "description": "Detects circular dependencies between packages",
+      "languages": [
+        "javascript",
+        "typescript"
+      ],
+      "check_type": "circular_dependencies",
+      "cycles": [
+        "core.src.core.world -> core.src.core.raster -> core.src.core.rendering.bridge -> core.src.internal.history -> core.src.core.history -> core.src.core.world",
+        "core.src.core.world -> core.src.core.raster -> core.src.core.tile -> core.src.core.rendering.bridge -> core.src.internal.history -> core.src.core.history -> core.src.core.world",
+        "core.src.core.world -> core.src.core.raster -> core.src.core.tile.store -> core.src.core.tile -> core.src.core.rendering.bridge -> core.src.internal.history -> core.src.core.history -> core.src.core.world",
+        "core.src.core.world -> core.src.core.raster -> core.src.internal.history -> core.src.core.history -> core.src.core.world",
+        "core.src.core.world -> core.src.core.raster -> core.src.internal.paint-target -> core.src.core.brush -> core.src.internal.raster-write -> core.src.core.rendering.bridge -> core.src.internal.history -> core.src.core.history -> core.src.core.world",
+        "core.src.core.world -> core.src.core.raster -> core.src.internal.raster-write -> core.src.core.rendering.bridge -> core.src.internal.history -> core.src.core.history -> core.src.core.world",
+        "core.src.core.world -> core.src.internal.paint-target -> core.src.core.brush -> core.src.core.paint -> core.src.core.raster -> core.src.core.rendering.bridge -> core.src.internal.history -> core.src.core.history -> core.src.core.world",
+        "core.src.core.world -> core.src.internal.paint-target -> core.src.core.brush -> core.src.core.paint -> core.src.core.raster -> core.src.core.tile -> core.src.core.rendering.bridge -> core.src.internal.history -> core.src.core.history -> core.src.core.world",
+        "core.src.core.world -> core.src.internal.paint-target -> core.src.core.brush -> core.src.core.paint -> core.src.core.raster -> core.src.core.tile.store -> core.src.core.tile -> core.src.core.rendering.bridge -> core.src.internal.history -> core.src.core.history -> core.src.core.world",
+        "core.src.core.world -> core.src.internal.paint-target -> core.src.core.brush -> core.src.core.paint -> core.src.core.raster -> core.src.internal.history -> core.src.core.history -> core.src.core.world",
+        "core.src.core.world -> core.src.internal.paint-target -> core.src.core.brush -> core.src.core.paint -> core.src.core.raster -> core.src.internal.raster-write -> core.src.core.rendering.bridge -> core.src.internal.history -> core.src.core.history -> core.src.core.world",
+        "core.src.core.world -> core.src.internal.paint-target -> core.src.core.brush -> core.src.internal.raster-write -> core.src.core.rendering.bridge -> core.src.internal.history -> core.src.core.history -> core.src.core.world",
+        "core.src.core.brush -> core.src.core.paint -> core.src.core.raster -> core.src.internal.paint-target -> core.src.core.brush",
+        "core.src.core.brush -> core.src.core.paint -> core.src.core.raster -> core.src.internal.raster-write -> core.src.internal.paint-target -> core.src.core.brush",
+        "core.src.core.brush -> core.src.internal.raster-write -> core.src.internal.paint-target -> core.src.core.brush",
+        "core.src.core.paint -> core.src.core.raster -> core.src.core.paint",
+        "core.src.core.history -> core.src.core.rendering.bridge -> core.src.internal.history -> core.src.core.history",
+        "core.src.core.history -> core.src.internal.history -> core.src.core.history",
+        "core.src.core.tile.store -> core.src.core.tile -> core.src.core.rendering.bridge -> core.src.core.tile.store",
+        "core.src.internal.history -> core.src.core.rendering.bridge -> core.src.internal.history",
+        "core.src.core.rendering.bridge -> core.src.core.tile -> core.src.core.rendering.bridge"
+      ],
+      "packages_checked": 136,
+      "packages_in_cycles": 11
+    },
+    {
+      "check_name": "unused_code_diagnostics",
+      "description": "Detects unused imports, variables, functions, and dead code via LSP diagnostics",
+      "languages": [
+        "javascript",
+        "typescript"
+      ],
+      "check_type": "standard",
+      "total_entities_checked": 1,
+      "findings_count": 1,
+      "warning_count": 0,
+      "score": 0.95,
+      "finding_groups": [
+        {
+          "severity": "info",
+          "threshold": 0,
+          "description": "Variables declared but never used",
+          "entities": [
+            {
+              "entity_name": "[unused_variable] 'Raster' is declared but its value is never read.",
+              "file_path": "core/src/core/rendering/RenderingCore.ts",
+              "line_start": 1,
+              "line_end": 1,
+              "metric_value": 0.0
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "file_summaries": [
+    {
+      "file_path": "demo/src/PaintingWorkspace.tsx",
+      "total_findings": 2,
+      "warning_findings": 2,
+      "composite_risk_score": 30.0
+    },
+    {
+      "file_path": "core/src/core/rendering/RenderingCore.ts",
+      "total_findings": 2,
+      "warning_findings": 1,
+      "composite_risk_score": 25.0
+    },
+    {
+      "file_path": "demo/profiling/PanProfile.ts",
+      "total_findings": 1,
+      "warning_findings": 1,
+      "composite_risk_score": 15.0
+    },
+    {
+      "file_path": "renderers/canvas-renderer/src/canvas/CanvasRenderer.ts",
+      "total_findings": 1,
+      "warning_findings": 1,
+      "composite_risk_score": 15.0
+    },
+    {
+      "file_path": "demo/src/DiagnosticsPanel.tsx",
+      "total_findings": 1,
+      "warning_findings": 1,
+      "composite_risk_score": 15.0
+    },
+    {
+      "file_path": "demo/src/DiagnosticsHistoryChart.tsx",
+      "total_findings": 1,
+      "warning_findings": 1,
+      "composite_risk_score": 15.0
+    }
+  ]
+}
