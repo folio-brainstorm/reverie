@@ -30,6 +30,12 @@
   <img src="https://img.shields.io/badge/pnpm-11.18.0-F69220?style=flat-square&logo=pnpm&logoColor=white" alt="pnpm 11.18.0" />
 </p>
 
+<p align="center">
+  <a href="https://gitdiagram.com/folio-brainstorm/reverie/video">
+    <img src="https://gitdiagram.com/video-badge.svg" alt="Watch a one-minute video tour of reverie" />
+  </a>
+</p>
+
 ## What is this?
 
 Rêverie is a raster painting engine for drawing, annotation, and lightweight image-editing experiences. It handles continuous strokes, sparse pixels, layers, selections, history, Canvas presentation, and image export; your application retains its own interface, workflow, and product rules.
