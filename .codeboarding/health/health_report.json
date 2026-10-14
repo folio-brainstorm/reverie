@@ -1,7 +1,7 @@
 {
   "repository_name": ".codeboarding-target",
-  "timestamp": "2026-10-11T08:13:39.942832+00:00",
-  "overall_score": 0.9925475687103594,
+  "timestamp": "2026-10-14T09:58:05.765881+00:00",
+  "overall_score": 0.9928643724696357,
   "check_summaries": [
     {
       "check_name": "function_size",
@@ -11,10 +11,10 @@
         "typescript"
       ],
       "check_type": "standard",
-      "total_entities_checked": 945,
+      "total_entities_checked": 987,
       "findings_count": 7,
       "warning_count": 7,
-      "score": 0.9925925925925926,
+      "score": 0.9929078014184397,
       "finding_groups": [
         {
           "severity": "warning",
@@ -73,40 +73,6 @@
           ]
         }
       ]
-    },
-    {
-      "check_name": "circular_dependencies",
-      "description": "Detects circular dependencies between packages",
-      "languages": [
-        "javascript",
-        "typescript"
-      ],
-      "check_type": "circular_dependencies",
-      "cycles": [
-        "core.src.core.world -> core.src.core.raster -> core.src.core.rendering.bridge -> core.src.internal.history -> core.src.core.history -> core.src.core.world",
-        "core.src.core.world -> core.src.core.raster -> core.src.core.tile -> core.src.core.rendering.bridge -> core.src.internal.history -> core.src.core.history -> core.src.core.world",
-        "core.src.core.world -> core.src.core.raster -> core.src.core.tile.store -> core.src.core.tile -> core.src.core.rendering.bridge -> core.src.internal.history -> core.src.core.history -> core.src.core.world",
-        "core.src.core.world -> core.src.core.raster -> core.src.internal.history -> core.src.core.history -> core.src.core.world",
-        "core.src.core.world -> core.src.core.raster -> core.src.internal.paint-target -> core.src.core.brush -> core.src.internal.raster-write -> core.src.core.rendering.bridge -> core.src.internal.history -> core.src.core.history -> core.src.core.world",
-        "core.src.core.world -> core.src.core.raster -> core.src.internal.raster-write -> core.src.core.rendering.bridge -> core.src.internal.history -> core.src.core.history -> core.src.core.world",
-        "core.src.core.world -> core.src.internal.paint-target -> core.src.core.brush -> core.src.core.paint -> core.src.core.raster -> core.src.core.rendering.bridge -> core.src.internal.history -> core.src.core.history -> core.src.core.world",
-        "core.src.core.world -> core.src.internal.paint-target -> core.src.core.brush -> core.src.core.paint -> core.src.core.raster -> core.src.core.tile -> core.src.core.rendering.bridge -> core.src.internal.history -> core.src.core.history -> core.src.core.world",
-        "core.src.core.world -> core.src.internal.paint-target -> core.src.core.brush -> core.src.core.paint -> core.src.core.raster -> core.src.core.tile.store -> core.src.core.tile -> core.src.core.rendering.bridge -> core.src.internal.history -> core.src.core.history -> core.src.core.world",
-        "core.src.core.world -> core.src.internal.paint-target -> core.src.core.brush -> core.src.core.paint -> core.src.core.raster -> core.src.internal.history -> core.src.core.history -> core.src.core.world",
-        "core.src.core.world -> core.src.internal.paint-target -> core.src.core.brush -> core.src.core.paint -> core.src.core.raster -> core.src.internal.raster-write -> core.src.core.rendering.bridge -> core.src.internal.history -> core.src.core.history -> core.src.core.world",
-        "core.src.core.world -> core.src.internal.paint-target -> core.src.core.brush -> core.src.internal.raster-write -> core.src.core.rendering.bridge -> core.src.internal.history -> core.src.core.history -> core.src.core.world",
-        "core.src.core.brush -> core.src.core.paint -> core.src.core.raster -> core.src.internal.paint-target -> core.src.core.brush",
-        "core.src.core.brush -> core.src.core.paint -> core.src.core.raster -> core.src.internal.raster-write -> core.src.internal.paint-target -> core.src.core.brush",
-        "core.src.core.brush -> core.src.internal.raster-write -> core.src.internal.paint-target -> core.src.core.brush",
-        "core.src.core.paint -> core.src.core.raster -> core.src.core.paint",
-        "core.src.core.history -> core.src.core.rendering.bridge -> core.src.internal.history -> core.src.core.history",
-        "core.src.core.history -> core.src.internal.history -> core.src.core.history",
-        "core.src.core.tile.store -> core.src.core.tile -> core.src.core.rendering.bridge -> core.src.core.tile.store",
-        "core.src.internal.history -> core.src.core.rendering.bridge -> core.src.internal.history",
-        "core.src.core.rendering.bridge -> core.src.core.tile -> core.src.core.rendering.bridge"
-      ],
-      "packages_checked": 136,
-      "packages_in_cycles": 11
     },
     {
       "check_name": "unused_code_diagnostics",
