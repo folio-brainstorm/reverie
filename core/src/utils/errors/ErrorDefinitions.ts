@@ -340,6 +340,24 @@ export const ErrorDefinitions = {
       template:
         "Selection rectangle requires safe-integer x and y origins, positive safe-integer dimensions, safe half-open bounds, and a safe pixel count.",
     },
+    INVALID_POLYGON: {
+      code: "EC_SELECTION_0003",
+      template: "Invalid selection polygon: $reason.",
+    },
+    UNSAFE_POLYGON_BOUNDS: {
+      code: "EC_SELECTION_0004",
+      template:
+        "Selection polygon requires safe integer pixel bounds, dimensions, and candidate pixel count. Reduce its coordinate range or extent.",
+    },
+    INVALID_MASK: {
+      code: "EC_SELECTION_0005",
+      template:
+        "Selection composition requires another SelectionMask instance.",
+    },
+    INVALID_SPAN_VISITOR: {
+      code: "EC_SELECTION_0006",
+      template: "Selection span visitor must be a function.",
+    },
   },
   HISTORY: {
     GROUP_ALREADY_ACTIVE: {
