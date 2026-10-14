@@ -102,6 +102,7 @@ export type { TileBounds } from "./src/interfaces/tile/TileBounds.js";
 export type { RasterLayerStatistics } from "./src/interfaces/world/RasterLayerStatistics.js";
 export type { WorldRasterStatistics } from "./src/interfaces/world/WorldRasterStatistics.js";
 export type { SelectionMaskConfig } from "./src/interfaces/selection/SelectionMaskConfig.js";
+export type { SelectionSpanVisitor } from "./src/interfaces/selection/SelectionSpanVisitor.js";
 export type { RGBAColor } from "./src/interfaces/color/Colors.js";
 export type { LocalPixelCoord } from "./src/interfaces/pixel/LocalPixelCoord.js";
 export type { PixelCoord } from "./src/interfaces/pixel/PixelCoords.js";
