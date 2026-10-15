@@ -3,6 +3,109 @@ import { RenderingCore } from "@reveriejs/core/rendering";
 import { describe, expect, it } from "vitest";
 
 describe("RenderingCore result cache", () => {
+  it("reuses exact World states after switching away and back within the byte budget", () => {
+    const world = new World({ tileSize: 2 });
+    const bottom = world.getLayer(0);
+    const top = world.addLayer();
+    bottom.raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    top.raster.setPixel({ x: 0, y: 0 }, { r: 0, g: 0, b: 255, a: 255 });
+    const core = new RenderingCore({ resultCacheByteBudget: 32 });
+    const request = {
+      source: { world },
+      context: {},
+      viewport: { x: 0, y: 0, width: 2, height: 2 },
+    };
+    const visible = core.render(request).regions[0];
+    top.visible = false;
+    const hidden = core.render(request).regions[0];
+    expect(hidden?.pixels.slice(0, 4)).toEqual(
+      new Uint8Array([255, 0, 0, 255]),
+    );
+    top.visible = true;
+    expect(core.render(request).regions[0]).toBe(visible);
+    top.visible = false;
+    expect(core.render(request).regions[0]).toBe(hidden);
+    expect(core.getDiagnosticsSnapshot().resultCache).toMatchObject({
+      entries: 2,
+      bytes: 32,
+      hits: 2,
+      misses: 2,
+      evictions: 0,
+    });
+    expect(core.getDiagnosticsSnapshot().world.canonicalGeneratedCount).toBe(2);
+    bottom.raster.setPixel({ x: 0, y: 0 }, { r: 0, g: 255, b: 0, a: 255 });
+    const edited = core.render(request).regions[0];
+    expect(edited).not.toBe(hidden);
+    expect(edited?.pixels.slice(0, 4)).toEqual(
+      new Uint8Array([0, 255, 0, 255]),
+    );
+    core.dispose();
+    expect(core.getDiagnosticsSnapshot().resultCache).toMatchObject({
+      entries: 0,
+      bytes: 0,
+    });
+  });
+
+  it("evicts the least recently used state across signatures of one World Tile", () => {
+    const world = new World({ tileSize: 2 });
+    world
+      .getLayer(0)
+      .raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    const top = world.addLayer();
+    top.raster.setPixel({ x: 0, y: 0 }, { r: 0, g: 0, b: 255, a: 255 });
+    const core = new RenderingCore({ resultCacheByteBudget: 32 });
+    const render = (opacity: number) => {
+      top.opacity = opacity;
+      return core.render({
+        source: { world },
+        context: {},
+        viewport: { x: 0, y: 0, width: 2, height: 2 },
+      }).regions[0];
+    };
+    const first = render(0);
+    const second = render(0.5);
+    expect(render(0)).toBe(first);
+    render(1);
+    expect(render(0)).toBe(first);
+    expect(render(0.5)).not.toBe(second);
+    expect(core.getDiagnosticsSnapshot().resultCache).toMatchObject({
+      entries: 2,
+      bytes: 32,
+      evictions: 2,
+    });
+  });
+
+  it("keeps canonical and approximate priority isolated across returning states", () => {
+    const world = new World({ tileSize: 4 });
+    world
+      .getLayer(0)
+      .raster.setPixel({ x: 0, y: 0 }, { r: 255, g: 0, b: 0, a: 255 });
+    const top = world.addLayer();
+    top.raster.setPixel({ x: 1, y: 0 }, { r: 0, g: 0, b: 255, a: 255 });
+    const core = new RenderingCore();
+    const request = {
+      source: { world },
+      viewport: { x: 0, y: 0, width: 4, height: 4 },
+    };
+    const canonical = core.render({
+      ...request,
+      context: { scale: 0.5, quality: "full" },
+    }).regions[0];
+    top.visible = false;
+    const preview = core.render({
+      ...request,
+      context: { scale: 1, quality: "interactive" },
+    }).regions[0];
+    expect(preview?.resultClass).toBe("approximate");
+    top.visible = true;
+    expect(
+      core.render({
+        ...request,
+        context: { scale: 1, quality: "interactive" },
+      }).regions[0],
+    ).toBe(canonical);
+  });
+
   it("keeps same-size World previews separate from canonical pixels and refines on settle", () => {
     const world = new World({ tileSize: 4 });
     const bottom = world.getLayer(0);

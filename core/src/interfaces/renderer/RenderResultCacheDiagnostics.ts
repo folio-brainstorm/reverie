@@ -8,6 +8,7 @@ export interface RenderResultCacheDiagnostics {
   readonly byteBudget: number;
   readonly insertions: number;
   readonly evictions: number;
+  /** Lookups with retained variants but no exact match for the requested source signature. */
   readonly validationFailures: number;
   readonly reusedPixelBytes: number;
   /** Cumulative hits grouped by effective square output Tile edge length. */
