@@ -4,7 +4,11 @@ import type { RenderResultCacheDiagnostics } from "../../../interfaces/renderer/
 
 /** Bounded least-recently-used storage for published full-Region results. */
 export default class RenderResultCache {
-  private readonly entries = new Map<string, RenderResultCacheEntry>();
+  private readonly entries = new Map<RenderResultCacheEntry, string>();
+  private readonly variants = new Map<
+    string,
+    Map<string, RenderResultCacheEntry>
+  >();
   private retainedBytes = 0;
   private hitCount = 0;
   private missCount = 0;
@@ -39,18 +43,17 @@ export default class RenderResultCache {
     outputTileSize: number,
   ): RenderRegion | undefined {
     for (const key of keys) {
-      const entry = this.entries.get(key);
+      const variants = this.variants.get(key);
+      if (variants === undefined) {
+        continue;
+      }
+      const entry = variants.get(signature);
       if (entry === undefined) {
-        continue;
-      }
-      if (entry.signature !== signature) {
         this.validationFailureCount += 1;
-        this.retainedBytes -= entry.region.pixels.byteLength;
-        this.entries.delete(key);
         continue;
       }
-      this.entries.delete(key);
-      this.entries.set(key, entry);
+      this.entries.delete(entry);
+      this.entries.set(entry, key);
       this.hitCount += 1;
       this.reusedPixelBytes += entry.region.pixels.byteLength;
       this.hitsByOutputTileSize.set(
@@ -69,22 +72,24 @@ export default class RenderResultCache {
     if (this.byteBudget === 0 || bytes > this.byteBudget) {
       return;
     }
-    const previous = this.entries.get(key);
+    const previous = this.variants.get(key)?.get(signature);
     if (previous !== undefined) {
-      this.retainedBytes -= previous.region.pixels.byteLength;
-      this.entries.delete(key);
+      this.removeEntry(key, previous);
     }
-    this.entries.set(key, { signature, region });
+    const variants =
+      this.variants.get(key) ?? new Map<string, RenderResultCacheEntry>();
+    const entry = { signature, region };
+    variants.set(signature, entry);
+    this.variants.set(key, variants);
+    this.entries.set(entry, key);
     this.retainedBytes += bytes;
     this.insertionCount += 1;
     while (this.retainedBytes > this.byteBudget) {
-      const oldestKey = this.entries.keys().next().value;
-      if (oldestKey === undefined) {
+      const oldest = this.entries.entries().next().value;
+      if (oldest === undefined) {
         break;
       }
-      const oldest = this.entries.get(oldestKey);
-      this.entries.delete(oldestKey);
-      this.retainedBytes -= oldest?.region.pixels.byteLength ?? 0;
+      this.removeEntry(oldest[1], oldest[0]);
       this.evictionCount += 1;
     }
   }
@@ -92,6 +97,7 @@ export default class RenderResultCache {
   /** Drops all retained buffers and resets cache accounting immediately. */
   clear(): void {
     this.entries.clear();
+    this.variants.clear();
     this.retainedBytes = 0;
     this.hitCount = 0;
     this.missCount = 0;
@@ -120,5 +126,16 @@ export default class RenderResultCache {
       reusedPixelBytes: this.reusedPixelBytes,
       hitsByOutputTileSize: Object.fromEntries(this.hitsByOutputTileSize),
     };
+  }
+
+  /** Removes both lookup and LRU references so evicted signatures retain no buffers. */
+  private removeEntry(key: string, entry: RenderResultCacheEntry): void {
+    this.entries.delete(entry);
+    this.retainedBytes -= entry.region.pixels.byteLength;
+    const variants = this.variants.get(key);
+    variants?.delete(entry.signature);
+    if (variants?.size === 0) {
+      this.variants.delete(key);
+    }
   }
 }
